@@ -21,8 +21,20 @@ var (
 
 // GitChangesResult holds the git changes detection result
 type GitChangesResult struct {
-	Count int      `json:"count"`
-	Files []string `json:"files,omitempty"`
+	Count int `json:"count"`
+	// No omitempty, deliberately. `files` must always be present and be a list,
+	// so a consumer can iterate it without guarding a case the schema never
+	// announced. With omitempty a clean working tree emitted {"count":0} and
+	// the key was simply gone. The --axi path was affected identically, because
+	// EncodeAXI projects through the JSON form and reads this same tag.
+	//
+	// The nil-to-empty normalisation in outputGitChanges reads as if it were
+	// what guarantees this. It is not, and never was: parseGitStatus is the
+	// only constructor and always sets Files to []string{}, so that branch is
+	// unreachable. Deleting it leaves every test green. It is kept as a cheap
+	// guard against a future second constructor, not because it does anything
+	// today.
+	Files []string `json:"files"`
 }
 
 // newGitChangesCmd creates the git-changes command

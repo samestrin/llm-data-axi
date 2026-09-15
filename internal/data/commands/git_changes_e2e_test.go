@@ -182,13 +182,13 @@ func TestGitChangesMinOutputIsJustTheCount(t *testing.T) {
 	}
 }
 
-// A clean tree must never encode files as null. Pinned as the code actually
-// behaves: the `omitempty` tag on Files means an empty slice drops the key
-// entirely, so the payload is {"count":0}. Note that this makes the nil-to-
-// empty-slice normalisation in outputGitChanges unreachable — the key is gone
-// either way. That dead code is filed as technical debt rather than fixed
-// here, because git_changes_test.go pins the omission as the contract and a
-// port is the wrong place to change one.
+// A clean tree must emit `"files": []` — present and empty, never null and
+// never absent. The `omitempty` tag was deleting the key instead, so a consumer
+// iterating `files` hit a case the schema never announced.
+//
+// What actually delivers this is parseGitStatus initialising Files to
+// []string{}, plus the tag. The nil check in outputGitChanges looks like the
+// guarantee and is not: removing it leaves this test green.
 func TestGitChangesEmitsAnEmptyListNotNull(t *testing.T) {
 	dir := t.TempDir()
 	resolved, err := filepath.EvalSymlinks(dir)
@@ -215,9 +215,52 @@ func TestGitChangesEmitsAnEmptyListNotNull(t *testing.T) {
 	if strings.Contains(out, "null") {
 		t.Errorf("a clean tree encoded files as null:\n%s", out)
 	}
+	// Checked on the raw payload, not on the decoded struct: encoding/json
+	// gives a nil slice for BOTH an absent key and an explicit null, so a
+	// decoded `len(Files) == 0` passes for all three shapes and cannot tell the
+	// bug from the fix.
+	if !strings.Contains(out, `"files": []`) {
+		t.Errorf("a clean tree did not emit an empty files list:\n%s", out)
+	}
 	got := decodeGitChanges(t, out)
 	if got.Count != 0 || len(got.Files) != 0 {
 		t.Errorf("a clean tree reported %+v, want count 0 and no files", got)
+	}
+}
+
+// The same guarantee on the AXI path. EncodeAXI projects through the JSON form
+// first, so the struct tag governs both encodings and a fix that only reached
+// one of them would be half a fix.
+func TestGitChangesAXIEmitsAnEmptyListNotNull(t *testing.T) {
+	dir := t.TempDir()
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitAt(t, resolved, "2026-01-01T00:00:00Z", "init", "-q")
+	if err := os.WriteFile(filepath.Join(resolved, "f.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitAt(t, resolved, "2026-01-01T00:00:00Z", "add", ".")
+	gitAt(t, resolved, "2026-01-01T00:00:00Z", "commit", "-q", "-m", "clean")
+
+	original, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(resolved); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(original) })
+
+	withAXI(t)
+	out := runGitChangesCmd(t)
+
+	if strings.HasPrefix(strings.TrimSpace(out), "{") {
+		t.Fatalf("--axi was ignored; JSON was emitted:\n%s", out)
+	}
+	if !strings.Contains(out, "files") {
+		t.Errorf("the AXI payload dropped the files key entirely:\n%s", out)
 	}
 }
 

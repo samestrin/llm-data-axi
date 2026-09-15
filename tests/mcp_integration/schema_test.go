@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -98,8 +99,29 @@ type rpcResponse struct {
 	Error  json.RawMessage `json:"error"`
 }
 
+// expectedIDs returns the "id" of every request that asks for a response.
+// A notification carries none and is skipped.
+func expectedIDs(requests []string) map[int]bool {
+	want := make(map[int]bool)
+	for _, r := range requests {
+		var probe struct {
+			ID *int `json:"id"`
+		}
+		if err := json.Unmarshal([]byte(r), &probe); err == nil && probe.ID != nil {
+			want[*probe.ID] = true
+		}
+	}
+	return want
+}
+
 // speak runs the MCP server, writes the given JSON-RPC lines to its stdin, and
 // returns every response keyed by id.
+//
+// It waits for every expected id to arrive rather than sleeping a fixed
+// interval before closing stdin. A 500ms settle was enough on an ordinary run
+// and NOT enough under -race, where it failed with "no response to tools/list";
+// a timing-dependent test that passes locally and fails in CI is worse than no
+// test, so the wait is on the condition, not on the clock.
 func speak(t *testing.T, requests []string) map[int]rpcResponse {
 	t.Helper()
 	cli, mcp := builtBinaries(t)
@@ -121,9 +143,16 @@ func speak(t *testing.T, requests []string) map[int]rpcResponse {
 		t.Fatal(err)
 	}
 
-	done := make(chan map[int]rpcResponse, 1)
+	want := expectedIDs(requests)
+
+	var mu sync.Mutex
+	got := make(map[int]rpcResponse)
+	allSeen := make(chan struct{})
+	scannerDone := make(chan struct{})
+
 	go func() {
-		got := make(map[int]rpcResponse)
+		defer close(scannerDone)
+		var closed bool
 		scanner := bufio.NewScanner(stdout)
 		scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 		for scanner.Scan() {
@@ -135,11 +164,18 @@ func speak(t *testing.T, requests []string) map[int]rpcResponse {
 			if err := json.Unmarshal([]byte(line), &resp); err != nil {
 				continue
 			}
-			if resp.ID != 0 {
-				got[resp.ID] = resp
+			if resp.ID == 0 {
+				continue
+			}
+			mu.Lock()
+			got[resp.ID] = resp
+			complete := len(got) >= len(want)
+			mu.Unlock()
+			if complete && !closed {
+				closed = true
+				close(allSeen)
 			}
 		}
-		done <- got
 	}()
 
 	for _, r := range requests {
@@ -147,20 +183,30 @@ func speak(t *testing.T, requests []string) map[int]rpcResponse {
 			t.Fatal(err)
 		}
 	}
-	// The server answers in order, so a short settle is enough before closing
-	// stdin; closing it is what ends the scanner loop.
-	time.Sleep(500 * time.Millisecond)
-	_ = stdin.Close()
 
 	select {
-	case got := <-done:
-		_ = cmd.Wait()
-		return got
+	case <-allSeen:
 	case <-time.After(30 * time.Second):
 		_ = cmd.Process.Kill()
-		t.Fatal("the MCP server did not finish within 30s")
+		<-scannerDone
+		mu.Lock()
+		defer mu.Unlock()
+		t.Fatalf("only %d of %d responses arrived within 30s", len(got), len(want))
 		return nil
 	}
+
+	// Closing stdin ends the server, which ends the scanner loop.
+	_ = stdin.Close()
+	<-scannerDone
+	_ = cmd.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	out := make(map[int]rpcResponse, len(got))
+	for k, v := range got {
+		out[k] = v
+	}
+	return out
 }
 
 const initRequest = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"integration","version":"1"}}}`

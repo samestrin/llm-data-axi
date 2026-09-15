@@ -8,18 +8,12 @@ Severity is about consequence. **HIGH** means a caller can be misled about what 
 
 | | Open | Resolved | Total |
 |---|---|---|---|
-| HIGH | 2 | 0 | 2 |
+| HIGH | 1 | 1 | 2 |
 | MEDIUM | 5 | 0 | 5 |
-| LOW | 3 | 0 | 3 |
-| **Total** | **10** | **0** | **10** |
+| LOW | 4 | 0 | 4 |
+| **Total** | **10** | **1** | **11** |
 
 ## Open
-
-- [ ] **HIGH** — `internal/data/commands/git_changes.go:25` and `:187-200` — `GitChangesResult.Files` carries `json:"files,omitempty"`, and `outputGitChanges` sets a nil `Files` to `[]string{}` under the comment "Ensure files is never null". Those two are in direct contradiction: `omitempty` deletes the key outright for an empty slice, so on a clean working tree the payload is `{"count":0}` with no `files` key at all, and the normalisation above it is unreachable. Probed: `json.Marshal(R{Count:0, Files: []string{}})` with that tag emits `{"count":0}`.
-
-  The consequence is the one the normalisation was written to prevent — a consumer iterating `files` hits a key that is simply absent, which the schema never announced. The `--axi` path is affected identically, because `output.EncodeAXI` projects through the JSON form first, so the same tag governs both.
-
-  **Not fixed here deliberately.** `git_changes_test.go:371` (`TestGitChangesResultStruct/empty_result_omits_files`) pins the omission as the contract, so the two disagree about intent and a port is the wrong place to pick a winner. Fix: decide which is right, then change the tag and that test together, or delete the dead normalisation. `TestGitChangesEmitsAnEmptyListNotNull` pins the current behaviour and carries this note.
 
 - [ ] **HIGH** — `internal/data/commands/extract_links.go:382` — `rankLinksWithLLM` sits at 6.7% coverage. It is one of only two places in this repository that makes a network LLM call, it is reached by `extract-links --context`, and essentially none of its body is exercised. `extract-relevant` now has a full `httptest` fake (`extract_relevant_e2e_test.go`); the same treatment applied here would cover the ranking prompt, the parse of the model's reply, and what happens when the model returns something unparseable. Until then the failure modes of a live LLM call on this path are unknown.
 
@@ -37,8 +31,18 @@ Severity is about consequence. **HIGH** means a caller can be misled about what 
 
 - [ ] **LOW** — `internal/data/commands/extract_relevant.go:31-48` — `ExtractRelevantResult` declares every field twice, once long and once abbreviated (`Path`/`P`, `Context`/`Ctx`, `ExtractedParts`/`EP`, and so on), all with `omitempty`. Only the long form is ever populated, so the short fields are dead weight in the type and in every encoding. Minimal-mode abbreviation is already handled generically by `pkg/output`'s `KeyAbbreviations` table, which is where it belongs.
 
+- [ ] **LOW** — `internal/data/commands/git_changes.go:187-200` (AXI branch) and `:211-217` (JSON branch) — both output paths set a nil `Files` to `[]string{}`, and both branches are **unreachable**. `parseGitStatus` is the only constructor of a `GitChangesResult` and always initialises `Files` to `[]string{}`, so nothing nil ever reaches either. Deleting both leaves every test green, which is how this was found — it was the second sabotage while verifying the `omitempty` fix, and the first one that stayed green.
+
+  Not a correctness bug; dead logic that reads as if it were load-bearing, which is worse than dead logic that looks dead. The comments on the struct, the test row and the e2e test have been corrected to say the guarantee comes from `parseGitStatus` plus the struct tag. Decide whether to delete the two branches or keep them as a guard against a future second constructor — this row exists so the choice is made rather than defaulted.
+
 - [ ] **LOW** — `pkg/llmapi/client_test.go` and `streaming_test.go` — the `pkg/llmapi` suite takes ~22 seconds, dominating a 30-second total. The retry defaults are `MaxRetries: 3`, `RetryDelay: 2s`, `RetryBackoff: 2.0`, so a single test of a retryable status code sleeps 2+4+8 seconds of real time. Injecting the delay, or setting `RetryDelay` to a millisecond in tests, would return most of that. Every new test added here already sets `MaxRetries = 0` for this reason.
 
 ## Resolved
 
-*(none yet)*
+- [x] **HIGH** — `internal/data/commands/git_changes.go` — **RESOLVED.** `GitChangesResult.Files` carried `json:"files,omitempty"` while `outputGitChanges` set a nil `Files` to `[]string{}` under the comment "Ensure files is never null". Those contradicted: `omitempty` deletes the key outright for an empty slice, so on a clean working tree the payload was `{"count":0}` with no `files` key at all. A consumer iterating `files` hit a key the schema never announced — the exact case the normalisation was written to prevent. The `--axi` path was affected identically, because `output.EncodeAXI` projects through the JSON form and reads the same tag.
+
+  Filed rather than fixed at port time, because `git_changes_test.go` pinned the omission as the contract and the code and its test disagreed about intent. **Sam chose the `files: []` reading.** The `omitempty` was dropped and both rows of `TestGitChangesResultStruct` were updated in the same change, plus `TestGitChangesAXIEmitsAnEmptyListNotNull` added so the fix is pinned on both encodings rather than one.
+
+  **Sabotage found a second, separate piece of dead code while verifying this.** Restoring `omitempty` goes red on four assertions, as it should. But deleting the nil-to-empty normalisation in `outputGitChanges` leaves every test green: `parseGitStatus` is the only constructor of a `GitChangesResult` and always sets `Files` to `[]string{}`, so that branch is unreachable regardless of the tag. It is kept as a cheap guard against a future second constructor, and the comments on the struct, the test row and the e2e test were all corrected to say so — each of them had claimed the normalisation was load-bearing, which was never true.
+
+  Also fixed in the e2e assertion: it originally checked `len(got.Files) != 0` on the decoded struct, which `encoding/json` produces identically for an absent key, an explicit null and an empty list. That assertion could not tell the bug from the fix. It now checks the raw payload for `"files": []`.

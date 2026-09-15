@@ -368,14 +368,24 @@ func TestGitChangesResultStruct(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "empty result omits files",
+			// Changed from `{"count":0}` when the omitempty tag was dropped.
+			// The two output paths both normalise nil to an empty slice so the
+			// key is never null; omitempty was deleting the key instead, which
+			// made that normalisation dead code and handed a consumer a missing
+			// key rather than an empty list.
+			name:     "empty result still emits files",
 			result:   GitChangesResult{Count: 0, Files: []string{}},
-			expected: `{"count":0}`, // omitempty removes empty files array
+			expected: `{"count":0,"files":[]}`,
 		},
 		{
-			name:     "nil files omitted",
+			// A hand-built nil slice still marshals to null. No command can
+			// produce this — parseGitStatus always sets Files to []string{} —
+			// so this row pins the raw encoding only. The guarantee that the
+			// COMMAND never emits null is a separate claim, covered by
+			// TestGitChangesEmitsAnEmptyListNotNull against the real output.
+			name:     "a hand-built nil slice marshals to null",
 			result:   GitChangesResult{Count: 0, Files: nil},
-			expected: `{"count":0}`, // omitempty removes nil files
+			expected: `{"count":0,"files":null}`,
 		},
 		{
 			name:     "single file",
