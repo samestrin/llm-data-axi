@@ -17,8 +17,7 @@ coverage.html
 
 # atcr workspace: local config plus runtime outputs (diff cache, reviewer
 # output, reconciled reports). Never committed. atcr runs in this checkout
-# before the push, so nothing downstream needs to see it — unlike the
-# technical-debt file below, which the no-mistakes worktree does need.
+# before the push, so nothing downstream needs to see it.
 .atcr/
 
 .planning/

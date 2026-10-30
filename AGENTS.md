@@ -49,9 +49,9 @@ Five things worth knowing before you add one:
 
 ## Technical debt
 
-`.planning/technical-debt/README.md` is the record. It is the one thing under `.planning/` that is committed, because the validation pipeline runs in a disposable worktree built from the pushed branch and cannot see an untracked file.
+The record is `technical-debt/README.md` in the private `llm-data-axi-planning` repository, cloned at `.planning/`. Nothing under `.planning/` is committed here: this repository ignores the whole directory, and plans and debt are versioned in the planning repository instead.
 
-**When you resolve an item, update it in the same change that fixes it.** Mark the row `[x]`, rewrite the entry to say what was done while keeping the original report readable, and correct the counts. A debt file that lags reality is worse than none, because it is trusted.
+**When you resolve an item, update the record in the planning repository alongside the change that fixes it.** Mark the row `[x]`, rewrite the entry to say what was done while keeping the original report readable, and correct the counts. A debt file that lags reality is worse than none, because it is trusted.
 
 When you find something you are not fixing, file it: severity, `file:line`, what is wrong, and how to reproduce. Severity is about consequence — **HIGH** means a caller can be misled about what happened.
 
