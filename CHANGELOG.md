@@ -8,16 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Removed
 
-- The `extract_relevant` and `extract_links` MCP tools (and `LLMTimeout`) are gone; the server now advertises 24 tools and rejects calls to the removed ones as unknown. They move to llm-extract-axi.
+- The `extract-relevant` and `extract-links` CLI commands and the `extract_relevant` and `extract_links` MCP tools (with their `llmCommands` map and `LLMTimeout`) are gone; the server now advertises 24 tools and rejects calls to the removed ones as unknown. They move to [llm-extract-axi](https://github.com/samestrin/llm-extract-axi), which ships them as `llm-extract extract-relevant` and `llm-extract extract-links` (MCP: `extract_relevant` and `extract_links` on `llm-extract-mcp`). Nothing left in this repository makes a network call: `internal/noweb_guard_test.go` fails the build if any non-test file imports `net/http`, `net` or `goquery`.
+- The `pkg/llmapi` package (client, concurrency, config, response, streaming) with its tests, plus the `goquery` and `golang.org/x/sync` dependencies it was the only consumer of. It moves to [llm-extract-axi](https://github.com/samestrin/llm-extract-axi).
 
 ### Added
 
-- Standalone repository, extracted from [samestrin/llm-tools](https://github.com/samestrin/llm-tools). Twenty-six tools travel across 25 source files, together with `pkg/output`, `pkg/llmapi`, `internal/support/gitignore` and `internal/support/utils`, renamed to `internal/data/*`.
+- Standalone repository, extracted from [samestrin/llm-tools](https://github.com/samestrin/llm-tools). Twenty-six tools travelled across 25 source files, together with `pkg/output`, `internal/support/gitignore` and `internal/support/utils`, renamed to `internal/data/*`; the two LLM commands and the LLM client package they used have since moved on (see Removed), leaving 24.
 - `Makefile` with `build`, `build-all`, `test`, `test-race`, `test-cover`, `lint`, `vet`, `fmt`, `install`, `clean` and `hooks` targets.
 - CI: `lint` → `test -race` → `coverage`, chained by `needs:`, plus a five-platform cross-compile matrix with a 20MB binary size gate, and a tag-triggered release workflow.
 - `.golangci.yml` matching the selection used across `samestrin/atcr` and `samestrin/go-axi`.
 - `tests/mcp_integration` drives the built `llm-data-mcp` over real stdio — JSON-RPC framing, the SDK registration loop and the exec of the CLI — which no in-package test can reach.
-- `pkg/llmapi/concurrency.go` gains its first tests. It had none in `llm-tools`.
 
 ### Changed
 
@@ -26,17 +26,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Thirteen direct dependencies that only the unported commands used are dropped. Ten direct requires remain.
 - The CLI version is stamped by `-X` onto `commands.Version` at build time instead of being hardcoded.
 
-### Deprecated
-
-- `extract-relevant`, `extract-links` and the `llm_data_extract_relevant` / `llm_data_extract_links` MCP tools. They move to [llm-extract-axi](https://github.com/samestrin/llm-extract-axi) as `llm-extract extract-relevant` and `llm-extract extract-links`; the README points there.
-
 ### Fixed
 
 - **`--axi` was unreachable through MCP.** `ExecuteHandler` appended `--json --min` to every command unconditionally and no handler ever passed `--axi`, so an MCP client could not obtain TOON no matter what the CLI supported. The server now sends exactly one encoding flag, selected by `LLM_DATA_MCP_AXI` or by a per-call `"format": "axi"` argument. Pinned end to end over stdio.
-- **The two commands that call an LLM had the shortest timeout.** The `llmCommands` map named `complete` and `foreach`, neither of which travelled, and omitted `extract_relevant` and `extract_links` — the only two tools here that make a network LLM call. They were capped at 60 seconds instead of 300.
 - **A data race in `BatchProcessor.ProcessItemsWithProgress`.** The completion counter was incremented from inside each worker goroutine with no lock. Measured under `-race` across 32 items at concurrency 8: the final progress report read "29 of 32" and three intermediate values were reported twice. The counter and the callback now run under one mutex, so the callback also sees a strictly increasing count.
 - **The MCP server hardcoded `/usr/local/bin/llm-support`** with no lookup, so it refused to start for anyone who installed the CLI elsewhere, and the repo's own end-to-end tests could not run without installing first. `BinaryPath` now resolves from `PATH`, falls back to the install location, and honours `LLM_DATA_BINARY`.
-- **A help-text promise that nothing kept.** `extract-relevant --help` advertised a `.planning/.config/openai_api_key` file. No such file is ever read; `pkg/llmapi/config.go` is environment-only. The line now names the environment variables that actually work.
+- **A help-text promise that nothing kept.** `extract-relevant --help` advertised a `.planning/.config/openai_api_key` file. No such file was ever read; the LLM client configuration was environment-only. The line was corrected to name the environment variables that actually work; the command itself has since been removed (see Removed).
 
 ### Not ported
 
