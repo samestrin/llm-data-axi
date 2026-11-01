@@ -252,8 +252,13 @@ func TestRemovedExtractToolCallIsRejectedOverStdio(t *testing.T) {
 	if !ok {
 		t.Fatal("no response to tools/call")
 	}
-	if len(resp.Error) == 0 && !strings.Contains(strings.ToLower(string(resp.Result)), "unknown") {
-		t.Errorf("tools/call llm_data_extract_links was not rejected as unknown: %s", resp.Result)
+	// The error itself must name the unknown tool; a bare "any error" would
+	// still pass if the tool were registered and failed for another reason.
+	if len(resp.Error) == 0 {
+		t.Fatalf("tools/call llm_data_extract_links was not rejected: %s", resp.Result)
+	}
+	if !strings.Contains(strings.ToLower(string(resp.Error)), "unknown tool") {
+		t.Errorf("rejection does not say unknown tool: %s", resp.Error)
 	}
 }
 
