@@ -88,6 +88,8 @@ Set `LLM_DATA_MCP_DEBUG=true` to log each command line and timeout to stderr.
 
 ## LLM configuration
 
+> `extract-relevant` and `extract-links` are moving to [llm-extract-axi](https://github.com/samestrin/llm-extract-axi), which already ships them as `llm-extract extract-relevant` and `llm-extract extract-links` (MCP: `extract_relevant` and `extract_links` on `llm-extract-mcp`). Use those. The copies here, and the `llm_data_extract_*` MCP tools, will be removed.
+
 `extract-relevant` and `extract-links --context` call an OpenAI-compatible endpoint. Configuration is **environment only** — there is no config file:
 
 | Variable | Meaning |
