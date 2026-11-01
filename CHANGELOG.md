@@ -22,6 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Thirteen direct dependencies that only the unported commands used are dropped. Ten direct requires remain.
 - The CLI version is stamped by `-X` onto `commands.Version` at build time instead of being hardcoded.
 
+### Deprecated
+
+- `extract-relevant`, `extract-links` and the `llm_data_extract_relevant` / `llm_data_extract_links` MCP tools. They move to [llm-extract-axi](https://github.com/samestrin/llm-extract-axi) as `llm-extract extract-relevant` and `llm-extract extract-links`; the README points there.
+
 ### Fixed
 
 - **`--axi` was unreachable through MCP.** `ExecuteHandler` appended `--json --min` to every command unconditionally and no handler ever passed `--axi`, so an MCP client could not obtain TOON no matter what the CLI supported. The server now sends exactly one encoding flag, selected by `LLM_DATA_MCP_AXI` or by a per-call `"format": "axi"` argument. Pinned end to end over stdio.
