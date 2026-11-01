@@ -84,22 +84,6 @@ func resolveBinaryPath() string {
 // CommandTimeout is the default timeout for command execution
 var CommandTimeout = 60 * time.Second
 
-// LLMTimeout is the timeout for commands that call an external LLM API, which
-// can take far longer than a local operation.
-var LLMTimeout = 300 * time.Second // 5 minutes
-
-// llmCommands lists the commands that reach pkg/llmapi and therefore need
-// LLMTimeout rather than CommandTimeout.
-//
-// llm-tools' copy of this map omitted both of these, so the two commands that
-// actually make network LLM calls were the two capped at 60 seconds.
-// extract_links only calls out under --context, but a map cannot express that,
-// and over-granting the timeout is the harmless direction.
-var llmCommands = map[string]bool{
-	"extract_relevant": true,
-	"extract_links":    true,
-}
-
 // Debug enables verbose logging for debugging MCP tool execution
 var Debug = os.Getenv("LLM_DATA_MCP_DEBUG") == "true"
 
@@ -146,9 +130,6 @@ func ExecuteHandler(toolName string, args map[string]interface{}) (string, error
 
 	// Determine timeout based on command type
 	timeout := CommandTimeout
-	if llmCommands[cmdName] {
-		timeout = LLMTimeout
-	}
 
 	// Execute command with appropriate timeout
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -213,10 +194,6 @@ func buildArgs(cmdName string, args map[string]interface{}) ([]string, error) {
 		return buildGitContextArgs(args), nil
 	case "repo_root":
 		return buildRepoRootArgs(args), nil
-	case "extract_relevant":
-		return buildExtractRelevantArgs(args), nil
-	case "extract_links":
-		return buildExtractLinksArgs(args), nil
 	case "highest":
 		return buildHighestArgs(args), nil
 	case "plan_type":
@@ -495,52 +472,6 @@ func buildRepoRootArgs(args map[string]interface{}) []string {
 	}
 	if getBool(args, "validate") {
 		cmdArgs = append(cmdArgs, "--validate")
-	}
-	return cmdArgs
-}
-
-func buildExtractRelevantArgs(args map[string]interface{}) []string {
-	cmdArgs := []string{"extract-relevant"}
-	if path, ok := args["path"].(string); ok {
-		cmdArgs = append(cmdArgs, "--path", path)
-	}
-	if ctx, ok := args["context"].(string); ok {
-		cmdArgs = append(cmdArgs, "--context", ctx)
-	}
-	if conc, ok := getInt(args, "concurrency"); ok {
-		cmdArgs = append(cmdArgs, "--concurrency", strconv.Itoa(conc))
-	}
-	if output, ok := args["output"].(string); ok {
-		cmdArgs = append(cmdArgs, "--output", output)
-	}
-	if timeout, ok := getInt(args, "timeout"); ok {
-		cmdArgs = append(cmdArgs, "--timeout", strconv.Itoa(timeout))
-	}
-	if getBoolDefault(args, "json", true) {
-		cmdArgs = append(cmdArgs, "--json")
-	}
-	if getBoolDefault(args, "min", true) {
-		cmdArgs = append(cmdArgs, "--min")
-	}
-	return cmdArgs
-}
-
-func buildExtractLinksArgs(args map[string]interface{}) []string {
-	cmdArgs := []string{"extract-links"}
-	if url, ok := args["url"].(string); ok {
-		cmdArgs = append(cmdArgs, "--url", url)
-	}
-	if context, ok := args["context"].(string); ok && context != "" {
-		cmdArgs = append(cmdArgs, "--context", context)
-	}
-	if timeout, ok := getInt(args, "timeout"); ok {
-		cmdArgs = append(cmdArgs, "--timeout", strconv.Itoa(timeout))
-	}
-	if getBoolDefault(args, "json", true) {
-		cmdArgs = append(cmdArgs, "--json")
-	}
-	if getBoolDefault(args, "min", true) {
-		cmdArgs = append(cmdArgs, "--min")
 	}
 	return cmdArgs
 }

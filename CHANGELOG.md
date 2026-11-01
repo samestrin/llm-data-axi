@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Removed
+
+- The `extract_relevant` and `extract_links` MCP tools (and `LLMTimeout`) are gone; the server now advertises 24 tools and rejects calls to the removed ones as unknown. They move to llm-extract-axi.
+
 ### Added
 
 - Standalone repository, extracted from [samestrin/llm-tools](https://github.com/samestrin/llm-tools). Twenty-six tools travel across 25 source files, together with `pkg/output`, `pkg/llmapi`, `internal/support/gitignore` and `internal/support/utils`, renamed to `internal/data/*`.

@@ -254,57 +254,6 @@ func GetToolDefinitions() []ToolDefinition {
 					}`),
 		},
 		{
-			Name:        ToolPrefix + "extract_relevant",
-			Description: "Extract relevant content from files/URLs using LLM. Filters to query-relevant parts.",
-			InputSchema: json.RawMessage(`{
-						"type": "object",
-						"properties": {
-							"path": {
-								"type": "string",
-								"description": "File, directory, or URL"
-							},
-							"context": {
-								"type": "string",
-								"description": "Relevance criteria"
-							},
-							"concurrency": {
-								"type": "integer",
-								"description": "Concurrent API calls (default: 2)"
-							},
-							"output": {
-								"type": "string"
-							},
-							"timeout": {
-								"type": "integer",
-								"description": "Timeout in seconds (default: 60)"
-							}
-						},
-						"required": ["context"]
-					}`),
-		},
-		{
-			Name:        ToolPrefix + "extract_links",
-			Description: "Extract and rank links from a URL. Heuristic mode (default) or LLM-ranked (with context).",
-			InputSchema: json.RawMessage(`{
-						"type": "object",
-						"properties": {
-							"url": {
-								"type": "string",
-								"description": "URL"
-							},
-							"context": {
-								"type": "string",
-								"description": "Context for LLM-based ranking (enables LLM mode)"
-							},
-							"timeout": {
-								"type": "integer",
-								"description": "HTTP timeout in seconds (default: 30)"
-							}
-						},
-						"required": ["url"]
-					}`),
-		},
-		{
 			Name:        ToolPrefix + "highest",
 			Description: "Find highest numbered directory or file. Returns HIGHEST, NAME, FULL_PATH, NEXT, COUNT.",
 			InputSchema: json.RawMessage(`{

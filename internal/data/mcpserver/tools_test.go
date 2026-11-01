@@ -14,7 +14,7 @@ import (
 // catch a tool being dropped.
 var portedTools = []string{
 	"catfiles", "count", "detect", "diff_smell", "discover_tests",
-	"extract_links", "extract_relevant", "git_changes", "git_context",
+	"git_changes", "git_context",
 	"grep", "highest", "math", "multiexists", "multigrep", "plan_type",
 	"project_components", "repo_root", "runtime", "stats", "template",
 	"tier_classifier", "tree", "yaml_get", "yaml_multiget", "yaml_multiset",
@@ -40,7 +40,7 @@ func TestGetToolDefinitionsRegistersExactlyThePortedSet(t *testing.T) {
 	}
 	sort.Strings(want)
 
-	// Reported as two lists rather than a count, because "26 tools, one of them
+	// Reported as two lists rather than a count, because "24 tools, one of them
 	// the wrong one" is the failure a count alone reads as a pass.
 	wantSet := make(map[string]bool, len(want))
 	for _, n := range want {
@@ -93,16 +93,15 @@ func TestEveryToolHasAUsefulDescription(t *testing.T) {
 
 func TestToolSchemaRequiredFields(t *testing.T) {
 	requiredFields := map[string][]string{
-		ToolPrefix + "grep":             {"pattern", "paths"},
-		ToolPrefix + "multiexists":      {"paths"},
-		ToolPrefix + "template":         {"file"},
-		ToolPrefix + "multigrep":        {"keywords"},
-		ToolPrefix + "count":            {"mode", "path"},
-		ToolPrefix + "extract_relevant": {"context"},
-		ToolPrefix + "yaml_get":         {"file", "key"},
-		ToolPrefix + "yaml_set":         {"file", "key", "value"},
-		ToolPrefix + "yaml_multiget":    {"file"},
-		ToolPrefix + "yaml_multiset":    {"file", "pairs"},
+		ToolPrefix + "grep":          {"pattern", "paths"},
+		ToolPrefix + "multiexists":   {"paths"},
+		ToolPrefix + "template":      {"file"},
+		ToolPrefix + "multigrep":     {"keywords"},
+		ToolPrefix + "count":         {"mode", "path"},
+		ToolPrefix + "yaml_get":      {"file", "key"},
+		ToolPrefix + "yaml_set":      {"file", "key", "value"},
+		ToolPrefix + "yaml_multiget": {"file"},
+		ToolPrefix + "yaml_multiset": {"file", "pairs"},
 	}
 
 	seen := make(map[string]bool)

@@ -23,9 +23,9 @@ import (
 )
 
 // portedToolCount is the size of the set carried over from llm-support by the
-// Phase 2 port rule. llm-tools asserted 77 here; llm-data ships the 26 tools
+// Phase 2 port rule. llm-tools asserted 77 here; llm-data ships the 24 tools
 // that the cadence skills actually call.
-const portedToolCount = 26
+const portedToolCount = 24
 
 func TestToolCount(t *testing.T) {
 	if got := len(mcpserver.GetToolDefinitions()); got != portedToolCount {
@@ -233,6 +233,27 @@ func TestServerListsEveryPortedToolOverStdio(t *testing.T) {
 	}
 	if len(payload.Tools) != portedToolCount {
 		t.Errorf("the running server advertises %d tools, want %d", len(payload.Tools), portedToolCount)
+	}
+	for _, tool := range payload.Tools {
+		if strings.HasPrefix(tool.Name, "llm_data_extract_") {
+			t.Errorf("the running server still advertises %s, which moved to llm-extract-axi", tool.Name)
+		}
+	}
+}
+
+// A call to a tool that moved to llm-extract-axi must be rejected, not run.
+func TestRemovedExtractToolCallIsRejectedOverStdio(t *testing.T) {
+	got := speak(t, []string{
+		initRequest,
+		initNotification,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"llm_data_extract_links","arguments":{"url":"http://127.0.0.1:1"}}}`,
+	})
+	resp, ok := got[2]
+	if !ok {
+		t.Fatal("no response to tools/call")
+	}
+	if len(resp.Error) == 0 && !strings.Contains(strings.ToLower(string(resp.Result)), "unknown") {
+		t.Errorf("tools/call llm_data_extract_links was not rejected as unknown: %s", resp.Result)
 	}
 }
 

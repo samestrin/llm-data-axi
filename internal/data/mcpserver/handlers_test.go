@@ -461,44 +461,6 @@ func TestBuildRepoRootArgs(t *testing.T) {
 	}
 }
 
-func TestBuildExtractRelevantArgs(t *testing.T) {
-	tests := []struct {
-		name string
-		args map[string]interface{}
-		want []string
-	}{
-		{
-			name: "basic (defaults to json+min)",
-			args: map[string]interface{}{"context": "find auth code"},
-			want: []string{"extract-relevant", "--context", "find auth code", "--json", "--min"},
-		},
-		{
-			name: "with path (defaults to json+min)",
-			args: map[string]interface{}{"context": "query", "path": "/src"},
-			want: []string{"extract-relevant", "--path", "/src", "--context", "query", "--json", "--min"},
-		},
-		{
-			name: "with concurrency and timeout (defaults to json+min)",
-			args: map[string]interface{}{"context": "query", "concurrency": float64(4), "timeout": float64(30)},
-			want: []string{"extract-relevant", "--context", "query", "--concurrency", "4", "--timeout", "30", "--json", "--min"},
-		},
-		{
-			name: "with json+min disabled",
-			args: map[string]interface{}{"context": "query", "json": false, "min": false},
-			want: []string{"extract-relevant", "--context", "query"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := buildExtractRelevantArgs(tt.args)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("buildExtractRelevantArgs() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestBuildArgsDispatcher(t *testing.T) {
 	// Note: Many commands now default to --json --min, so expected lengths are higher
 	tests := []struct {
@@ -516,9 +478,8 @@ func TestBuildArgsDispatcher(t *testing.T) {
 		{"count", map[string]interface{}{"mode": "lines", "path": "f"}, 6}, // now includes --json --min
 		{"git_context", map[string]interface{}{}, 3},                       // now includes --json --min
 		{"repo_root", map[string]interface{}{}, 1},
-		{"extract_relevant", map[string]interface{}{"context": "c"}, 5}, // now includes --json --min
-		{"plan_type", map[string]interface{}{}, 3},                      // now includes --json --min
-		{"git_changes", map[string]interface{}{}, 3},                    // now includes --json --min
+		{"plan_type", map[string]interface{}{}, 3},   // now includes --json --min
+		{"git_changes", map[string]interface{}{}, 3}, // now includes --json --min
 	}
 
 	for _, tt := range tests {
@@ -553,6 +514,16 @@ func TestBuildArgsUnknownCommand(t *testing.T) {
 	_, err := buildArgs("unknown_command", map[string]interface{}{})
 	if err == nil {
 		t.Error("Expected error for unknown command")
+	}
+}
+
+// extract_relevant and extract_links moved to llm-extract-axi. A call to either
+// must be rejected as unknown, not silently run something.
+func TestRemovedExtractToolsAreRejectedAsUnknown(t *testing.T) {
+	for _, name := range []string{"extract_relevant", "extract_links"} {
+		if _, err := buildArgs(name, map[string]interface{}{"context": "c", "url": "u"}); err == nil {
+			t.Errorf("buildArgs(%s) succeeded, want unknown command", name)
+		}
 	}
 }
 
