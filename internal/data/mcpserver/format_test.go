@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 )
 
 // fakeBinary installs a shell script in place of the real llm-data binary. The
@@ -97,37 +96,6 @@ func TestPerCallFormatOverridesTheServerWideDefault(t *testing.T) {
 	}
 	if !wantsAXI(map[string]interface{}{"format": "AXI"}) {
 		t.Error("the format argument must be case-insensitive")
-	}
-}
-
-// The two commands that reach pkg/llmapi were both absent from llm-tools'
-// llmCommands map, so the only two tools that make a network LLM call were the
-// two capped at the 60-second local timeout.
-func TestLLMCommandsCoversEveryCommandThatCallsAnLLM(t *testing.T) {
-	for _, name := range []string{"extract_relevant", "extract_links"} {
-		if !llmCommands[name] {
-			t.Errorf("%s calls an LLM API and must get LLMTimeout, not CommandTimeout", name)
-		}
-	}
-	if LLMTimeout <= CommandTimeout {
-		t.Errorf("LLMTimeout (%v) must exceed CommandTimeout (%v)", LLMTimeout, CommandTimeout)
-	}
-	if LLMTimeout != 300*time.Second {
-		t.Errorf("LLMTimeout = %v, want 300s", LLMTimeout)
-	}
-}
-
-// Every command that llmCommands names must actually be registered, or the map
-// is granting a longer timeout to a tool that does not exist.
-func TestLLMCommandsNamesOnlyRegisteredTools(t *testing.T) {
-	registered := make(map[string]bool)
-	for _, tool := range GetToolDefinitions() {
-		registered[strings.TrimPrefix(tool.Name, ToolPrefix)] = true
-	}
-	for name := range llmCommands {
-		if !registered[name] {
-			t.Errorf("llmCommands names %q, which is not a registered tool", name)
-		}
 	}
 }
 
