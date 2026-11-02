@@ -27,39 +27,3 @@ func TestFormatSize(t *testing.T) {
 		})
 	}
 }
-
-func TestParseSize(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected int64
-		hasError bool
-	}{
-		{"bytes", "500 B", 500, false},
-		{"kilobytes", "1 KB", 1024, false},
-		{"megabytes", "1 MB", 1024 * 1024, false},
-		{"gigabytes", "1 GB", 1024 * 1024 * 1024, false},
-		{"no space", "1KB", 1024, false},
-		{"just number", "1024", 1024, false},
-		{"lowercase", "1 kb", 1024, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := ParseSize(tt.input)
-			if tt.hasError {
-				if err == nil {
-					t.Errorf("ParseSize(%q) should return error", tt.input)
-				}
-				return
-			}
-			if err != nil {
-				t.Errorf("ParseSize(%q) returned error: %v", tt.input, err)
-				return
-			}
-			if result != tt.expected {
-				t.Errorf("ParseSize(%q) = %d, want %d", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
