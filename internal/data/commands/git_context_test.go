@@ -535,3 +535,33 @@ func TestParseGitRemotes(t *testing.T) {
 		})
 	}
 }
+
+// TestGetGitRemotes defends the wiring around parseGitRemotes: a repo's
+// remotes reach git-context, and a directory git rejects yields no remotes
+// rather than an entry built from an error message.
+func TestGetGitRemotes(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	repo := t.TempDir()
+	initGitRepo(t, repo)
+	runGitCmd(t, repo, "remote", "add", "upstream", "https://example.com/upstream.git")
+	runGitCmd(t, repo, "remote", "add", "origin", "git@example.com:me/repo.git")
+
+	want := []GitRemote{
+		{Name: "origin", FetchURL: "git@example.com:me/repo.git", PushURL: "git@example.com:me/repo.git"},
+		{Name: "upstream", FetchURL: "https://example.com/upstream.git", PushURL: "https://example.com/upstream.git"},
+	}
+	if got := getGitRemotes(repo); !reflect.DeepEqual(got, want) {
+		t.Errorf("getGitRemotes(repo) =\n  %#v\nwant\n  %#v", got, want)
+	}
+
+	// Stop git searching upward, so a temp dir inside some checkout is
+	// still not a repository.
+	notRepo := t.TempDir()
+	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(notRepo))
+	if got := getGitRemotes(notRepo); got != nil {
+		t.Errorf("getGitRemotes(not a repo) = %#v, want nil", got)
+	}
+}
