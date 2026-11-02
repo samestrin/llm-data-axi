@@ -1,10 +1,5 @@
 package utils
 
-import (
-	"path/filepath"
-	"strings"
-)
-
 // ExcludedDirs is a set of directory names to exclude from traversal
 var ExcludedDirs = map[string]bool{
 	".stryker-tmp":  true,
@@ -42,11 +37,4 @@ var ExcludedDirs = map[string]bool{
 // IsExcludedDir checks if a directory name should be excluded
 func IsExcludedDir(name string) bool {
 	return ExcludedDirs[name]
-}
-
-// NormalizePath normalizes a file path for consistent comparison
-func NormalizePath(path string) string {
-	path = filepath.Clean(path)
-	path = strings.ReplaceAll(path, "\\", "/")
-	return path
 }
