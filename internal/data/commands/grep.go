@@ -78,9 +78,14 @@ func runGrep(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
+		// A path that cannot be read is an error, not an empty result: skipping
+		// it made a mistyped path indistinguishable from a search with no match.
 		info, err := os.Stat(absPath)
+		if os.IsNotExist(err) {
+			return fmt.Errorf("path not found: %s", pathStr)
+		}
 		if err != nil {
-			continue
+			return err
 		}
 
 		if info.IsDir() {

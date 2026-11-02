@@ -192,21 +192,22 @@ func TestGrepCLIHelperProcess(t *testing.T) {
 	os.Exit(0)
 }
 
-// runGrepCLI runs llm-data with args in a child process and returns its stdout
-// and exit code.
-func runGrepCLI(t *testing.T, args ...string) (string, int) {
+// runGrepCLI runs llm-data with args in a child process and returns its stdout,
+// its stderr and its exit code.
+func runGrepCLI(t *testing.T, args ...string) (string, string, int) {
 	t.Helper()
 	c := exec.Command(os.Args[0], "-test.run=^TestGrepCLIHelperProcess$")
 	c.Env = append(os.Environ(), grepCLIArgsEnv+"="+strings.Join(args, "\n"))
 	stdout := new(bytes.Buffer)
 	c.Stdout = stdout
-	c.Stderr = new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	c.Stderr = stderr
 	err := c.Run()
 	var exitErr *exec.ExitError
 	if err != nil && !errors.As(err, &exitErr) {
 		t.Fatalf("run %v: %v", args, err)
 	}
-	return stdout.String(), c.ProcessState.ExitCode()
+	return stdout.String(), stderr.String(), c.ProcessState.ExitCode()
 }
 
 // TestGrepMissingPathFailsInEveryMode defends against grep skipping a path that
@@ -216,26 +217,33 @@ func runGrepCLI(t *testing.T, args ...string) (string, int) {
 func TestGrepMissingPathFailsInEveryMode(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 
+	// Plain mode writes the error to stderr; the structured modes keep it on
+	// stdout so a consumer reads one stream.
 	modes := []struct {
-		name string
-		flag []string
+		name     string
+		flag     []string
+		onStderr bool
 	}{
-		{"plain", nil},
-		{"json", []string{"--json"}},
-		{"axi", []string{"--axi"}},
+		{"plain", nil, true},
+		{"json", []string{"--json"}, false},
+		{"axi", []string{"--axi"}, false},
 	}
 	for _, m := range modes {
 		t.Run(m.name, func(t *testing.T) {
 			args := append([]string{"grep", "foo", missing}, m.flag...)
-			out, code := runGrepCLI(t, args...)
+			stdout, stderr, code := runGrepCLI(t, args...)
 			if code == 0 {
-				t.Errorf("exit 0 for a missing path; output:\n%s", out)
+				t.Errorf("exit 0 for a missing path; stdout:\n%s", stdout)
 			}
-			if !strings.Contains(out, "path not found") || !strings.Contains(out, missing) {
-				t.Errorf("output does not name the missing path:\n%s", out)
+			msg := stdout
+			if m.onStderr {
+				msg = stderr
 			}
-			if strings.Contains(out, "pattern: foo") || strings.Contains(out, `"pattern": "foo"`) {
-				t.Errorf("printed a result as if the search ran:\n%s", out)
+			if !strings.Contains(msg, "path not found") || !strings.Contains(msg, missing) {
+				t.Errorf("error does not name the missing path:\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+			}
+			if strings.Contains(stdout, "pattern: foo") || strings.Contains(stdout, `"pattern": "foo"`) {
+				t.Errorf("printed a result as if the search ran:\n%s", stdout)
 			}
 		})
 	}
