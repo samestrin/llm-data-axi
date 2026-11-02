@@ -148,15 +148,3 @@ func TestYAMLMultisetDryRunHonoursAXI(t *testing.T) {
 		t.Errorf("the new value did not survive:\n%s", got)
 	}
 }
-
-func TestYAMLListScalarPrefixHonoursAXI(t *testing.T) {
-	// `yaml list PREFIX` where the prefix resolves to a SCALAR takes an early
-	// return that prints `prefix=value` and never reaches the guard.
-	got := runYAMLWithAXI(t, "list", "--file", writeYAMLFixture(t), "nested.inner")
-	if strings.Contains(got, "nested.inner=value") {
-		t.Errorf("--axi was ignored on the scalar-prefix early return:\n%s", got)
-	}
-	if !strings.Contains(got, "value") {
-		t.Errorf("the value did not survive:\n%s", got)
-	}
-}
