@@ -90,7 +90,7 @@ Examples:
 			data, err := readYAMLAsMap(file)
 			if err != nil {
 				if os.IsNotExist(err) {
-					return fmt.Errorf("config file not found: %s (hint: run 'llm-data yaml init --file %s' first)", file, file)
+					return fmt.Errorf("config file not found: %s", file)
 				}
 				return fmt.Errorf("failed to read config file: %w", err)
 			}
@@ -187,7 +187,7 @@ Examples:
 			// Check if file exists
 			if _, err := os.Stat(file); os.IsNotExist(err) {
 				if !create {
-					return fmt.Errorf("config file not found: %s (hint: use --create to create it, or run 'llm-data yaml init --file %s' first)", file, file)
+					return fmt.Errorf("config file not found: %s (hint: use --create to create it)", file)
 				}
 				// Create empty file (unless dry-run)
 				if !dryRun {
