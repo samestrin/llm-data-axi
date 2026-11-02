@@ -1,7 +1,10 @@
 package commands
 
 import (
+	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/samestrin/llm-data-axi/pkg/output"
@@ -56,7 +59,11 @@ workflows.
 
 Designed for fast startup, single binary distribution, and AXI (TOON)
 output that costs fewer tokens than JSON.`,
-	Version:       Version,
+	Version: Version,
+	// No Args validator on purpose: with Args nil, cobra's legacyArgs rejects a
+	// stray word as "unknown command" before it looks at --help. cobra.NoArgs
+	// would let `llm-data typo --help` print help and exit 0.
+	RunE:          runHome,
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
@@ -75,6 +82,54 @@ output that costs fewer tokens than JSON.`,
 		// calls, so nothing else would have cleared it.
 		output.SetDefaultAXI(GlobalAXIOutput)
 	},
+}
+
+// homeDescription is the one sentence the home view prints.
+const homeDescription = "Deterministic commands for reading, searching and reshaping code, configuration and documentation in LLM workflows."
+
+// executablePath is os.Executable, swappable so a test can pin the path the
+// home view reports.
+var executablePath = os.Executable
+
+// HomeView is what a bare `llm-data` prints: where the binary is and what it
+// is for, instead of the full cobra help page.
+type HomeView struct {
+	Bin         string `json:"bin"`
+	Description string `json:"description"`
+}
+
+// runHome prints the home view. A path that cannot be resolved is an error,
+// not a blank line: the view exists to say where the binary is.
+func runHome(cmd *cobra.Command, args []string) error {
+	exe, err := executablePath()
+	if err != nil {
+		return fmt.Errorf("cannot resolve executable path: %w", err)
+	}
+	home, _ := os.UserHomeDir()
+	view := HomeView{Bin: tildeHome(exe, home), Description: homeDescription}
+	return output.New(GlobalJSONOutput, GlobalMinOutput, cmd.OutOrStdout()).Print(view, printHomeText)
+}
+
+func printHomeText(w io.Writer, data interface{}) {
+	v := data.(HomeView)
+	fmt.Fprintf(w, "bin: %s\n", v.Bin)
+	fmt.Fprintf(w, "description: %s\n", v.Description)
+}
+
+// tildeHome writes path with a leading home directory as "~". Only a whole
+// path element matches, so /home/samx is not shortened under /home/sam.
+func tildeHome(path, home string) string {
+	if home == "" {
+		return path
+	}
+	home = filepath.Clean(home)
+	if path == home {
+		return "~"
+	}
+	if rest, ok := strings.CutPrefix(path, home+string(filepath.Separator)); ok {
+		return "~" + string(filepath.Separator) + rest
+	}
+	return path
 }
 
 // Execute runs the root command
