@@ -42,7 +42,7 @@ Five things worth knowing before you add one:
 
 1. **Assert side effects, not exit codes.** A command test that only checks for exit 0 passes even when the command printed nothing. Check the payload.
 2. **Tests are not parallel-safe.** `internal/data/commands` swaps package globals (`GlobalAXIOutput`, `GlobalJSONOutput`, `GlobalMinOutput`, and each command's own flag vars). Never add `t.Parallel()` there, and restore any global you set with `t.Cleanup`.
-3. **No network in tests.** There is no network in the product either — nothing in this repository imports `net/http`, and `internal/noweb_guard_test.go` fails the build if one ever does. **Never write a test that `t.Skip`s on an environment variable** — that is what makes a local number and a CI number disagree.
+3. **No network in tests.** There is no network in the product either — nothing in this repository imports `net/http`, and `internal/noweb_guard_test.go` fails the build if a file under `internal/` or `pkg/` ever does. **Never write a test that `t.Skip`s on an environment variable** — that is what makes a local number and a CI number disagree.
 4. **Never mix a real path with a `t.TempDir()` path.** On macOS `t.TempDir()` sits behind `/var -> /private/var`, and `os.Getwd` resolves it. Call `filepath.EvalSymlinks` on the temp dir before comparing.
 5. **Prove a test can fail.** Break the code deliberately and confirm it goes red. A test that passes against sabotaged code is not defending anything — one assertion here about stripped HTML chrome passed against sabotaged code and had to be rewritten.
 
@@ -62,4 +62,4 @@ Prefer the smallest change that solves the problem. If a fix starts pulling in a
 
 This repository was extracted from `llm-tools` and the extraction is not finished across the wider toolchain. Do not port behaviour back and forth between the two; `llm-tools` is frozen on go-axi v0.1.2 and is being archived. In particular, **a change here is not a change there** — the two copies of these commands will diverge and that is expected.
 
-Twenty-four tools travelled and remain. The rest stayed behind on purpose, because no consumer calls them. Adding one back is cheap and reversible; do it when something actually needs it, not pre-emptively.
+Twenty-six tools travelled; twenty-four remain. The rest stayed behind on purpose, because no consumer calls them. Adding one back is cheap and reversible; do it when something actually needs it, not pre-emptively.
