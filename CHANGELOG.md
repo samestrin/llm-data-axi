@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The no-network guard (`internal/noweb_guard_test.go`) now also scans `cmd/`, so a `net/http`, `net` or `goquery` import in either binary fails the build.
+
 ### Removed
 
 - The `extract-relevant` and `extract-links` CLI commands and the `extract_relevant` and `extract_links` MCP tools (with their `llmCommands` map and `LLMTimeout`) are gone; the server now advertises 24 tools and rejects calls to the removed ones as unknown. They move to [llm-extract-axi](https://github.com/samestrin/llm-extract-axi), which ships them as `llm-extract extract-relevant` and `llm-extract extract-links` (MCP: `extract_relevant` and `extract_links` on `llm-extract-mcp`). Nothing left in this repository makes a network call: `internal/noweb_guard_test.go` fails the build if a non-test file under `internal/` or `pkg/` imports `net/http`, `net` or `goquery`.
@@ -25,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **A bare `llm-data` run shows a home view instead of cobra help.** It prints two lines, `bin:` with the executable path (home directory written as `~`) and `description:` with one sentence, and honours `--json` and `--axi`. `--help` still prints help, and an unknown subcommand still fails with exit 2. If the executable path cannot be resolved the run fails rather than printing an empty `bin:`.
 - go-axi moves from **v0.1.2** to **v0.3.0**.
 - Binary renamed `llm-support` → `llm-data`; MCP tool prefix `llm_support_` → `llm_data_`; debug variable `LLM_SUPPORT_MCP_DEBUG` → `LLM_DATA_MCP_DEBUG`.
+- **The MCP server now asks the CLI for TOON (`--axi`) by default.** Pass `"format": "json"` on a call, or start the server with `LLM_DATA_MCP_AXI=false`, to get `--json --min`; an unknown `format` value is now an error (`runtime` keeps its own `format`, the time format).
 - Thirteen direct dependencies that only the unported commands used are dropped, plus the two the removed LLM code was the only consumer of. Seven direct requires remain.
 - The CLI version is stamped by `-X` onto `commands.Version` at build time instead of being hardcoded.
 

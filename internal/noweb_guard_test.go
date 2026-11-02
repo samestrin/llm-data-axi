@@ -53,10 +53,10 @@ func scanForbiddenImports(root string) ([]string, error) {
 	return hits, err
 }
 
-// TestNoWebImports defends the Epic 01 split: nothing under internal/ or pkg/
+// TestNoWebImports defends the Epic 01 split: nothing under internal/, pkg/ or cmd/
 // may import net, net/http or goquery.
 func TestNoWebImports(t *testing.T) {
-	for _, root := range []string{".", "../pkg"} {
+	for _, root := range []string{".", "../pkg", "../cmd"} {
 		hits, err := scanForbiddenImports(root)
 		if err != nil {
 			t.Fatalf("scan %s: %v", root, err)

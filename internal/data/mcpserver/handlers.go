@@ -87,22 +87,73 @@ var CommandTimeout = 60 * time.Second
 // Debug enables verbose logging for debugging MCP tool execution
 var Debug = os.Getenv("LLM_DATA_MCP_DEBUG") == "true"
 
-// AXIFormat selects TOON output for every command this server runs.
+// AXIFormat is the server-wide encoding: true asks the CLI for TOON, false for
+// --json --min.
 //
 // llm-tools appended "--json --min" unconditionally and no handler ever passed
 // --axi, so the CLI's AXI output was unreachable through MCP no matter what the
-// binary supported. The default stays --json --min, because that is what the
-// registered MCP clients parse today; set LLM_DATA_MCP_AXI=true, or pass
-// "format": "axi" on a single call, to get TOON instead.
-var AXIFormat = os.Getenv("LLM_DATA_MCP_AXI") == "true"
+// binary supported. TOON is now the default. LLM_DATA_MCP_AXI=false restores
+// --json --min for the whole server, and a per-call "format": "json" does the
+// same for one call.
+var AXIFormat = loadAXIDefault()
+
+func loadAXIDefault() bool {
+	axi, err := axiDefaultFromEnv(os.Getenv("LLM_DATA_MCP_AXI"))
+	if err != nil {
+		// stdout carries the protocol, so the warning goes to stderr.
+		fmt.Fprintln(os.Stderr, "[LLM_DATA_MCP]", err)
+	}
+	return axi
+}
+
+// axiDefaultFromEnv reads LLM_DATA_MCP_AXI. Unset means TOON. A value that is
+// not a boolean keeps TOON and returns an error, so it is reported rather than
+// silently ignored.
+func axiDefaultFromEnv(value string) (bool, error) {
+	if value == "" {
+		return true, nil
+	}
+	axi, err := strconv.ParseBool(value)
+	if err != nil {
+		return true, fmt.Errorf("LLM_DATA_MCP_AXI=%q is not true or false; using the default, TOON", value)
+	}
+	return axi, nil
+}
 
 // wantsAXI reports whether this call should ask the CLI for TOON.
-// A per-call "format" argument wins over the server-wide default.
-func wantsAXI(args map[string]interface{}) bool {
-	if f, ok := args["format"].(string); ok && f != "" {
-		return strings.EqualFold(f, "axi") || strings.EqualFold(f, "toon")
+// A per-call "format" argument wins over the server-wide default. A format
+// the server does not know is an error: falling back to a default would hand a
+// caller who asked for something else an encoding it did not ask for.
+//
+// runtime advertises its own "format" (secs, hms, human, ...), which is its
+// time format, so for runtime the argument never selects the encoding.
+func wantsAXI(cmdName string, args map[string]interface{}) (bool, error) {
+	f, ok := args["format"].(string)
+	if !ok || f == "" || cmdName == "runtime" {
+		return AXIFormat, nil
 	}
-	return AXIFormat
+	switch strings.ToLower(f) {
+	case "axi", "toon":
+		return true, nil
+	case "json":
+		return false, nil
+	}
+	return false, fmt.Errorf("unknown format %q: want \"axi\" (or \"toon\") or \"json\"", f)
+}
+
+// withoutBuilderEncoding returns a copy of args that tells every builder not
+// to add --json or --min, so the encoding is decided in one place. It works
+// through the builders' own json/min switches rather than by filtering the
+// built command line, because a user value can be spelled "--json" too: a
+// grep pattern or a tree exclude must reach the CLI intact.
+func withoutBuilderEncoding(args map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(args)+2)
+	for k, v := range args {
+		out[k] = v
+	}
+	out["json"] = false
+	out["min"] = false
+	return out
 }
 
 // ExecuteHandler executes the appropriate command for a tool
@@ -110,10 +161,13 @@ func ExecuteHandler(toolName string, args map[string]interface{}) (string, error
 	// Strip prefix
 	cmdName := strings.TrimPrefix(toolName, ToolPrefix)
 
-	axi := wantsAXI(args)
+	axi, err := wantsAXI(cmdName, args)
+	if err != nil {
+		return "", err
+	}
 
 	// Build command args
-	cmdArgs, err := buildArgs(cmdName, args)
+	cmdArgs, err := buildArgs(cmdName, withoutBuilderEncoding(args))
 	if err != nil {
 		return "", err
 	}
@@ -856,7 +910,9 @@ func buildDiffSmellArgs(args map[string]interface{}) []string {
 	if v, ok := args["rev"].(string); ok && v != "" {
 		cmdArgs = append(cmdArgs, "--rev", v)
 	}
-	cmdArgs = append(cmdArgs, "--json")
+	if getBoolDefault(args, "json", true) {
+		cmdArgs = append(cmdArgs, "--json")
+	}
 	return cmdArgs
 }
 
@@ -868,6 +924,8 @@ func buildTierClassifierArgs(args map[string]interface{}) []string {
 	if v, ok := args["config"].(string); ok && v != "" {
 		cmdArgs = append(cmdArgs, "--config", v)
 	}
-	cmdArgs = append(cmdArgs, "--json")
+	if getBoolDefault(args, "json", true) {
+		cmdArgs = append(cmdArgs, "--json")
+	}
 	return cmdArgs
 }

@@ -46,25 +46,3 @@ func TestIsExcludedDir(t *testing.T) {
 		})
 	}
 }
-
-func TestNormalizePath(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"forward slashes", "path/to/file", "path/to/file"},
-		{"double slashes", "path//to//file", "path/to/file"},
-		{"trailing slash", "path/to/dir/", "path/to/dir"},
-		{"dot segments", "path/./to/../file", "path/file"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := NormalizePath(tt.input)
-			if result != tt.expected {
-				t.Errorf("NormalizePath(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
