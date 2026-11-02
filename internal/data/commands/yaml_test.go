@@ -33,10 +33,6 @@ func createTestYAML(t *testing.T, dir, content string) string {
 }
 
 // ============================================================================
-// US-01: Configuration Initialization Tests
-// ============================================================================
-
-// ============================================================================
 // US-02: Single Value Operations Tests
 // ============================================================================
 
@@ -465,14 +461,6 @@ func TestYamlMultiset_ValidationBeforeWrite(t *testing.T) {
 		t.Error("file was modified despite validation failure")
 	}
 }
-
-// ============================================================================
-// US-04: Configuration Management Tests
-// ============================================================================
-
-// ============================================================================
-// Array Operations Tests (Push/Pop)
-// ============================================================================
 
 // ============================================================================
 // Additional Coverage Tests
@@ -2379,9 +2367,19 @@ func TestYamlSurfaceIsOnlyTheFourCommands(t *testing.T) {
 		cmd := newYamlCmd()
 		cmd.SetOut(new(bytes.Buffer))
 		cmd.SetErr(new(bytes.Buffer))
-		cmd.SetArgs([]string{name, "--file", "x.yaml"})
-		if err := cmd.Execute(); err == nil {
-			t.Errorf("yaml %s was accepted; it should be an unknown command", name)
+		cmd.SetArgs([]string{name})
+		err := cmd.Execute()
+		if err == nil || !strings.Contains(err.Error(), "unknown command") {
+			t.Errorf("yaml %s: want an unknown-command error, got %v", name, err)
 		}
+	}
+
+	// The bare parent still shows help and succeeds.
+	cmd := newYamlCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetErr(new(bytes.Buffer))
+	cmd.SetArgs([]string{})
+	if err := cmd.Execute(); err != nil {
+		t.Errorf("bare yaml should print help, got %v", err)
 	}
 }

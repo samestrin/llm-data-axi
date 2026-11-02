@@ -26,6 +26,14 @@ Subcommands:
   set       Store a value at a key
   multiget  Retrieve multiple values
   multiset  Store multiple values atomically`,
+		// Runnable so cobra validates the argument instead of printing help
+		// and exiting 0 for a removed or misspelt subcommand.
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
+		},
 	}
 
 	// Add subcommands
