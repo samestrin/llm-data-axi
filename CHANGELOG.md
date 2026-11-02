@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **A data race in `BatchProcessor.ProcessItemsWithProgress`.** The completion counter was incremented from inside each worker goroutine with no lock. Measured under `-race` across 32 items at concurrency 8: the final progress report read "29 of 32" and three intermediate values were reported twice. The counter and the callback now run under one mutex, so the callback also sees a strictly increasing count.
 - **The MCP server hardcoded `/usr/local/bin/llm-support`** with no lookup, so it refused to start for anyone who installed the CLI elsewhere, and the repo's own end-to-end tests could not run without installing first. `BinaryPath` now resolves from `PATH`, falls back to the install location, and honours `LLM_DATA_BINARY`.
 - **A help-text promise that nothing kept.** `extract-relevant --help` advertised a `.planning/.config/openai_api_key` file. No such file was ever read; the LLM client configuration was environment-only. The line was corrected to name the environment variables that actually work; the command itself has since been removed (see Removed).
+- **`git-context` listed remotes in a different order on every run.** The list was built by ranging over a map, so a repository with more than one remote printed them in random order. Remotes are now sorted by name, and the `git remote -v` parser is pinned by a table test over captured output.
 
 ### Not ported
 
