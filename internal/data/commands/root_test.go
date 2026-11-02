@@ -8,6 +8,15 @@ import (
 	"testing"
 )
 
+// clearHelpFlag undoes cobra leaving --help set after a run that passed it;
+// otherwise the next in-process run prints help whatever its arguments.
+func clearHelpFlag() {
+	if f := RootCmd.Flags().Lookup("help"); f != nil {
+		_ = f.Value.Set("false")
+		f.Changed = false
+	}
+}
+
 // runRootBoth drives the real command tree with stdout and stderr captured
 // together, so a test can see help text wherever cobra chose to write it.
 func runRootBoth(t *testing.T, args ...string) string {
@@ -21,13 +30,9 @@ func runRootBoth(t *testing.T, args ...string) string {
 		RootCmd.SetOut(nil)
 		RootCmd.SetErr(nil)
 		RootCmd.SetArgs(nil)
-		// cobra leaves --help set after a run that passed it, so the next
-		// in-process run would print help again whatever its arguments.
-		if f := RootCmd.Flags().Lookup("help"); f != nil {
-			_ = f.Value.Set("false")
-			f.Changed = false
-		}
+		clearHelpFlag()
 	})
+	clearHelpFlag()
 	ResetOutputModes()
 	if err := RootCmd.Execute(); err != nil {
 		t.Fatalf("%v: %v", args, err)
@@ -128,20 +133,25 @@ func TestRootHelpStillPrintsHelp(t *testing.T) {
 
 // Defends unknown subcommands: giving the root a Run makes cobra willing to
 // treat leftover words as its arguments, which would turn a typo into a
-// silent home view and exit 0.
+// silent home view and exit 0. With --help as well, an Args validator on the
+// root would print help and exit 0 instead.
 func TestRootUnknownCommandStillFails(t *testing.T) {
 	fakeExecutable(t)
-	RootCmd.SetOut(new(bytes.Buffer))
-	RootCmd.SetErr(new(bytes.Buffer))
-	RootCmd.SetArgs([]string{"no-such-command"})
-	t.Cleanup(func() {
-		RootCmd.SetOut(nil)
-		RootCmd.SetErr(nil)
-		RootCmd.SetArgs(nil)
-	})
-	err := RootCmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "unknown command") {
-		t.Errorf("want an unknown command error, got %v", err)
+	for _, args := range [][]string{{"no-such-command"}, {"no-such-command", "--help"}} {
+		clearHelpFlag()
+		RootCmd.SetOut(new(bytes.Buffer))
+		RootCmd.SetErr(new(bytes.Buffer))
+		RootCmd.SetArgs(args)
+		t.Cleanup(func() {
+			RootCmd.SetOut(nil)
+			RootCmd.SetErr(nil)
+			RootCmd.SetArgs(nil)
+			clearHelpFlag()
+		})
+		err := RootCmd.Execute()
+		if err == nil || !strings.Contains(err.Error(), "unknown command") {
+			t.Errorf("%v: want an unknown command error, got %v", args, err)
+		}
 	}
 }
 
