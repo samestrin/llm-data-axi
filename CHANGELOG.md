@@ -23,7 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - go-axi moves from **v0.1.2** to **v0.3.0**.
 - Binary renamed `llm-support` → `llm-data`; MCP tool prefix `llm_support_` → `llm_data_`; debug variable `LLM_SUPPORT_MCP_DEBUG` → `LLM_DATA_MCP_DEBUG`.
-- **The MCP server now asks the CLI for TOON (`--axi`) by default.** A call that passes `"format": "json"`, or a server started with `LLM_DATA_MCP_AXI=false`, still gets `--json --min`; `LLM_DATA_MCP_AXI=true` and `"format": "axi"` keep working. Exactly one encoding flag is sent: builders that added their own `--json` no longer send it beside `--axi`, and `format: "json"` no longer sends the flags twice. An unknown `format` value is now an error instead of falling back to JSON (`runtime` keeps its own `format`, the time format). Pinned end to end over stdio.
+- **The MCP server now asks the CLI for TOON (`--axi`) by default.** Pass `"format": "json"` on a call, or start the server with `LLM_DATA_MCP_AXI=false`, to get `--json --min`; an unknown `format` value is now an error (`runtime` keeps its own `format`, the time format).
 - Thirteen direct dependencies that only the unported commands used are dropped, plus the two the removed LLM code was the only consumer of. Seven direct requires remain.
 - The CLI version is stamped by `-X` onto `commands.Version` at build time instead of being hardcoded.
 

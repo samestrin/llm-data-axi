@@ -141,16 +141,19 @@ func wantsAXI(cmdName string, args map[string]interface{}) (bool, error) {
 	return false, fmt.Errorf("unknown format %q: want \"axi\" (or \"toon\") or \"json\"", f)
 }
 
-// withoutEncodingFlags drops the --json and --min that most builders add on
-// their own, so the encoding is decided in one place.
-func withoutEncodingFlags(cmdArgs []string) []string {
-	kept := cmdArgs[:0]
-	for _, a := range cmdArgs {
-		if a != "--json" && a != "--min" {
-			kept = append(kept, a)
-		}
+// withoutBuilderEncoding returns a copy of args that tells every builder not
+// to add --json or --min, so the encoding is decided in one place. It works
+// through the builders' own json/min switches rather than by filtering the
+// built command line, because a user value can be spelled "--json" too: a
+// grep pattern or a tree exclude must reach the CLI intact.
+func withoutBuilderEncoding(args map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(args)+2)
+	for k, v := range args {
+		out[k] = v
 	}
-	return kept
+	out["json"] = false
+	out["min"] = false
+	return out
 }
 
 // ExecuteHandler executes the appropriate command for a tool
@@ -164,7 +167,7 @@ func ExecuteHandler(toolName string, args map[string]interface{}) (string, error
 	}
 
 	// Build command args
-	cmdArgs, err := buildArgs(cmdName, args)
+	cmdArgs, err := buildArgs(cmdName, withoutBuilderEncoding(args))
 	if err != nil {
 		return "", err
 	}
@@ -173,7 +176,6 @@ func ExecuteHandler(toolName string, args map[string]interface{}) (string, error
 	// is sent. Sending both would in fact work — Formatter checks AXI first, so
 	// --axi wins over --json — but relying on that makes the encoding depend on
 	// a precedence rule rather than on what was asked for.
-	cmdArgs = withoutEncodingFlags(cmdArgs)
 	if axi {
 		cmdArgs = append(cmdArgs, "--axi")
 	} else {
@@ -908,7 +910,9 @@ func buildDiffSmellArgs(args map[string]interface{}) []string {
 	if v, ok := args["rev"].(string); ok && v != "" {
 		cmdArgs = append(cmdArgs, "--rev", v)
 	}
-	cmdArgs = append(cmdArgs, "--json")
+	if getBoolDefault(args, "json", true) {
+		cmdArgs = append(cmdArgs, "--json")
+	}
 	return cmdArgs
 }
 
@@ -920,6 +924,8 @@ func buildTierClassifierArgs(args map[string]interface{}) []string {
 	if v, ok := args["config"].(string); ok && v != "" {
 		cmdArgs = append(cmdArgs, "--config", v)
 	}
-	cmdArgs = append(cmdArgs, "--json")
+	if getBoolDefault(args, "json", true) {
+		cmdArgs = append(cmdArgs, "--json")
+	}
 	return cmdArgs
 }
