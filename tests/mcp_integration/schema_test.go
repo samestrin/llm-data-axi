@@ -10,6 +10,7 @@ package mcp_integration
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -129,7 +130,9 @@ func speak(t *testing.T, requests []string) map[int]rpcResponse {
 	cmd := exec.Command(mcp)
 	// Points the server at the freshly built CLI rather than whatever happens
 	// to be installed, so this test cannot pass against a stale binary.
-	cmd.Env = append(os.Environ(), "LLM_DATA_BINARY="+cli)
+	// LLM_DATA_MCP_AXI is cleared so an exported value cannot change which
+	// encoding the default-format assertions see.
+	cmd.Env = append(os.Environ(), "LLM_DATA_BINARY="+cli, "LLM_DATA_MCP_AXI=")
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -262,15 +265,17 @@ func TestRemovedExtractToolCallIsRejectedOverStdio(t *testing.T) {
 	}
 }
 
-// The end-to-end proof that --axi is reachable through MCP. llm-tools appended
-// "--json --min" unconditionally, so no MCP client could ever obtain TOON no
-// matter what the CLI supported.
+// The end-to-end proof of the MCP encoding. llm-tools appended "--json --min"
+// unconditionally, so no MCP client could ever obtain TOON no matter what the
+// CLI supported. Epic 03 T6 made TOON the default: a client that sends no
+// format gets TOON, and one that sends format=json still gets JSON.
 func TestToolCallHonoursTheFormatArgumentOverStdio(t *testing.T) {
 	got := speak(t, []string{
 		initRequest,
 		initNotification,
 		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"llm_data_math","arguments":{"expression":"2+2"}}}`,
-		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"llm_data_math","arguments":{"expression":"6*7","format":"axi"}}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"llm_data_math","arguments":{"expression":"6*7","format":"json"}}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"llm_data_math","arguments":{"expression":"5*5","format":"axi"}}}`,
 	})
 
 	text := func(id int) string {
@@ -297,19 +302,23 @@ func TestToolCallHonoursTheFormatArgumentOverStdio(t *testing.T) {
 		return payload.Content[0].Text
 	}
 
-	jsonOut := strings.TrimSpace(text(2))
-	if !strings.HasPrefix(jsonOut, "{") {
-		t.Errorf("the default call did not return JSON: %q", jsonOut)
-	}
-	if !strings.Contains(jsonOut, "4") {
-		t.Errorf("2+2 did not reach the CLI: %q", jsonOut)
+	// TOON for math is "expression: ...\nresult: ..."; asserting the key line
+	// rather than "not JSON" means an empty or garbled reply cannot pass.
+	defaultOut := strings.TrimSpace(text(2))
+	if strings.HasPrefix(defaultOut, "{") || !strings.Contains(defaultOut, "result: 4") {
+		t.Errorf("a call with no format did not return TOON with the result: %q", defaultOut)
 	}
 
-	axiOut := strings.TrimSpace(text(3))
-	if strings.HasPrefix(axiOut, "{") {
-		t.Errorf("format=axi still returned JSON: %q", axiOut)
+	jsonOut := strings.TrimSpace(text(3))
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonOut), &parsed); err != nil {
+		t.Errorf("format=json did not return JSON: %q (%v)", jsonOut, err)
+	} else if fmt.Sprint(parsed["result"]) != "42" {
+		t.Errorf("6*7 did not reach the CLI: %q", jsonOut)
 	}
-	if !strings.Contains(axiOut, "42") {
-		t.Errorf("6*7 did not reach the CLI: %q", axiOut)
+
+	axiOut := strings.TrimSpace(text(4))
+	if strings.HasPrefix(axiOut, "{") || !strings.Contains(axiOut, "result: 25") {
+		t.Errorf("format=axi did not return TOON with the result: %q", axiOut)
 	}
 }
