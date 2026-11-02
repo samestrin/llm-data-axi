@@ -2389,3 +2389,36 @@ func TestYamlSurfaceIsOnlyTheFourCommands(t *testing.T) {
 		}
 	}
 }
+
+// Defends against missing-file errors hinting at the deleted init subcommand
+// command, which now exits 2 with `unknown command`. The hint must also
+// stay actionable: `set` still names --create, which exists.
+func TestYamlMissingFileErrors_DoNotNameDeletedInit(t *testing.T) {
+	missing := filepath.Join(createTempDir(t), "missing.yaml")
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"get", []string{"get", "--file", missing, "key"}, "config file not found"},
+		{"set", []string{"set", "--file", missing, "key", "value"}, "--create"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := newYamlCmd()
+			cmd.SetOut(new(bytes.Buffer))
+			cmd.SetErr(new(bytes.Buffer))
+			cmd.SetArgs(tc.args)
+			err := cmd.Execute()
+			if err == nil {
+				t.Fatal("expected error for missing file")
+			}
+			if strings.Contains(err.Error(), "yaml "+"init") {
+				t.Errorf("error names deleted command: %q", err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q missing %q", err, tc.want)
+			}
+		})
+	}
+}

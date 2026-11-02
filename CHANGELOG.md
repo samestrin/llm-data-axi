@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `yaml get` and `yaml set` errors for a missing file no longer tell the caller to run the deleted `yaml init`; `set` still points at `--create`.
+
 - The no-network guard (`internal/noweb_guard_test.go`) now also scans `cmd/`, so a `net/http`, `net` or `goquery` import in either binary fails the build.
 
 ### Removed
