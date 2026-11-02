@@ -57,7 +57,7 @@ llm-data yaml multiset --file config.yaml server.port 8080 server.host localhost
 
 `catfiles` · `count` · `detect` · `diff-smell` · `discover-tests` · `git-changes` · `git-context` · `grep` · `highest` · `math` · `multiexists` · `multigrep` · `plan-type` · `project-components` · `repo-root` · `runtime` · `stats` · `template` · `tier-classifier` · `tree` · `yaml`
 
-`yaml` carries its own subcommands: `get`, `set`, `multiget`, `multiset`, plus `init`, `list`, `delete`, `validate`, `push` and `pop`.
+`yaml` carries its own subcommands: `get`, `set`, `multiget` and `multiset`.
 
 Run `llm-data <command> --help` for the flags.
 

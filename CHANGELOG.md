@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Removed
 
+- The six extra `yaml` subcommands `init`, `list`, `delete`, `validate`, `push` and `pop`, with their templates and helpers. `yaml` now has only `get`, `set`, `multiget` and `multiset`; the removed names are rejected as unknown commands.
+
 - The `extract-relevant` and `extract-links` CLI commands and the `extract_relevant` and `extract_links` MCP tools (with their `llmCommands` map and `LLMTimeout`) are gone; the server now advertises 24 tools and rejects calls to the removed ones as unknown. They move to [llm-extract-axi](https://github.com/samestrin/llm-extract-axi), which ships them as `llm-extract extract-relevant` and `llm-extract extract-links` (MCP: `extract_relevant` and `extract_links` on `llm-extract-mcp`). Nothing left in this repository makes a network call: `internal/noweb_guard_test.go` fails the build if a non-test file under `internal/` or `pkg/` imports `net/http`, `net` or `goquery`.
 - The `pkg/llmapi` package (client, concurrency, config, response, streaming) with its tests, plus the `golang.org/x/sync` dependency it was the only consumer of (`goquery`, used by the extract commands above, is gone too). It moves to [llm-extract-axi](https://github.com/samestrin/llm-extract-axi).
 

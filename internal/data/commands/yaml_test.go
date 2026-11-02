@@ -6,8 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 // Test helpers
@@ -29,123 +32,6 @@ func createTestYAML(t *testing.T, dir, content string) string {
 		t.Fatalf("failed to create test YAML: %v", err)
 	}
 	return path
-}
-
-// ============================================================================
-// US-01: Configuration Initialization Tests
-// ============================================================================
-
-func TestYamlInit_BasicInit(t *testing.T) {
-	// AC 01-01: yaml init --file creates a new YAML config file with default structure
-	dir := createTempDir(t)
-	configPath := filepath.Join(dir, "config.yaml")
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"init", "--file", configPath})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	// Verify file was created
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		t.Fatal("config file was not created")
-	}
-
-	// Verify output contains CONFIG_FILE and STATUS
-	output := buf.String()
-	if !strings.Contains(output, "CONFIG_FILE:") {
-		t.Errorf("output missing CONFIG_FILE, got: %s", output)
-	}
-	if !strings.Contains(output, "STATUS: CREATED") {
-		t.Errorf("output missing STATUS: CREATED, got: %s", output)
-	}
-
-	// Verify file is valid YAML with expected sections
-	content, _ := os.ReadFile(configPath)
-	if !strings.Contains(string(content), "helper:") {
-		t.Error("config missing helper section")
-	}
-}
-
-func TestYamlInit_WithTemplate(t *testing.T) {
-	// AC 01-02: yaml init --template planning uses the planning template
-	dir := createTempDir(t)
-	configPath := filepath.Join(dir, "config.yaml")
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"init", "--file", configPath, "--template", "planning"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	// Verify planning template sections exist
-	content, _ := os.ReadFile(configPath)
-	contentStr := string(content)
-
-	expectedSections := []string{"helper:", "project:", "testing:", "commands:", "tools:"}
-	for _, section := range expectedSections {
-		if !strings.Contains(contentStr, section) {
-			t.Errorf("planning template missing section: %s", section)
-		}
-	}
-}
-
-func TestYamlInit_ForceOverwrite(t *testing.T) {
-	// AC 01-03: yaml init --force overwrites an existing file
-	dir := createTempDir(t)
-	configPath := filepath.Join(dir, "config.yaml")
-
-	// Create existing file with custom content
-	os.WriteFile(configPath, []byte("old: content\n"), 0644)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"init", "--file", configPath, "--force"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	// Verify file was overwritten
-	content, _ := os.ReadFile(configPath)
-	if strings.Contains(string(content), "old: content") {
-		t.Error("file was not overwritten")
-	}
-}
-
-func TestYamlInit_ExistsWithoutForce(t *testing.T) {
-	// yaml init without --force should not overwrite existing file
-	dir := createTempDir(t)
-	configPath := filepath.Join(dir, "config.yaml")
-
-	// Create existing file
-	os.WriteFile(configPath, []byte("existing: content\n"), 0644)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"init", "--file", configPath})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	// Verify STATUS: EXISTS
-	output := buf.String()
-	if !strings.Contains(output, "STATUS: EXISTS") {
-		t.Errorf("expected STATUS: EXISTS, got: %s", output)
-	}
 }
 
 // ============================================================================
@@ -579,267 +465,8 @@ func TestYamlMultiset_ValidationBeforeWrite(t *testing.T) {
 }
 
 // ============================================================================
-// US-04: Configuration Management Tests
-// ============================================================================
-
-func TestYamlList_FlatKeys(t *testing.T) {
-	// AC 04-01: yaml list --flat outputs all keys in dot notation
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-  script: llm-data
-project:
-  type: go
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"list", "--file", configPath, "--flat"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	output := buf.String()
-	expectedKeys := []string{"helper.llm", "helper.script", "project.type"}
-	for _, key := range expectedKeys {
-		if !strings.Contains(output, key) {
-			t.Errorf("output missing key: %s", key)
-		}
-	}
-}
-
-func TestYamlList_WithValues(t *testing.T) {
-	// AC 04-02: yaml list --values includes values alongside keys
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"list", "--file", configPath, "--flat", "--values"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "helper.llm=gemini") {
-		t.Errorf("expected key=value format, got: %s", output)
-	}
-}
-
-func TestYamlDelete_ExistingKey(t *testing.T) {
-	// AC 04-03: yaml delete removes a key from the config
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-  script: llm-data
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"delete", "--file", configPath, "helper.script"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	// Verify key was deleted
-	content, _ := os.ReadFile(configPath)
-	if strings.Contains(string(content), "script:") {
-		t.Error("key was not deleted")
-	}
-	// Verify other keys remain
-	if !strings.Contains(string(content), "llm:") {
-		t.Error("other keys were incorrectly deleted")
-	}
-}
-
-func TestYamlValidate_ValidSyntax(t *testing.T) {
-	// AC 04-04: yaml validate checks YAML syntax
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"validate", "--file", configPath})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error for valid YAML, got: %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "VALID: TRUE") {
-		t.Errorf("expected VALID: TRUE, got: %s", output)
-	}
-}
-
-func TestYamlValidate_InvalidSyntax(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-  bad yaml here: [unclosed
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"validate", "--file", configPath})
-
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("expected error for invalid YAML")
-	}
-}
-
-func TestYamlValidate_RequiredKeys(t *testing.T) {
-	// AC 04-05: yaml validate --required checks for required keys
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"validate", "--file", configPath, "--required", "helper.llm,missing.key"})
-
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("expected error for missing required key")
-	}
-
-	if !strings.Contains(err.Error(), "missing.key") {
-		t.Errorf("error should mention missing key, got: %v", err)
-	}
-}
-
-// ============================================================================
-// Array Operations Tests (Push/Pop)
-// ============================================================================
-
-func TestYamlPush_AddsElement(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-items:
-  - first
-  - second
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"push", "--file", configPath, "items", "third"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	content, _ := os.ReadFile(configPath)
-	if !strings.Contains(string(content), "third") {
-		t.Error("new element was not added")
-	}
-}
-
-func TestYamlPop_RemovesLastElement(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-items:
-  - first
-  - second
-  - third
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"pop", "--file", configPath, "items", "--min"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	// Should output the popped value
-	output := strings.TrimSpace(buf.String())
-	if output != "third" {
-		t.Errorf("expected 'third', got: %s", output)
-	}
-
-	// Verify element was removed
-	content, _ := os.ReadFile(configPath)
-	if strings.Contains(string(content), "third") {
-		t.Error("popped element was not removed")
-	}
-}
-
-// ============================================================================
 // Additional Coverage Tests
 // ============================================================================
-
-func TestYamlInit_MinimalTemplate(t *testing.T) {
-	// Test minimal template
-	dir := createTempDir(t)
-	configPath := filepath.Join(dir, "config.yaml")
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"init", "--file", configPath, "--template", "minimal"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	content, _ := os.ReadFile(configPath)
-	if len(content) == 0 {
-		t.Error("minimal template should create non-empty file")
-	}
-}
-
-func TestYamlInit_JSONOutput(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := filepath.Join(dir, "config.yaml")
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"init", "--file", configPath, "--json"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
-		t.Fatalf("output is not valid JSON: %v", err)
-	}
-
-	if result["status"] != "CREATED" && result["status"] != "created" {
-		t.Errorf("expected status=CREATED or created, got: %v", result["status"])
-	}
-}
 
 func TestYamlGet_JSONOutput(t *testing.T) {
 	dir := createTempDir(t)
@@ -1087,310 +714,6 @@ helper:
 	}
 }
 
-func TestYamlList_JSONOutput(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"list", "--file", configPath, "--json"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
-		t.Fatalf("output is not valid JSON: %v", err)
-	}
-}
-
-func TestYamlList_TopLevelPrefix(t *testing.T) {
-	// Test listing with a prefix filter
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-  script: llm-data
-project:
-  type: go
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"list", "--file", configPath, "helper", "--flat"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "helper.llm") {
-		t.Error("should include helper.llm")
-	}
-	// Should not include project keys when filtering by helper
-	if strings.Contains(output, "project") {
-		t.Error("should not include project keys when filtering by helper")
-	}
-}
-
-func TestYamlList_DefaultHierarchical(t *testing.T) {
-	// Test default hierarchical output (without --flat)
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-project:
-  type: go
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"list", "--file", configPath})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "helper") {
-		t.Error("should include 'helper'")
-	}
-	if !strings.Contains(output, "project") {
-		t.Error("should include 'project'")
-	}
-}
-
-func TestYamlDelete_NestedKey(t *testing.T) {
-	// Test deleting a deeply nested key
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-deeply:
-  nested:
-    key: value
-    other: keep
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"delete", "--file", configPath, "deeply.nested.key"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	content, _ := os.ReadFile(configPath)
-	if strings.Contains(string(content), "key: value") {
-		t.Error("nested key was not deleted")
-	}
-	if !strings.Contains(string(content), "other: keep") {
-		t.Error("sibling key was incorrectly deleted")
-	}
-}
-
-func TestYamlDelete_JSONOutput(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-  script: llm-data
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"delete", "--file", configPath, "helper.script", "--json"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
-		t.Fatalf("output is not valid JSON: %v", err)
-	}
-
-	if result["status"] != "deleted" {
-		t.Errorf("expected status=deleted, got: %v", result["status"])
-	}
-}
-
-func TestYamlValidate_JSONOutput(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"validate", "--file", configPath, "--json"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
-		t.Fatalf("output is not valid JSON: %v", err)
-	}
-
-	if result["valid"] != true {
-		t.Errorf("expected valid=true, got: %v", result["valid"])
-	}
-}
-
-func TestYamlValidate_AllRequiredPresent(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-  script: llm-data
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"validate", "--file", configPath, "--required", "helper.llm,helper.script"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error when all required keys present, got: %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "VALID: TRUE") {
-		t.Errorf("expected VALID: TRUE, got: %s", output)
-	}
-}
-
-func TestYamlPush_NewArray(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"push", "--file", configPath, "items", "first"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	content, _ := os.ReadFile(configPath)
-	if !strings.Contains(string(content), "first") {
-		t.Error("new array with element was not created")
-	}
-}
-
-func TestYamlPush_JSONOutput(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-items:
-  - first
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"push", "--file", configPath, "items", "second", "--json"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
-		t.Fatalf("output is not valid JSON: %v", err)
-	}
-
-	if result["status"] != "pushed" {
-		t.Errorf("expected status=pushed, got: %v", result["status"])
-	}
-}
-
-func TestYamlPop_EmptyArray(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-items: []
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"pop", "--file", configPath, "items"})
-
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("expected error when popping from empty array")
-	}
-}
-
-func TestYamlPop_NotAnArray(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"pop", "--file", configPath, "helper"})
-
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("expected error when popping from non-array")
-	}
-}
-
-func TestYamlPop_JSONOutput(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-items:
-  - first
-  - second
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"pop", "--file", configPath, "items", "--json"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
-		t.Fatalf("output is not valid JSON: %v", err)
-	}
-
-	if result["value"] != "second" {
-		t.Errorf("expected value=second, got: %v", result["value"])
-	}
-}
-
 func TestYamlGet_ObjectValue(t *testing.T) {
 	// Test getting an object (should return formatted YAML)
 	dir := createTempDir(t)
@@ -1437,80 +760,6 @@ items:
 	output := buf.String()
 	if !strings.Contains(output, "first") {
 		t.Errorf("expected array output to contain 'first', got: %s", output)
-	}
-}
-
-func TestYamlDelete_TopLevelKey(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-helper:
-  llm: gemini
-project:
-  type: go
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"delete", "--file", configPath, "project"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	content, _ := os.ReadFile(configPath)
-	if strings.Contains(string(content), "project:") {
-		t.Error("top-level key was not deleted")
-	}
-	if !strings.Contains(string(content), "helper:") {
-		t.Error("other keys were incorrectly deleted")
-	}
-}
-
-func TestYamlList_EmptyFile(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, ``)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"list", "--file", configPath, "--flat"})
-
-	err := cmd.Execute()
-	// Should not error, just empty output
-	if err != nil {
-		t.Fatalf("expected no error for empty file, got: %v", err)
-	}
-}
-
-func TestYamlValidate_EmptyFile(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, ``)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"validate", "--file", configPath})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error for empty YAML, got: %v", err)
-	}
-}
-
-func TestYamlInit_InvalidTemplate(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := filepath.Join(dir, "config.yaml")
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"init", "--file", configPath, "--template", "nonexistent_template"})
-
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("expected error for invalid template")
 	}
 }
 
@@ -1566,98 +815,6 @@ existing: value
 	}
 }
 
-func TestFlattenKeys_NestedArrays(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-simple: value
-nested:
-  child1: val1
-  child2: val2
-deep:
-  level1:
-    level2: val3
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"list", "--file", configPath, "--flat"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	output := buf.String()
-	expectedKeys := []string{"simple", "nested.child1", "nested.child2", "deep.level1.level2"}
-	for _, key := range expectedKeys {
-		if !strings.Contains(output, key) {
-			t.Errorf("expected key %s in output", key)
-		}
-	}
-}
-
-func TestFlattenKeysWithValues_AllTypes(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-string_val: hello
-int_val: 42
-float_val: 3.14
-bool_val: true
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"list", "--file", configPath, "--flat", "--values"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "string_val=hello") {
-		t.Error("string value not shown correctly")
-	}
-	if !strings.Contains(output, "int_val=42") {
-		t.Error("int value not shown correctly")
-	}
-}
-
-func TestDeleteValueAtPath_MultipleLevels(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-level1:
-  level2:
-    target: delete_me
-    keep: this
-  sibling: value
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"delete", "--file", configPath, "level1.level2.target"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	content, _ := os.ReadFile(configPath)
-	contentStr := string(content)
-	if strings.Contains(contentStr, "delete_me") {
-		t.Error("target was not deleted")
-	}
-	if !strings.Contains(contentStr, "keep: this") {
-		t.Error("sibling was incorrectly deleted")
-	}
-	if !strings.Contains(contentStr, "sibling: value") {
-		t.Error("parent sibling was incorrectly deleted")
-	}
-}
-
 func TestMultiget_PartialDefaults(t *testing.T) {
 	// Test multiget where some keys exist and some use defaults
 	dir := createTempDir(t)
@@ -1692,47 +849,6 @@ exists2: value2
 	}
 }
 
-func TestYamlPush_ToNonExistent(t *testing.T) {
-	// Push to a key that doesn't exist yet
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-other: value
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"push", "--file", configPath, "newarray", "item1"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	content, _ := os.ReadFile(configPath)
-	if !strings.Contains(string(content), "item1") {
-		t.Error("new array item was not added")
-	}
-}
-
-func TestYamlPush_NotAnArray(t *testing.T) {
-	// Push to something that's not an array
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-scalar: value
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"push", "--file", configPath, "scalar", "item"})
-
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("expected error when pushing to scalar")
-	}
-}
-
 func TestYamlSet_NullValue(t *testing.T) {
 	dir := createTempDir(t)
 	configPath := createTestYAML(t, dir, `
@@ -1752,52 +868,6 @@ key: oldvalue
 	content, _ := os.ReadFile(configPath)
 	if !strings.Contains(string(content), "null") {
 		t.Error("null value was not set")
-	}
-}
-
-func TestYamlValidate_MultipleRequiredMissing(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-exists: value
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"validate", "--file", configPath, "--required", "exists,missing1,missing2"})
-
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("expected error for missing required keys")
-	}
-
-	errStr := err.Error()
-	if !strings.Contains(errStr, "missing1") || !strings.Contains(errStr, "missing2") {
-		t.Errorf("error should mention missing keys, got: %v", err)
-	}
-}
-
-func TestYamlList_MinOutput(t *testing.T) {
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-a: 1
-b: 2
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"list", "--file", configPath, "--flat", "--min"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	output := buf.String()
-	// Should have minimal output with keys
-	if !strings.Contains(output, "a") || !strings.Contains(output, "b") {
-		t.Errorf("expected keys in output, got: %s", output)
 	}
 }
 
@@ -1845,32 +915,6 @@ empty: ""
 	output := strings.TrimSpace(buf.String())
 	if output != "" && output != `""` {
 		t.Errorf("expected empty string, got: %q", output)
-	}
-}
-
-func TestYamlValidate_WithNonRequiredKeys(t *testing.T) {
-	// Validate a file that has extra keys beyond required
-	dir := createTempDir(t)
-	configPath := createTestYAML(t, dir, `
-required1: value1
-required2: value2
-optional1: value3
-optional2: value4
-`)
-
-	cmd := newYamlCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"validate", "--file", configPath, "--required", "required1,required2"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "VALID: TRUE") {
-		t.Errorf("expected VALID: TRUE, got: %s", output)
 	}
 }
 
@@ -2016,95 +1060,6 @@ func TestSetValueAtPath_EmptyPath(t *testing.T) {
 	}
 }
 
-func TestDeleteValueAtPath_EmptyPath(t *testing.T) {
-	data := map[string]interface{}{"key": "value"}
-	err := deleteValueAtPath(data, "")
-	if err == nil {
-		t.Fatal("expected error for empty path")
-	}
-}
-
-func TestDeleteValueAtPath_MapInterfaceInterface(t *testing.T) {
-	// Test deleting when intermediate node is map[interface{}]interface{}
-	inner := map[interface{}]interface{}{
-		"target": "delete_me",
-		"keep":   "this",
-	}
-	data := map[string]interface{}{
-		"outer": inner,
-	}
-
-	err := deleteValueAtPath(data, "outer.target")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestDeleteValueAtPath_NonTraversable(t *testing.T) {
-	// Test error when path goes through a non-map value
-	data := map[string]interface{}{
-		"scalar": "value",
-	}
-
-	err := deleteValueAtPath(data, "scalar.nested.key")
-	if err == nil {
-		t.Fatal("expected error for non-traversable path")
-	}
-	if !strings.Contains(err.Error(), "not traversable") {
-		t.Errorf("expected 'not traversable' error, got: %v", err)
-	}
-}
-
-func TestFlattenKeys_MapInterfaceInterface(t *testing.T) {
-	// Test flattenKeys with map[interface{}]interface{}
-	inner := map[interface{}]interface{}{
-		"nested": "value",
-	}
-	data := map[string]interface{}{
-		"outer": inner,
-	}
-
-	keys := flattenKeys(data, "")
-	if len(keys) != 1 {
-		t.Errorf("expected 1 key, got %d", len(keys))
-	}
-	if keys[0] != "outer.nested" {
-		t.Errorf("expected 'outer.nested', got: %s", keys[0])
-	}
-}
-
-func TestFlattenKeysWithValues_MapInterfaceInterface(t *testing.T) {
-	// Test flattenKeysWithValues with map[interface{}]interface{}
-	inner := map[interface{}]interface{}{
-		"nested": "value",
-	}
-	data := map[string]interface{}{
-		"outer": inner,
-	}
-
-	result := flattenKeysWithValues(data, "")
-	if val, ok := result["outer.nested"]; !ok || val != "value" {
-		t.Errorf("expected outer.nested=value, got: %v", result)
-	}
-}
-
-func TestCountKeys_MapInterfaceInterface(t *testing.T) {
-	// Test countKeys with map[interface{}]interface{}
-	inner := map[interface{}]interface{}{
-		"key1": "value1",
-		"key2": "value2",
-	}
-	data := map[string]interface{}{
-		"outer":  inner,
-		"simple": "value",
-	}
-
-	count := countKeys(data)
-	if count != 3 {
-		t.Errorf("expected 3 keys, got %d", count)
-	}
-}
-
 func TestConvertDotPathToYAMLPath(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -2152,19 +1107,6 @@ func TestParseDotPath_EscapedDots(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestGetTopLevelSections(t *testing.T) {
-	data := map[string]interface{}{
-		"section1": map[string]interface{}{"key": "value"},
-		"section2": "simple",
-		"section3": []interface{}{"a", "b"},
-	}
-
-	sections := getTopLevelSections(data)
-	if len(sections) != 3 {
-		t.Errorf("expected 3 sections, got %d", len(sections))
 	}
 }
 
@@ -3406,5 +2348,44 @@ func TestYamlMultiset_PreservesVersionStrings(t *testing.T) {
 	}
 	if strings.Contains(got, "version: 4.3\n") {
 		t.Errorf("registry truncated 4.30 to 4.3:\n%s", got)
+	}
+}
+
+// TestYamlSurfaceIsOnlyTheFourCommands defends the owner decision (EST-3971)
+// to delete init/list/delete/validate/push/pop: a removed name must be an
+// unknown command, not a silently accepted one.
+func TestYamlSurfaceIsOnlyTheFourCommands(t *testing.T) {
+	var got []string
+	for _, c := range newYamlCmd().Commands() {
+		got = append(got, c.Name())
+	}
+	sort.Strings(got)
+	want := []string{"get", "multiget", "multiset", "set"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("yaml subcommands = %v, want %v", got, want)
+	}
+
+	// Run under a parent, as the binary does: a root-level yaml would be
+	// rejected by cobra itself and hide a missing parent RunE.
+	run := func(args ...string) error {
+		root := &cobra.Command{Use: "llm-data", SilenceUsage: true, SilenceErrors: true}
+		root.AddCommand(newYamlCmd())
+		root.SetOut(new(bytes.Buffer))
+		root.SetErr(new(bytes.Buffer))
+		root.SetArgs(append([]string{"yaml"}, args...))
+		return root.Execute()
+	}
+	for _, name := range []string{"init", "list", "delete", "validate", "push", "pop"} {
+		err := run(name)
+		if err == nil || !strings.Contains(err.Error(), "unknown command") {
+			t.Errorf("yaml %s: want an unknown-command error, got %v", name, err)
+		}
+	}
+
+	// The bare parent and --help still succeed.
+	for _, args := range [][]string{{}, {"--help"}} {
+		if err := run(args...); err != nil {
+			t.Errorf("yaml %v should print help, got %v", args, err)
+		}
 	}
 }
