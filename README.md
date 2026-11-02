@@ -7,7 +7,7 @@
 
 A general-purpose data CLI built to the [AXI](https://axi.md) principles, so its output is cheap for a model to read and hard for a model to misread. It answers the questions an agent asks constantly and should never guess at: does this path exist, what is in this directory, what type of project is this, what changed in git, what does this YAML key say.
 
-Every command is deterministic. Two of them — `extract-relevant` and `extract-links --context` — call an LLM API; the other twenty-four do not.
+Every command is deterministic. None of them calls a model or opens a network connection.
 
 Two binaries:
 
@@ -55,7 +55,7 @@ llm-data yaml multiset --file config.yaml server.port 8080 server.host localhost
 
 ### Commands
 
-`catfiles` · `count` · `detect` · `diff-smell` · `discover-tests` · `extract-links` · `extract-relevant` · `git-changes` · `git-context` · `grep` · `highest` · `math` · `multiexists` · `multigrep` · `plan-type` · `project-components` · `repo-root` · `runtime` · `stats` · `template` · `tier-classifier` · `tree` · `yaml`
+`catfiles` · `count` · `detect` · `diff-smell` · `discover-tests` · `git-changes` · `git-context` · `grep` · `highest` · `math` · `multiexists` · `multigrep` · `plan-type` · `project-components` · `repo-root` · `runtime` · `stats` · `template` · `tier-classifier` · `tree` · `yaml`
 
 `yaml` carries its own subcommands: `get`, `set`, `multiget`, `multiset`, plus `init`, `list`, `delete`, `validate`, `push` and `pop`.
 
@@ -86,17 +86,9 @@ By default it asks the CLI for `--json --min`, because that is what registered M
 
 Set `LLM_DATA_MCP_DEBUG=true` to log each command line and timeout to stderr.
 
-## LLM configuration
+## Where did `extract-relevant` and `extract-links` go?
 
-> `extract-relevant` and `extract-links` are moving to [llm-extract-axi](https://github.com/samestrin/llm-extract-axi), which already ships them as `llm-extract extract-relevant` and `llm-extract extract-links` (MCP: `extract_relevant` and `extract_links` on `llm-extract-mcp`). Use those. The copies here, and the `llm_data_extract_*` MCP tools, will be removed.
-
-`extract-relevant` and `extract-links --context` call an OpenAI-compatible endpoint. Configuration is **environment only** — there is no config file:
-
-| Variable | Meaning |
-|---|---|
-| `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` | required |
-| `OPENAI_BASE_URL` | default `https://api.openai.com/v1` |
-| `OPENAI_MODEL` | default `gpt-4o-mini` |
+They moved to [llm-extract-axi](https://github.com/samestrin/llm-extract-axi), which ships them as `llm-extract extract-relevant` and `llm-extract extract-links` (MCP: `extract_relevant` and `extract_links` on `llm-extract-mcp`). The copies here, and the `llm_data_extract_*` MCP tools, are removed. Everything that remains in this repository is deterministic and never touches the network.
 
 ## Development
 
