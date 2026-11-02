@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -255,10 +256,15 @@ func getGitCommits(path string, maxCommits int, since string) []GitCommit {
 
 func getGitRemotes(path string) []GitRemote {
 	output, err := runGitOutput(path, "remote", "-v")
-	if err != nil || output == "" {
+	if err != nil {
 		return nil
 	}
+	return parseGitRemotes(output)
+}
 
+// parseGitRemotes parses `git remote -v` output into one entry per remote,
+// sorted by name. It returns nil when the output names no remote.
+func parseGitRemotes(output string) []GitRemote {
 	remoteMap := make(map[string]*GitRemote)
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 
@@ -284,10 +290,15 @@ func getGitRemotes(path string) []GitRemote {
 		}
 	}
 
+	if len(remoteMap) == 0 {
+		return nil
+	}
+
 	remotes := make([]GitRemote, 0, len(remoteMap))
 	for _, r := range remoteMap {
 		remotes = append(remotes, *r)
 	}
+	sort.Slice(remotes, func(i, j int) bool { return remotes[i].Name < remotes[j].Name })
 	return remotes
 }
 
