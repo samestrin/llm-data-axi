@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -113,6 +114,91 @@ func TestExecuteHandlerHonoursAServerWideJSONDefault(t *testing.T) {
 	}
 	if got := strings.Join(encodingFlags(out), " "); got != "--json --min" {
 		t.Errorf("LLM_DATA_MCP_AXI=false sent %q, want \"--json --min\"", got)
+	}
+}
+
+// The first fix for the duplicate encoding flags deleted every argument token
+// spelled --json or --min, so a grep pattern "--json" vanished and the CLI
+// failed with "requires at least 2 arg(s)", and an exclude named "--min" was
+// dropped, silently widening a tree. A user value must reach the CLI intact.
+func TestExecuteHandlerKeepsUserValuesSpelledLikeEncodingFlags(t *testing.T) {
+	fakeBinary(t)
+
+	for _, format := range []string{"", "json"} {
+		args := map[string]interface{}{"pattern": "--json", "paths": []interface{}{"--min"}}
+		if format != "" {
+			args["format"] = format
+		}
+		out, err := ExecuteHandler(ToolPrefix+"grep", args)
+		if err != nil {
+			t.Fatalf("format=%q: ExecuteHandler: %v", format, err)
+		}
+		if !strings.HasPrefix(out, "grep --json --min ") {
+			t.Errorf("format=%q: the pattern and path were not passed through: %q", format, out)
+		}
+
+		args = map[string]interface{}{"exclude": []interface{}{"--min"}}
+		if format != "" {
+			args["format"] = format
+		}
+		out, err = ExecuteHandler(ToolPrefix+"tree", args)
+		if err != nil {
+			t.Fatalf("format=%q: ExecuteHandler: %v", format, err)
+		}
+		if !strings.Contains(out, "--exclude --min") {
+			t.Errorf("format=%q: the exclude value was dropped: %q", format, out)
+		}
+	}
+}
+
+// The README promises that a non-boolean LLM_DATA_MCP_AXI is reported on
+// stderr. Without this test the warning line could be deleted and nothing
+// would go red.
+func TestLoadAXIDefaultWarnsOnStderrAboutAnUnreadableValue(t *testing.T) {
+	t.Setenv("LLM_DATA_MCP_AXI", "sometimes")
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := os.Stderr
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = original })
+
+	axi := loadAXIDefault()
+	os.Stderr = original
+	_ = w.Close()
+	captured, _ := io.ReadAll(r)
+
+	if !axi {
+		t.Error("an unreadable LLM_DATA_MCP_AXI must keep the TOON default")
+	}
+	if !strings.Contains(string(captured), `LLM_DATA_MCP_AXI="sometimes"`) {
+		t.Errorf("no warning naming the bad value on stderr, got %q", captured)
+	}
+}
+
+func TestLoadAXIDefaultIsSilentForAValidValue(t *testing.T) {
+	t.Setenv("LLM_DATA_MCP_AXI", "false")
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := os.Stderr
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = original })
+
+	axi := loadAXIDefault()
+	os.Stderr = original
+	_ = w.Close()
+	captured, _ := io.ReadAll(r)
+
+	if axi {
+		t.Error("LLM_DATA_MCP_AXI=false must select JSON")
+	}
+	if len(captured) != 0 {
+		t.Errorf("a valid value must not warn, got %q", captured)
 	}
 }
 
