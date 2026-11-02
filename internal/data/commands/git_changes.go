@@ -28,12 +28,9 @@ type GitChangesResult struct {
 	// the key was simply gone. The --axi path was affected identically, because
 	// EncodeAXI projects through the JSON form and reads this same tag.
 	//
-	// The nil-to-empty normalisation in outputGitChanges reads as if it were
-	// what guarantees this. It is not, and never was: parseGitStatus is the
-	// only constructor and always sets Files to []string{}, so that branch is
-	// unreachable. Deleting it leaves every test green. It is kept as a cheap
-	// guard against a future second constructor, not because it does anything
-	// today.
+	// What guarantees this is parseGitStatus, the only constructor, which always
+	// sets Files to []string{}. outputGitChanges used to carry nil-to-empty
+	// branches; they were unreachable and have been deleted.
 	Files []string `json:"files"`
 }
 
@@ -199,13 +196,9 @@ func parseGitStatus(output string, pathFilter string, includeUntracked bool, sta
 func outputGitChanges(cmd *cobra.Command, result GitChangesResult) {
 	out := cmd.OutOrStdout()
 
-	// AXI first, with the same nil-slice normalisation the JSON branch does:
-	// `files` must be an empty list rather than null, or a consumer iterating
-	// it has to guard a case the schema never announced.
+	// AXI first. `files` is never null: parseGitStatus is the only constructor
+	// and always sets Files to []string{}.
 	if GlobalAXIOutput {
-		if result.Files == nil {
-			result.Files = []string{}
-		}
 		// Reported rather than discarded: an encode failure that printed
 		// nothing and still exited 0 is the silent-empty-success trap this
 		// whole change exists to close. This helper returns nothing, so stderr
@@ -220,10 +213,6 @@ func outputGitChanges(cmd *cobra.Command, result GitChangesResult) {
 		fmt.Fprintf(out, "{\"count\":%d}\n", result.Count)
 	} else if gitChangesJSON {
 		// Full JSON output
-		// Ensure files is never null
-		if result.Files == nil {
-			result.Files = []string{}
-		}
 		output, _ := json.MarshalIndent(result, "", "  ")
 		fmt.Fprintln(out, string(output))
 	} else if gitChangesMin {
