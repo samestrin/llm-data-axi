@@ -60,6 +60,7 @@ type MultigrepResult struct {
 	FS                  *int                      `json:"fs,omitempty"`
 	Results             map[string]*keywordResult `json:"results,omitempty"`
 	R                   map[string]*keywordResult `json:"r,omitempty"`
+	Help                []string                  `json:"help,omitempty"`
 }
 
 // newMultigrepCmd creates the multigrep command
@@ -214,6 +215,10 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if totalMatches == 0 {
+		mgResult.Help = multigrepZeroMatchHelp()
+	}
+
 	formatter := output.New(multigrepJSON, multigrepMinimal, cmd.OutOrStdout())
 	return formatter.Print(mgResult, func(w io.Writer, data interface{}) {
 		fmt.Fprintln(w, strings.Repeat("=", 70))
@@ -255,6 +260,22 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "KEYWORDS_WITH_MATCHES: %d\n", keywordsWithMatches)
 		fmt.Fprintf(w, "TOTAL_MATCHES: %d\n", totalMatches)
 	})
+}
+
+// multigrepZeroMatchHelp is the next step a run with no match for any keyword
+// offers, leaving out what the caller already did.
+func multigrepZeroMatchHelp() []string {
+	var help []string
+	if !multigrepIgnoreCase {
+		help = append(help, "Add -i to match case-insensitively")
+	}
+	if multigrepExtensions != "" {
+		help = append(help, "Drop --extensions to search every file type")
+	}
+	if !multigrepNoExclude {
+		help = append(help, "Add --no-exclude to also search node_modules and other default-excluded directories")
+	}
+	return append(help, "Run `llm-data grep <regex> <path>` to search by regular expression")
 }
 
 func parseKeywords(s string) []string {
