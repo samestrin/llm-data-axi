@@ -35,6 +35,7 @@ type GrepResult struct {
 	Pattern string      `json:"pattern,omitempty"`
 	Matches []GrepMatch `json:"matches,omitempty"`
 	Files   []string    `json:"files,omitempty"`
+	Help    []string    `json:"help,omitempty"`
 }
 
 // newGrepCmd creates the grep command
@@ -72,6 +73,7 @@ func runGrep(cmd *cobra.Command, args []string) error {
 
 	// Collect files
 	var files []string
+	walkedDir := false
 	for _, pathStr := range paths {
 		absPath, err := filepath.Abs(pathStr)
 		if err != nil {
@@ -89,6 +91,7 @@ func runGrep(cmd *cobra.Command, args []string) error {
 		}
 
 		if info.IsDir() {
+			walkedDir = true
 			var ignorer *gitignore.Parser
 			if !grepNoGitignore {
 				ignorer, _ = gitignore.NewParser(absPath)
@@ -157,8 +160,26 @@ func runGrep(cmd *cobra.Command, args []string) error {
 		file.Close()
 	}
 
+	if len(result.Matches) == 0 && len(result.Files) == 0 {
+		result.Help = grepZeroMatchHelp(walkedDir)
+	}
+
 	formatter := output.New(grepJSON, grepMinimal, cmd.OutOrStdout())
 	return formatter.Print(result, printGrepText)
+}
+
+// grepZeroMatchHelp is the next step a search that found nothing offers. It
+// leaves out a flag the caller already passed, and the .gitignore hint when no
+// directory was walked, because only a walk applies the filter.
+func grepZeroMatchHelp(walkedDir bool) []string {
+	var help []string
+	if !grepIgnoreCase {
+		help = append(help, "Add -i to match case-insensitively")
+	}
+	if walkedDir && !grepNoGitignore {
+		help = append(help, "Add --no-gitignore to also search ignored and hidden files")
+	}
+	return append(help, "Run `llm-data multigrep --path <dir> --keywords <a,b>` to search several literal keywords at once")
 }
 
 func printGrepText(w io.Writer, data interface{}) {
