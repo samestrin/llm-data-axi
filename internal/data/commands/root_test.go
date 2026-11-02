@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -170,5 +171,31 @@ func TestTildeHome(t *testing.T) {
 		if got := tildeHome(c.path, c.home); got != c.want {
 			t.Errorf("tildeHome(%q, %q) = %q, want %q", c.path, c.home, got, c.want)
 		}
+	}
+}
+
+// Defends the home view against reporting success without its content: if
+// the executable path cannot be resolved, the run must fail rather than print
+// an empty bin line and exit 0.
+func TestRootNoArgsFailsWhenExecutableUnresolved(t *testing.T) {
+	orig := executablePath
+	executablePath = func() (string, error) { return "", errors.New("no /proc") }
+	t.Cleanup(func() { executablePath = orig })
+	clearHelpFlag()
+	buf := new(bytes.Buffer)
+	RootCmd.SetOut(buf)
+	RootCmd.SetErr(buf)
+	RootCmd.SetArgs(nil)
+	t.Cleanup(func() {
+		RootCmd.SetOut(nil)
+		RootCmd.SetErr(nil)
+	})
+	ResetOutputModes()
+	err := RootCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "cannot resolve executable path") {
+		t.Errorf("want an executable path error, got %v", err)
+	}
+	if strings.Contains(buf.String(), "bin:") {
+		t.Errorf("printed a home view despite the error:\n%s", buf.String())
 	}
 }
