@@ -82,7 +82,7 @@ llm-data-mcp        # speaks MCP over stdio
 
 It resolves `llm-data` from `PATH`, falling back to `/usr/local/bin/llm-data`. Set `LLM_DATA_BINARY` to point it somewhere else.
 
-By default it asks the CLI for `--json --min`, because that is what registered MCP clients parse. To get TOON instead, either set `LLM_DATA_MCP_AXI=true` for the whole server, or pass `"format": "axi"` on a single tool call. The `llm-tools` server appended `--json --min` unconditionally, which made `--axi` unreachable through MCP no matter what the CLI supported.
+By default it asks the CLI for TOON (`--axi`). To get `--json --min` instead, either set `LLM_DATA_MCP_AXI=false` for the whole server, or pass `"format": "json"` on a single tool call; `"format": "axi"` asks for TOON on one call when the server is set to JSON. Any other `format` value is an error, except on `runtime`, whose `format` is its time format. A `LLM_DATA_MCP_AXI` value that is not a boolean keeps TOON and logs a warning to stderr. The `llm-tools` server appended `--json --min` unconditionally, which made `--axi` unreachable through MCP no matter what the CLI supported.
 
 Set `LLM_DATA_MCP_DEBUG=true` to log each command line and timeout to stderr.
 
