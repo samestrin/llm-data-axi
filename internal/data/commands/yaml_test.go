@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 // Test helpers
@@ -2363,23 +2365,27 @@ func TestYamlSurfaceIsOnlyTheFourCommands(t *testing.T) {
 		t.Errorf("yaml subcommands = %v, want %v", got, want)
 	}
 
+	// Run under a parent, as the binary does: a root-level yaml would be
+	// rejected by cobra itself and hide a missing parent RunE.
+	run := func(args ...string) error {
+		root := &cobra.Command{Use: "llm-data", SilenceUsage: true, SilenceErrors: true}
+		root.AddCommand(newYamlCmd())
+		root.SetOut(new(bytes.Buffer))
+		root.SetErr(new(bytes.Buffer))
+		root.SetArgs(append([]string{"yaml"}, args...))
+		return root.Execute()
+	}
 	for _, name := range []string{"init", "list", "delete", "validate", "push", "pop"} {
-		cmd := newYamlCmd()
-		cmd.SetOut(new(bytes.Buffer))
-		cmd.SetErr(new(bytes.Buffer))
-		cmd.SetArgs([]string{name})
-		err := cmd.Execute()
+		err := run(name)
 		if err == nil || !strings.Contains(err.Error(), "unknown command") {
 			t.Errorf("yaml %s: want an unknown-command error, got %v", name, err)
 		}
 	}
 
-	// The bare parent still shows help and succeeds.
-	cmd := newYamlCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetErr(new(bytes.Buffer))
-	cmd.SetArgs([]string{})
-	if err := cmd.Execute(); err != nil {
-		t.Errorf("bare yaml should print help, got %v", err)
+	// The bare parent and --help still succeed.
+	for _, args := range [][]string{{}, {"--help"}} {
+		if err := run(args...); err != nil {
+			t.Errorf("yaml %v should print help, got %v", args, err)
+		}
 	}
 }
