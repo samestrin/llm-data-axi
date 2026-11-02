@@ -47,6 +47,13 @@ func ResetOutputModes() {
 	GlobalMinOutput = false
 	GlobalAXIOutput = false
 	output.SetDefaultAXI(false)
+	// pflag never clears Changed either, and PersistentPreRun reads it: without
+	// this, a bare run after an in-process --json run printed JSON.
+	for _, name := range []string{"json", "min", "axi"} {
+		if f := RootCmd.PersistentFlags().Lookup(name); f != nil {
+			f.Changed = false
+		}
+	}
 }
 
 // RootCmd is the base command when called without any subcommands
@@ -91,11 +98,19 @@ const homeDescription = "Deterministic commands for reading, searching and resha
 // home view reports.
 var executablePath = os.Executable
 
+// homeHelp is the next step a bare run offers in --json and --axi. The plain
+// view stays two lines; help there is what --help is for.
+var homeHelp = []string{
+	"Run `llm-data --help` to list every command",
+	"Run `llm-data <command> --help` for one command's flags",
+}
+
 // HomeView is what a bare `llm-data` prints: where the binary is and what it
 // is for, instead of the full cobra help page.
 type HomeView struct {
-	Bin         string `json:"bin"`
-	Description string `json:"description"`
+	Bin         string   `json:"bin"`
+	Description string   `json:"description"`
+	Help        []string `json:"help,omitempty"`
 }
 
 // runHome prints the home view. A path that cannot be resolved is an error,
@@ -106,7 +121,7 @@ func runHome(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot resolve executable path: %w", err)
 	}
 	home, _ := os.UserHomeDir()
-	view := HomeView{Bin: tildeHome(exe, home), Description: homeDescription}
+	view := HomeView{Bin: tildeHome(exe, home), Description: homeDescription, Help: homeHelp}
 	return output.New(GlobalJSONOutput, GlobalMinOutput, cmd.OutOrStdout()).Print(view, printHomeText)
 }
 

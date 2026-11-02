@@ -199,3 +199,15 @@ func TestRootNoArgsFailsWhenExecutableUnresolved(t *testing.T) {
 		t.Errorf("printed a home view despite the error:\n%s", buf.String())
 	}
 }
+
+// Defends ResetOutputModes against pflag's Changed bit: it cleared the bound
+// variables but not Changed, and PersistentPreRun reads Changed, so a bare run
+// after an in-process --json run printed JSON instead of the plain view.
+func TestResetOutputModesClearsChangedFlags(t *testing.T) {
+	fakeExecutable(t)
+	runRootBoth(t, "--json", "--min", "--axi")
+
+	if out := runRootBoth(t); strings.HasPrefix(strings.TrimSpace(out), "{") || !strings.HasPrefix(out, "bin: ") {
+		t.Errorf("bare run after --json is not the plain view:\n%s", out)
+	}
+}

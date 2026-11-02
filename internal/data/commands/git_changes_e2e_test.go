@@ -187,8 +187,7 @@ func TestGitChangesMinOutputIsJustTheCount(t *testing.T) {
 // iterating `files` hit a case the schema never announced.
 //
 // What actually delivers this is parseGitStatus initialising Files to
-// []string{}, plus the tag. The nil check in outputGitChanges looks like the
-// guarantee and is not: removing it leaves this test green.
+// []string{}, plus the tag.
 func TestGitChangesEmitsAnEmptyListNotNull(t *testing.T) {
 	dir := t.TempDir()
 	resolved, err := filepath.EvalSymlinks(dir)

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The no-network guard (`internal/noweb_guard_test.go`) now also scans `cmd/`, so a `net/http`, `net` or `goquery` import in either binary fails the build.
+
 ### Removed
 
 - The six extra `yaml` subcommands `init`, `list`, `delete`, `validate`, `push` and `pop`, with their templates and helpers. `yaml` now has only `get`, `set`, `multiget` and `multiset`; the removed names are rejected as unknown commands.
@@ -19,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `Makefile` with `build`, `build-all`, `test`, `test-race`, `test-cover`, `lint`, `vet`, `fmt`, `install`, `clean` and `hooks` targets.
 - CI: `lint` → `test -race` → `coverage`, chained by `needs:`, plus a five-platform cross-compile matrix with a 20MB binary size gate, and a tag-triggered release workflow.
 - `.golangci.yml` matching the selection used across `samestrin/atcr` and `samestrin/go-axi`.
+- **`help` next steps in `--json` and `--axi`.** The home view, a `grep` that matched nothing and a `multigrep` where no keyword matched carry a `help` list of suggested next commands; a zero-match run leaves out flags the caller already passed. A run with matches, and plain-text output, carry none.
 - `tests/mcp_integration` drives the built `llm-data-mcp` over real stdio — JSON-RPC framing, the SDK registration loop and the exec of the CLI — which no in-package test can reach.
 
 ### Changed
