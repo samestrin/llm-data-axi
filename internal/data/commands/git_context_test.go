@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -452,5 +453,85 @@ func TestGitContextSinceDate(t *testing.T) {
 	// Should have commits since the date
 	if len(ctx.Commits) == 0 {
 		t.Error("expected commits since 2020-01-01")
+	}
+}
+
+// TestParseGitRemotes defends the remotes list in git-context: each remote
+// keeps its own fetch and push URL, the list comes back sorted by name (it
+// was built from a map, so order changed run to run), and output with no
+// remotes yields nothing rather than an empty entry. The inputs are captured
+// `git remote -v` output (git 2.47.3), tab between name and URL.
+func TestParseGitRemotes(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		want   []GitRemote
+	}{
+		{
+			name:   "ssh",
+			output: "origin\tgit@github.com:samestrin/llm-data-axi.git (fetch)\norigin\tgit@github.com:samestrin/llm-data-axi.git (push)\n",
+			want: []GitRemote{
+				{Name: "origin", FetchURL: "git@github.com:samestrin/llm-data-axi.git", PushURL: "git@github.com:samestrin/llm-data-axi.git"},
+			},
+		},
+		{
+			name:   "https",
+			output: "origin\thttps://github.com/samestrin/llm-data-axi.git (fetch)\norigin\thttps://github.com/samestrin/llm-data-axi.git (push)\n",
+			want: []GitRemote{
+				{Name: "origin", FetchURL: "https://github.com/samestrin/llm-data-axi.git", PushURL: "https://github.com/samestrin/llm-data-axi.git"},
+			},
+		},
+		{
+			// Added as https://github.com/... with url."git@github.com:".insteadOf
+			// set; git prints the rewritten URL, so the parser sees the ssh form.
+			name:   "insteadOf rewritten",
+			output: "origin\tgit@github.com:samestrin/llm-data-axi.git (fetch)\norigin\tgit@github.com:samestrin/llm-data-axi.git (push)\n",
+			want: []GitRemote{
+				{Name: "origin", FetchURL: "git@github.com:samestrin/llm-data-axi.git", PushURL: "git@github.com:samestrin/llm-data-axi.git"},
+			},
+		},
+		{
+			// A separate push URL (git remote set-url --push) must not
+			// overwrite the fetch URL.
+			name:   "multiple remotes with a separate push URL",
+			output: "backup\thttps://gitlab.com/x/y.git (fetch)\nbackup\thttps://gitlab.com/x/y.git (push)\norigin\tgit@github.com:samestrin/llm-data-axi.git (fetch)\norigin\tgit@github.com:samestrin/llm-data-axi.git (push)\nupstream\tgit@github.com:other/repo.git (fetch)\nupstream\thttps://example.com/push.git (push)\n",
+			want: []GitRemote{
+				{Name: "backup", FetchURL: "https://gitlab.com/x/y.git", PushURL: "https://gitlab.com/x/y.git"},
+				{Name: "origin", FetchURL: "git@github.com:samestrin/llm-data-axi.git", PushURL: "git@github.com:samestrin/llm-data-axi.git"},
+				{Name: "upstream", FetchURL: "git@github.com:other/repo.git", PushURL: "https://example.com/push.git"},
+			},
+		},
+		{
+			// git happens to print remotes in name order; the parser must
+			// not depend on that, so this row feeds them out of order.
+			name:   "multiple remotes out of order",
+			output: "upstream\tgit@github.com:other/repo.git (fetch)\nupstream\tgit@github.com:other/repo.git (push)\nbackup\thttps://gitlab.com/x/y.git (fetch)\nbackup\thttps://gitlab.com/x/y.git (push)\norigin\tgit@github.com:samestrin/llm-data-axi.git (fetch)\norigin\tgit@github.com:samestrin/llm-data-axi.git (push)\n",
+			want: []GitRemote{
+				{Name: "backup", FetchURL: "https://gitlab.com/x/y.git", PushURL: "https://gitlab.com/x/y.git"},
+				{Name: "origin", FetchURL: "git@github.com:samestrin/llm-data-axi.git", PushURL: "git@github.com:samestrin/llm-data-axi.git"},
+				{Name: "upstream", FetchURL: "git@github.com:other/repo.git", PushURL: "git@github.com:other/repo.git"},
+			},
+		},
+		{
+			name:   "none",
+			output: "",
+			want:   nil,
+		},
+		{
+			// Lines that are not remote entries are skipped, not turned
+			// into a remote with empty URLs.
+			name:   "only unparseable lines",
+			output: "warning: something odd\n\n",
+			want:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseGitRemotes(tt.output)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parseGitRemotes() =\n  %#v\nwant\n  %#v", got, tt.want)
+			}
+		})
 	}
 }
