@@ -158,6 +158,7 @@ expect_nothing_installed "missing asset"
 # --- 7. every download uses curl --fail with connect and total timeouts ------
 # A logging shim in front of the real curl records each invocation.
 new_case curl-flags
+: >"$CASE/curl.log"
 REAL_CURL=$(command -v curl)
 cat >"$CASE/shim/curl" <<EOF
 #!/bin/sh
@@ -212,7 +213,33 @@ else
     fail "interrupted: install dir holds: $(echo "$left" | tr '\n' ' ')"
 fi
 
-# --- 9/10. an unknown OS or arch exits non-zero with a message ---------------
+# --- 9. an interruption between staging and the rename -----------------------
+# Both downloads are verified and staged under temp names in the install dir
+# when the run is killed at the first rename. The staged files must be removed
+# and the previous install must survive byte for byte.
+new_case interrupted-staged
+mkdir -p "$CASE/home/.local/bin"
+printf 'old-cli' >"$CASE/home/.local/bin/llm-data"
+printf 'old-mcp' >"$CASE/home/.local/bin/llm-data-mcp"
+cat >"$CASE/shim/mv" <<'EOF'
+#!/bin/sh
+kill -TERM "$PPID"
+sleep 5
+exit 1
+EOF
+chmod +x "$CASE/shim/mv"
+run_installer "$RELEASE"
+expect_failure "interrupted at rename"
+left=$(installed_files | tr '\n' ' ')
+if [ "$left" = "llm-data llm-data-mcp " ] &&
+    [ "$(cat "$CASE/home/.local/bin/llm-data")" = old-cli ] &&
+    [ "$(cat "$CASE/home/.local/bin/llm-data-mcp")" = old-mcp ]; then
+    pass "interrupted at rename: previous install intact, no staged files left"
+else
+    fail "interrupted at rename: install dir holds: $left"
+fi
+
+# --- 10/11. an unknown OS or arch exits non-zero with a message ---------------
 # A fake uname reports a platform no release is built for.
 for spec in "s:FreeBSD:operating system" "m:riscv64:architecture"; do
     flag=${spec%%:*}
