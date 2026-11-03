@@ -1,114 +1,121 @@
-#!/bin/bash
-set -e
+#!/bin/sh
+# Installs the prebuilt llm-data and llm-data-mcp release binaries for this OS
+# and architecture into ~/.local/bin. No clone, no Go toolchain, no sudo.
+#
+#   curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | sh
+#
+# Environment:
+#   LLM_DATA_VERSION      release tag to install, e.g. v1.0.0 (default: latest)
+#   LLM_DATA_INSTALL_DIR  where the binaries go (default: $HOME/.local/bin)
+#   LLM_DATA_BASE_URL     where the release assets are fetched from; overrides
+#                         LLM_DATA_VERSION. CI points it at a locally built
+#                         release directory (file:///path/to/dist).
+#
+# To build from source instead, clone the repository and run `make install`.
+#
+# Every binary is checked against the release's SHA256SUMS.txt, and all of them
+# are checked before any is installed: a tampered or truncated download fails
+# the run and leaves the install directory as it was.
+set -eu
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+REPO="samestrin/llm-data-axi"
+BINARIES="llm-data llm-data-mcp"
 
-INSTALL_DIR="/usr/local/bin"
-BUILD_DIR="build"
-
-# Binaries to build and install. The CLI must come first: the MCP server
-# resolves the CLI binary at startup (see internal/data/mcpserver).
-BINARIES=(
-    "llm-data"
-    "llm-data-mcp"
-)
-
-VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
-# The CLI version lives on commands.Version, not on main: the cobra root reads
-# it from there, so stamping main would leave `llm-data --version` reporting the
-# hardcoded default.
-CLI_LDFLAGS="-s -w -X github.com/samestrin/llm-data-axi/internal/data/commands.Version=$VERSION"
-MCP_LDFLAGS="-s -w -X main.serverVersion=$VERSION"
-
-echo -e "${YELLOW}llm-data installer${NC}"
-echo "======================"
-
-# Check if running as root (needed for /usr/local/bin)
-if [[ $EUID -ne 0 ]]; then
-    echo -e "${RED}Error: This script must be run with sudo${NC}"
-    echo "Usage: sudo ./install.sh"
+err() {
+    echo "install.sh: $*" >&2
     exit 1
+}
+
+case "$(uname -s)" in
+    Linux) os=linux ;;
+    Darwin) os=darwin ;;
+    *)
+        err "unsupported operating system: $(uname -s). Prebuilt binaries exist for Linux and macOS; on Windows download the .exe from https://github.com/$REPO/releases, or build from source with \`make install\`."
+        ;;
+esac
+
+case "$(uname -m)" in
+    x86_64 | amd64) arch=amd64 ;;
+    aarch64 | arm64) arch=arm64 ;;
+    *)
+        err "unsupported architecture: $(uname -m). Prebuilt binaries exist for amd64 and arm64; build from source with \`make install\`."
+        ;;
+esac
+
+if [ -n "${LLM_DATA_BASE_URL:-}" ]; then
+    base_url=${LLM_DATA_BASE_URL%/}
+elif [ -n "${LLM_DATA_VERSION:-}" ]; then
+    base_url="https://github.com/$REPO/releases/download/$LLM_DATA_VERSION"
+else
+    base_url="https://github.com/$REPO/releases/latest/download"
 fi
 
-# Get the directory where the script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+[ -n "${HOME:-}" ] || [ -n "${LLM_DATA_INSTALL_DIR:-}" ] || err "HOME is not set; set LLM_DATA_INSTALL_DIR"
+install_dir=${LLM_DATA_INSTALL_DIR:-$HOME/.local/bin}
 
-# Check for go
-if ! command -v go &> /dev/null; then
-    echo -e "${RED}Error: go is not installed${NC}"
-    exit 1
+command -v curl >/dev/null 2>&1 || err "curl is required"
+if command -v sha256sum >/dev/null 2>&1; then
+    sha256() { sha256sum "$1" | cut -d' ' -f1; }
+elif command -v shasum >/dev/null 2>&1; then
+    sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }
+else
+    err "sha256sum or shasum is required to verify the download"
 fi
 
-echo -e "${GREEN}Building binaries...${NC}"
-mkdir -p "$BUILD_DIR"
+# Downloads go to a private temp directory, and each binary is copied to a temp
+# name inside the install directory before a rename puts it in place. A rename
+# within one directory is atomic, so an interrupted run leaves either the old
+# binary or the new one, never half of one. The trap removes both kinds of
+# temp file however the script ends.
+tmp=$(mktemp -d)
+staged=""
+cleanup() {
+    rm -rf "$tmp"
+    for f in $staged; do rm -f "$f"; done
+}
+trap cleanup EXIT
+trap 'cleanup; trap - EXIT; exit 130' INT
+trap 'cleanup; trap - EXIT; exit 143' TERM HUP
 
-echo "  Building llm-data..."
-go build -ldflags "$CLI_LDFLAGS" -o "$BUILD_DIR/llm-data" ./cmd/llm-data
-echo "  Building llm-data-mcp..."
-go build -ldflags "$MCP_LDFLAGS" -o "$BUILD_DIR/llm-data-mcp" ./cmd/llm-data-mcp
+# --fail turns an HTTP error into a non-zero exit instead of saving the error
+# page; the timeouts stop a stalled connection from hanging the install.
+fetch() {
+    curl --fail --silent --show-error --location \
+        --connect-timeout 15 --max-time 300 \
+        -o "$2" "$1" || err "download failed: $1"
+}
 
-echo -e "${GREEN}Installing to $INSTALL_DIR...${NC}"
-for bin in "${BINARIES[@]}"; do
-    echo "  Installing $bin..."
-    # Clear xattrs on source before copying
-    xattr -cr "$BUILD_DIR/$bin" 2>/dev/null || true
-    # Remove old binary first
-    rm -f "$INSTALL_DIR/$bin"
-    # Copy binary
-    cp "$BUILD_DIR/$bin" "$INSTALL_DIR/$bin"
-    # Clear all extended attributes recursively
-    xattr -cr "$INSTALL_DIR/$bin" 2>/dev/null || true
-    # Re-sign with ad-hoc signature (required for Apple Silicon)
-    codesign --force --sign - "$INSTALL_DIR/$bin" 2>/dev/null || true
-    chmod 755 "$INSTALL_DIR/$bin"
+echo "Installing llm-data for $os/$arch from $base_url"
+
+fetch "$base_url/SHA256SUMS.txt" "$tmp/SHA256SUMS.txt"
+
+for bin in $BINARIES; do
+    asset="$bin-$os-$arch"
+    fetch "$base_url/$asset" "$tmp/$asset"
+    # sha256sum writes "<hash>  <name>", or "<hash> *<name>" in binary mode.
+    want=$(awk -v name="$asset" '{ f = $2; sub(/^\*/, "", f); if (f == name) { print $1; exit } }' "$tmp/SHA256SUMS.txt")
+    [ -n "$want" ] || err "$asset has no entry in SHA256SUMS.txt; refusing to install it"
+    got=$(sha256 "$tmp/$asset")
+    [ "$got" = "$want" ] || err "checksum mismatch for $asset (expected $want, got $got); nothing was installed"
 done
 
-echo ""
-echo -e "${GREEN}Installation complete!${NC}"
-echo "Installed ${#BINARIES[@]} binaries to $INSTALL_DIR"
-
-# Verify installation
-echo ""
-echo "Verifying installation..."
-FAILED=0
-for bin in "${BINARIES[@]}"; do
-    if [[ -x "$INSTALL_DIR/$bin" ]]; then
-        # MCP binaries need stdin, so just check they start without being killed
-        if [[ "$bin" == *"-mcp" ]]; then
-            # Send empty input and check it doesn't get killed (exit 137 = killed)
-            echo "" | timeout 2 "$INSTALL_DIR/$bin" >/dev/null 2>&1
-            EXIT_CODE=$?
-            if [[ $EXIT_CODE -eq 137 || $EXIT_CODE -eq 143 ]]; then
-                echo -e "  ${RED}✗${NC} $bin (killed by macOS)"
-                FAILED=1
-            else
-                echo -e "  ${GREEN}✓${NC} $bin"
-            fi
-        else
-            # CLI binaries - try --version first, fall back to --help
-            if timeout 2 "$INSTALL_DIR/$bin" --version >/dev/null 2>&1 || \
-               timeout 2 "$INSTALL_DIR/$bin" --help >/dev/null 2>&1; then
-                echo -e "  ${GREEN}✓${NC} $bin"
-            else
-                echo -e "  ${RED}✗${NC} $bin"
-                FAILED=1
-            fi
-        fi
-    else
-        echo -e "  ${RED}✗${NC} $bin (not found)"
-        FAILED=1
-    fi
+mkdir -p "$install_dir"
+for bin in $BINARIES; do
+    part="$install_dir/.$bin.tmp.$$"
+    staged="$staged $part"
+    cp "$tmp/$bin-$os-$arch" "$part"
+    chmod 755 "$part"
 done
+for bin in $BINARIES; do
+    mv -f "$install_dir/.$bin.tmp.$$" "$install_dir/$bin"
+done
+staged=""
 
-if [[ $FAILED -eq 1 ]]; then
-    echo -e "${RED}Some binaries failed to install${NC}"
-    exit 1
-fi
+version=$("$install_dir/llm-data" --version 2>&1) || err "installed $install_dir/llm-data but it does not run: $version"
+echo "Installed llm-data and llm-data-mcp to $install_dir"
+echo "$version"
 
-echo ""
-echo -e "${GREEN}All binaries installed successfully!${NC}"
+case ":$PATH:" in
+    *":$install_dir:"*) ;;
+    *) echo "Note: $install_dir is not on your PATH. Add it, e.g.: export PATH=\"$install_dir:\$PATH\"" ;;
+esac
