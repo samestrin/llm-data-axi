@@ -218,6 +218,11 @@ func TestCommittedResultsCarryTheTable(t *testing.T) {
 	if !strings.Contains(s, tableHeader) {
 		t.Fatal("RESULTS.md does not carry the table header")
 	}
+	// tree, stats, grep and multigrep print absolute paths, so their byte
+	// counts depend on the checkout location; the report must say so.
+	if !strings.Contains(s, "`tree`, `stats`, `grep` and `multigrep` print absolute paths") {
+		t.Fatal("RESULTS.md does not name the commands whose bytes depend on the checkout path")
+	}
 	for _, c := range commands {
 		if !strings.Contains(s, "| `"+c.Name+"` |") {
 			t.Fatalf("RESULTS.md has no row for %s", c.Name)
