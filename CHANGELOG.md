@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **`install.sh` installs a release, not a clone.** It downloads the prebuilt `llm-data` and `llm-data-mcp` for the current OS and architecture into `~/.local/bin` with no sudo and no Go toolchain, verifies both against the release's `SHA256SUMS.txt` before installing either, and renames each into place so a failed or interrupted run leaves the previous install as it was. `LLM_DATA_VERSION`, `LLM_DATA_INSTALL_DIR` and `LLM_DATA_BASE_URL` override the release, the directory and the download location. Building from source is `make install`. A new `install` workflow runs it on every push, as a non-root user in a clean container, against a release directory built by the new `make dist` target that `release.yml` now publishes from; the release action moves to `softprops/action-gh-release@v2`.
+
 - `yaml get` and `yaml set` errors for a missing file no longer tell the caller to run the deleted `yaml init`; `set` still points at `--create`.
 
 - The no-network guard (`internal/noweb_guard_test.go`) now also scans `cmd/`, so a `net/http`, `net` or `goquery` import in either binary fails the build.

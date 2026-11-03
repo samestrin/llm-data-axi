@@ -1,0 +1,48 @@
+name: install
+
+# No path filter, on purpose: install.sh depends on the asset names the Makefile
+# builds and on the binaries themselves, so any change can break it.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: shellcheck
+        run: shellcheck install.sh tests/install/run.sh
+
+      # The same target release.yml publishes from, so the installer is tested
+      # against the asset names and SHA256SUMS.txt a release really ships.
+      - name: build the release directory
+        run: make dist
+
+      # A clean container with no Go and no clone on PATH: only curl, as root,
+      # then everything else as an unprivileged user with no sudo. The checkout
+      # is mounted read-only; the installer reaches the release through a
+      # file:// base-URL override.
+      - name: run install.sh in a clean container as a non-root user
+        run: |
+          docker run --rm -v "$PWD:/src:ro" debian:bookworm-slim sh -euc '
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends curl ca-certificates >/dev/null
+            useradd --create-home tester
+            if command -v sudo || command -v go; then echo "container is not clean"; exit 1; fi
+            su tester -c "test \$(id -u) -ne 0 && cd ~ && sh /src/tests/install/run.sh /src/dist"
+          '
