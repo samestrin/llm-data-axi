@@ -155,6 +155,19 @@ run_installer "$dir"
 expect_failure "missing asset"
 expect_nothing_installed "missing asset"
 
+# --- 6b. a binary that installs but will not run fails the install -----------
+# Defends the closing --version check: a release whose checksums are right but
+# whose llm-data cannot start (wrong platform in the slot, broken build) must
+# not be reported as a successful install.
+new_case broken-binary
+dir=$(copy_release rel)
+printf '#!/bin/sh\nexit 3\n' >"$dir/$CLI_ASSET"
+grep -v " \*\{0,1\}$CLI_ASSET\$" "$RELEASE/SHA256SUMS.txt" >"$dir/SHA256SUMS.txt"
+echo "$(sha256 "$dir/$CLI_ASSET")  $CLI_ASSET" >>"$dir/SHA256SUMS.txt"
+run_installer "$dir"
+expect_failure "broken binary"
+case "$OUT" in *"does not run"*) pass "broken binary: message says it does not run" ;; *) fail "broken binary: no message: $OUT" ;; esac
+
 # --- 7. every download uses curl --fail with connect and total timeouts ------
 # A logging shim in front of the real curl records each invocation.
 new_case curl-flags
