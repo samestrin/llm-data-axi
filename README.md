@@ -22,7 +22,7 @@ Extracted from [samestrin/llm-tools](https://github.com/samestrin/llm-tools), wh
 curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | sh
 ```
 
-This downloads the release binaries for your OS and architecture into `~/.local/bin`, checks them against the release's `SHA256SUMS.txt`, and needs no sudo. Set `LLM_DATA_VERSION=v1.0.0` to pin a release or `LLM_DATA_INSTALL_DIR` to install elsewhere.
+This downloads the release binaries for your OS and architecture into `~/.local/bin`, checks them against the release's `SHA256SUMS.txt`, and needs no sudo. Set `LLM_DATA_VERSION=v1.0.0` to pin a release or `LLM_DATA_INSTALL_DIR` to install elsewhere. The script itself covers Linux and macOS on amd64 and arm64; on Windows it tells you to grab the `.exe` from the release page.
 
 Or build from source:
 
@@ -30,6 +30,8 @@ Or build from source:
 make build     # binaries land in ./build/
 make install   # build, then install to /usr/local/bin (may need sudo)
 ```
+
+**Support is best effort.** Releases ship binaries for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64 and windows/amd64 (the matrix in [`release.yml`](.github/workflows/release.yml)), but there is no support guarantee: a platform that misbehaves may simply stop being built, and anything outside that matrix — another OS, another architecture — means building from source yourself.
 
 ## Usage
 
