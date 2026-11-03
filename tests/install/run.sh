@@ -144,6 +144,7 @@ dir=$(copy_release rel)
 grep -v " \*\{0,1\}$MCP_ASSET\$" "$RELEASE/SHA256SUMS.txt" >"$dir/SHA256SUMS.txt"
 run_installer "$dir"
 expect_failure "missing checksum entry"
+case "$OUT" in *"$MCP_ASSET has no entry in SHA256SUMS.txt"*) pass "missing checksum entry: message names the file" ;; *) fail "missing checksum entry: no 'has no entry' message: $OUT" ;; esac
 expect_nothing_installed "missing checksum entry"
 
 # --- 6. a missing asset fails the download and installs nothing --------------
@@ -229,8 +230,9 @@ fi
 # --- 9. an interruption between staging and the rename -----------------------
 # Both downloads are verified and staged under temp names in the install dir
 # when the run is killed at the first rename. The staged files must be removed
-# and the previous install must survive byte for byte.
-new_case interrupted-staged
+# and the previous install must survive byte for byte. The case directory, and
+# so HOME, has a space in it: cleanup must not split the staged paths on it.
+new_case "interrupted staged"
 mkdir -p "$CASE/home/.local/bin"
 printf 'old-cli' >"$CASE/home/.local/bin/llm-data"
 printf 'old-mcp' >"$CASE/home/.local/bin/llm-data-mcp"
