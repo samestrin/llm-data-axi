@@ -8,7 +8,7 @@
 
 ## What it does
 
-Twenty-four read-only tools for inspecting a codebase and its data: `tree`, `stats`, `detect`, `discover-tests`, `grep`, `multigrep`, `count`, `catfiles`, `yaml get/set/multiget/multiset`, `math`, `runtime`, `git-changes`, `git-context`, `repo-root`, and more. Every command honours `--json` and `--axi` (TOON); the MCP server asks the CLI for TOON by default. A bare `llm-data` run prints a home view, and `llm-data setup` registers the CLI with Claude Code in the current project.
+Twenty-four tools for inspecting a codebase and its data: `tree`, `stats`, `detect`, `discover-tests`, `grep`, `multigrep`, `count`, `catfiles`, `yaml get/set/multiget/multiset`, `math`, `runtime`, `git-changes`, `git-context`, `repo-root`, and more. All read-only except `yaml set` and `yaml multiset`, which write the target YAML file in place. Every command honours `--json` and `--axi` (TOON); the MCP server asks the CLI for TOON by default. A bare `llm-data` run prints a home view, and `llm-data setup` registers the CLI with Claude Code in the current project.
 
 Nothing in the tool makes a network call — a build-time guard (`internal/noweb_guard_test.go`) fails the build if a non-test file imports `net/http`, `net` or `goquery`.
 
