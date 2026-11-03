@@ -79,7 +79,15 @@ func TestMeasurePassesOneFormatFlagPerRun(t *testing.T) {
 
 // Defends the "Done when": a command that fails yields an error, not a row.
 func TestMeasureFailsOnCommandError(t *testing.T) {
-	rows, err := measure(fakeRunner("", "", errors.New("exit status 1")), oneRepo, oneCmd)
+	// Only --axi fails, so a run that drops the TOON error and goes on to
+	// measure JSON cannot pass.
+	failAXI := func(dir string, args []string) ([]byte, error) {
+		if args[len(args)-1] == "--axi" {
+			return nil, errors.New("exit status 1")
+		}
+		return []byte("{}"), nil
+	}
+	rows, err := measure(failAXI, oneRepo, oneCmd)
 	if err == nil {
 		t.Fatal("measure returned no error for a failing command")
 	}
@@ -118,7 +126,7 @@ func TestRenderTable(t *testing.T) {
 	want := tableHeader +
 		"| a | `stats` | 100 | 25 | 40 | 10 | 60.0% |\n" +
 		"| b | `tree` | 100 | 25 | 60 | 15 | 40.0% |\n" +
-		"| **total** | | 200 | 50 | 100 | 25 | 50.0% |\n"
+		"| **total** |  | 200 | 50 | 100 | 25 | 50.0% |\n"
 	if got != want {
 		t.Fatalf("table mismatch\n got:\n%s\nwant:\n%s", got, want)
 	}
@@ -135,7 +143,7 @@ func TestRunExitsNonZeroWhenTheBinaryFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errOut bytes.Buffer
-	code := run([]string{"-bin", bin, t.TempDir()}, &out, &errOut)
+	code := run([]string{"-bin", bin, t.TempDir(), t.TempDir()}, &out, &errOut)
 	if code == 0 {
 		t.Fatal("run exited 0 for a failing command")
 	}
@@ -180,10 +188,22 @@ func TestRunPrintsAndWritesTheTable(t *testing.T) {
 }
 
 // Defends against a single-repo run passing as the benchmark the task asks for.
+// The binary is one that would succeed, so only the repo count can fail it.
 func TestRunRefusesFewerThanTwoRepos(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as the binary")
+	}
+	bin := filepath.Join(t.TempDir(), "llm-data")
+	script := "#!/bin/sh\nfor a in \"$@\"; do [ \"$a\" = --axi ] && { echo 'a: 1'; exit 0; }; done\necho '{\"a\": 1}'\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	var out, errOut bytes.Buffer
-	if code := run([]string{"-bin", "/nonexistent", t.TempDir()}, &out, &errOut); code == 0 {
+	if code := run([]string{"-bin", bin, t.TempDir()}, &out, &errOut); code == 0 {
 		t.Fatal("run accepted one repository")
+	}
+	if !strings.Contains(errOut.String(), "at least two") {
+		t.Fatalf("stderr does not say why: %q", errOut.String())
 	}
 }
 
@@ -202,5 +222,56 @@ func TestCommittedResultsCarryTheTable(t *testing.T) {
 		if !strings.Contains(s, "| `"+c.Name+"` |") {
 			t.Fatalf("RESULTS.md has no row for %s", c.Name)
 		}
+	}
+}
+
+// Defends the whole path against the real binary: with no -bin the program
+// builds ./cmd/llm-data from the module root (the test runs in benchmarks/,
+// so a cwd-relative build would fail here) and every command answers both
+// formats with different, non-empty documents.
+func TestRunBuildsAndMeasuresTheRealBinary(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := run([]string{t.TempDir(), t.TempDir()}, &out, &errOut); code != 0 {
+		t.Fatalf("run exited %d: %s", code, errOut.String())
+	}
+	if n := strings.Count(out.String(), "| `"); n != 2*len(commands) {
+		t.Fatalf("got %d command rows, want %d:\n%s", n, 2*len(commands), out.String())
+	}
+}
+
+// Defends the default repositories: this module and the cobra version go.mod
+// pins, both resolved to directories that exist.
+func TestDefaultRepos(t *testing.T) {
+	repos, err := defaultRepos()
+	if err != nil {
+		t.Fatalf("defaultRepos: %v", err)
+	}
+	if len(repos) != 2 || repos[0].Name != "llm-data-axi" || repos[1].Name != "spf13/cobra@v1.8.0" {
+		t.Fatalf("unexpected repos: %+v", repos)
+	}
+	for _, r := range repos {
+		if fi, err := os.Stat(r.Dir); err != nil || !fi.IsDir() {
+			t.Fatalf("%s: %s is not a directory", r.Name, r.Dir)
+		}
+	}
+}
+
+// Defends against a mistyped repo path being measured as an empty repository.
+func TestRunRejectsAMissingRepoDir(t *testing.T) {
+	var out, errOut bytes.Buffer
+	missing := filepath.Join(t.TempDir(), "nope")
+	if code := run([]string{"-bin", "/nonexistent", t.TempDir(), missing}, &out, &errOut); code == 0 {
+		t.Fatal("run accepted a missing directory")
+	}
+	if !strings.Contains(errOut.String(), "not a directory") {
+		t.Fatalf("stderr does not name the bad path: %q", errOut.String())
+	}
+}
+
+// Defends against an unknown flag being ignored.
+func TestRunRejectsAnUnknownFlag(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := run([]string{"-nope"}, &out, &errOut); code == 0 {
+		t.Fatal("run accepted an unknown flag")
 	}
 }
