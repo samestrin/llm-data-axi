@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -266,7 +267,14 @@ func report(repos []Repo, table string) string {
 	}
 	b.WriteString("\nCommands:\n\n")
 	for _, c := range commands {
-		fmt.Fprintf(&b, "- `%s`: `llm-data %s`\n", c.Name, strings.Join(c.Args, " "))
+		args := make([]string, len(c.Args))
+		for i, a := range c.Args {
+			args[i] = a
+			if strings.Contains(a, " ") {
+				args[i] = strconv.Quote(a)
+			}
+		}
+		fmt.Fprintf(&b, "- `%s`: `llm-data %s`\n", c.Name, strings.Join(args, " "))
 	}
 	b.WriteString("\n")
 	b.WriteString(table)
