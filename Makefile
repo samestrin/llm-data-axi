@@ -1,4 +1,4 @@
-.PHONY: build build-all test test-race test-cover lint vet fmt install clean hooks
+.PHONY: build build-all dist test test-race test-cover lint vet fmt install clean hooks
 
 CLI_BINARY := llm-data
 MCP_BINARY := llm-data-mcp
@@ -30,6 +30,13 @@ build-all:
 		GOOS=$$os GOARCH=$$arch go build $(CLI_LDFLAGS) -o $(DIST_DIR)/$(CLI_BINARY)-$$os-$$arch$$ext ./cmd/llm-data; \
 		GOOS=$$os GOARCH=$$arch go build $(MCP_LDFLAGS) -o $(DIST_DIR)/$(MCP_BINARY)-$$os-$$arch$$ext ./cmd/llm-data-mcp; \
 	done
+
+# dist is the release directory: every platform's binaries plus SHA256SUMS.txt.
+# release.yml publishes it and the install workflow runs install.sh against it,
+# so the asset names the installer asks for are the names a release ships.
+dist: build-all
+	@rm -f $(DIST_DIR)/SHA256SUMS.txt
+	cd $(DIST_DIR) && if command -v sha256sum >/dev/null 2>&1; then sha256sum *; else shasum -a 256 *; fi > SHA256SUMS.txt
 
 test:
 	go test ./...
