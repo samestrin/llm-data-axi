@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-03
+
 ### Changed
 
 - **The README Install section now leads with the one-line installer** (`curl -fsSL .../install.sh | sh`, no clone, no sudo), keeps `make build` / `make install` as the build-from-source alternative, and states that support is best effort across the five release platforms (`linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, `windows/amd64`) with no guarantee.
@@ -15,6 +17,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `yaml get` and `yaml set` errors for a missing file no longer tell the caller to run the deleted `yaml init`; `set` still points at `--create`.
 
 - The no-network guard (`internal/noweb_guard_test.go`) now also scans `cmd/`, so a `net/http`, `net` or `goquery` import in either binary fails the build.
+
+- **A bare `llm-data` run shows a home view instead of cobra help.** It prints two lines, `bin:` with the executable path (home directory written as `~`) and `description:` with one sentence, and honours `--json` and `--axi`. `--help` still prints help, and an unknown subcommand still fails with exit 2. If the executable path cannot be resolved the run fails rather than printing an empty `bin:`.
+- go-axi moves from **v0.1.2** to **v0.3.0**.
+- Binary renamed `llm-support` → `llm-data`; MCP tool prefix `llm_support_` → `llm_data_`; debug variable `LLM_SUPPORT_MCP_DEBUG` → `LLM_DATA_MCP_DEBUG`.
+- **The MCP server now asks the CLI for TOON (`--axi`) by default.** Pass `"format": "json"` on a call, or start the server with `LLM_DATA_MCP_AXI=false`, to get `--json --min`; an unknown `format` value is now an error (`runtime` keeps its own `format`, the time format).
+- Thirteen direct dependencies that only the unported commands used are dropped, plus the two the removed LLM code was the only consumer of. Seven direct requires remain.
+- The CLI version is stamped by `-X` onto `commands.Version` at build time instead of being hardcoded.
 
 ### Removed
 
@@ -33,15 +42,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **`help` next steps in `--json` and `--axi`.** The home view, a `grep` that matched nothing and a `multigrep` where no keyword matched carry a `help` list of suggested next commands; a zero-match run leaves out flags the caller already passed. A run with matches, and plain-text output, carry none.
 - `tests/mcp_integration` drives the built `llm-data-mcp` over real stdio — JSON-RPC framing, the SDK registration loop and the exec of the CLI — which no in-package test can reach.
 - **`llm-data setup` registers the CLI with Claude Code in the current project.** It merges a SessionStart hook (a bare `llm-data`, so the home view lands in the session context) into `.claude/settings.json`, keeping every other key and hook, and writes an Agent Skill at `.claude/skills/llm-data/SKILL.md`. Only files inside the project directory are written — `~/.claude` is never touched and running it in the home directory is refused — and a second run changes no bytes. `--dry-run` shows what would be written.
-
-### Changed
-
-- **A bare `llm-data` run shows a home view instead of cobra help.** It prints two lines, `bin:` with the executable path (home directory written as `~`) and `description:` with one sentence, and honours `--json` and `--axi`. `--help` still prints help, and an unknown subcommand still fails with exit 2. If the executable path cannot be resolved the run fails rather than printing an empty `bin:`.
-- go-axi moves from **v0.1.2** to **v0.3.0**.
-- Binary renamed `llm-support` → `llm-data`; MCP tool prefix `llm_support_` → `llm_data_`; debug variable `LLM_SUPPORT_MCP_DEBUG` → `LLM_DATA_MCP_DEBUG`.
-- **The MCP server now asks the CLI for TOON (`--axi`) by default.** Pass `"format": "json"` on a call, or start the server with `LLM_DATA_MCP_AXI=false`, to get `--json --min`; an unknown `format` value is now an error (`runtime` keeps its own `format`, the time format).
-- Thirteen direct dependencies that only the unported commands used are dropped, plus the two the removed LLM code was the only consumer of. Seven direct requires remain.
-- The CLI version is stamped by `-X` onto `commands.Version` at build time instead of being hardcoded.
 
 ### Fixed
 
