@@ -19,15 +19,16 @@ Extracted from [samestrin/llm-tools](https://github.com/samestrin/llm-tools), wh
 ## Install
 
 ```bash
-git clone https://github.com/samestrin/llm-data-axi.git
-cd llm-data-axi
-sudo ./install.sh
+curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | sh
 ```
 
-Or build only:
+This downloads the release binaries for your OS and architecture into `~/.local/bin`, checks them against the release's `SHA256SUMS.txt`, and needs no sudo. Set `LLM_DATA_VERSION=v1.0.0` to pin a release or `LLM_DATA_INSTALL_DIR` to install elsewhere.
+
+Or build from source:
 
 ```bash
 make build     # binaries land in ./build/
+make install   # build, then install to /usr/local/bin (may need sudo)
 ```
 
 ## Usage

@@ -25,22 +25,13 @@ jobs:
           go vet ./...
           go test -race ./...
 
+      # make dist is the release directory the install workflow tests install.sh
+      # against on every push, so the two cannot drift apart.
       - name: build all platforms
-        run: |
-          VERSION="${GITHUB_REF_NAME}"
-          mkdir -p dist
-          CLI_LDFLAGS="-s -w -X github.com/samestrin/llm-data-axi/internal/data/commands.Version=$VERSION"
-          MCP_LDFLAGS="-s -w -X main.serverVersion=$VERSION"
-          for platform in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64; do
-            os=${platform%/*}; arch=${platform#*/}
-            ext=""; [ "$os" = "windows" ] && ext=".exe"
-            GOOS=$os GOARCH=$arch go build -ldflags "$CLI_LDFLAGS" -o dist/llm-data-$os-$arch$ext ./cmd/llm-data
-            GOOS=$os GOARCH=$arch go build -ldflags "$MCP_LDFLAGS" -o dist/llm-data-mcp-$os-$arch$ext ./cmd/llm-data-mcp
-          done
-          cd dist && sha256sum * > SHA256SUMS.txt
+        run: make dist VERSION="${GITHUB_REF_NAME}"
 
       - name: publish
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true

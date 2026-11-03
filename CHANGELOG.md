@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **`install.sh` installs a release, not a clone.** It downloads the prebuilt `llm-data` and `llm-data-mcp` for your OS and architecture into `~/.local/bin` with no sudo and no Go toolchain, and checks both against the release's `SHA256SUMS.txt` before installing either, so a failed download or a bad checksum leaves an existing install untouched. Each binary is then replaced atomically; a failure after that point, such as an installed `llm-data` that does not run, exits non-zero with the new binaries in place. Build from source with `make install`.
+
 - `yaml get` and `yaml set` errors for a missing file no longer tell the caller to run the deleted `yaml init`; `set` still points at `--create`.
 
 - The no-network guard (`internal/noweb_guard_test.go`) now also scans `cmd/`, so a `net/http`, `net` or `goquery` import in either binary fails the build.
