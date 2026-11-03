@@ -68,10 +68,12 @@ fi
 # binary or the new one, never half of one. The trap removes both kinds of
 # temp file however the script ends.
 tmp=$(mktemp -d)
-staged=""
+staging=""
 cleanup() {
     rm -rf "$tmp"
-    for f in $staged; do rm -f "$f"; done
+    if [ -n "$staging" ]; then
+        for bin in $BINARIES; do rm -f "$install_dir/.$bin.tmp.$$"; done
+    fi
 }
 trap cleanup EXIT
 trap 'cleanup; trap - EXIT; exit 130' INT
@@ -102,14 +104,14 @@ done
 mkdir -p "$install_dir"
 for bin in $BINARIES; do
     part="$install_dir/.$bin.tmp.$$"
-    staged="$staged $part"
+    staging=1
     cp "$tmp/$bin-$os-$arch" "$part"
     chmod 755 "$part"
 done
 for bin in $BINARIES; do
     mv -f "$install_dir/.$bin.tmp.$$" "$install_dir/$bin"
 done
-staged=""
+staging=""
 
 version=$("$install_dir/llm-data" --version 2>&1) || err "installed $install_dir/llm-data but it does not run: $version"
 echo "Installed llm-data and llm-data-mcp to $install_dir"
