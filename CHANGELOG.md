@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Token benchmark, TOON against JSON.** `go run ./benchmarks` builds `llm-data`, runs six read-only commands with `--axi` and with `--json` on this repository and on `spf13/cobra` (from the module cache), and prints bytes and approximate tokens (bytes/4) per format; `-o` also writes the report. A command that fails, prints nothing, or answers `--axi` with the JSON document exits non-zero with no table. The committed result is `benchmarks/RESULTS.md`.
 - Standalone repository, extracted from [samestrin/llm-tools](https://github.com/samestrin/llm-tools). Twenty-six tools travelled across 25 source files, together with `pkg/output`, `internal/support/gitignore` and `internal/support/utils`, renamed to `internal/data/*`; the two LLM commands and the LLM client package they used have since moved on (see Removed), leaving 24.
 - `Makefile` with `build`, `build-all`, `test`, `test-race`, `test-cover`, `lint`, `vet`, `fmt`, `install`, `clean` and `hooks` targets.
 - CI: `lint` → `test -race` → `coverage`, chained by `needs:`, plus a five-platform cross-compile matrix with a 20MB binary size gate, and a tag-triggered release workflow.
