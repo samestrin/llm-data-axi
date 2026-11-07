@@ -46,3 +46,27 @@ jobs:
             if command -v sudo || command -v go; then echo "container is not clean"; exit 1; fi
             su tester -c "test \$(id -u) -ne 0 && cd ~ && sh /src/tests/install/run.sh /src/dist"
           '
+
+  # The macOS half of the installer promise (debt row install.sh:106): the
+  # ubuntu job proves the script's logic, but nothing ever ran it on Darwin,
+  # where curl does not set a quarantine xattr and Go links an ad-hoc
+  # signature on arm64. tests/install/run.sh already resolves darwin/<arch>
+  # and uses file:// URLs, so this is the same harness without the container.
+  installer-darwin:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: build the release directory
+        run: make dist
+
+      # Run as a plain step, not a container: run.sh already refuses to run as
+      # root where that matters, and the macOS runner's user is unprivileged.
+      - name: run install.sh against the local release
+        run: sh tests/install/run.sh dist
