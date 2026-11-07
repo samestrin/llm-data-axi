@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **`Execute` builds a fresh command tree per invocation** (`NewRootCmd`), replacing the package-level `RootCmd` assembled by `init()`s. `ResetOutputModes` is removed: a new tree re-registers every flag, so a second in-process run without `--axi` can no longer inherit TOON from the first. No change to the shipped binary, which runs once per process.
 - The MCP server's `buildArgs` switch is now one `commandRegistry` map, and a test checks it against the tool list in both directions, so a tool with no builder or a builder with no tool fails the build.
-- **README "Known AXI gaps" now matches the technical-debt record.** The `yaml push` bullet is removed: `yaml push` was deleted in Epic 05, so it cannot append twice. The two remaining gaps (no truncation / `--full`, and no totals / silent zeros on `grep` and `multigrep`) are each filed as a debt row. Documentation only; no behaviour changed.
+- **README "Known AXI gaps" drops the `yaml push` bullet and names the debt row for each remaining gap.** `yaml push` was deleted in Epic 05, so it cannot append twice; documentation only (EST-5243).
 
 ## [1.0.0] - 2026-11-03
 
