@@ -22,7 +22,13 @@ Extracted from [samestrin/llm-tools](https://github.com/samestrin/llm-tools), wh
 curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | sh
 ```
 
-This downloads the release binaries for your OS and architecture into `~/.local/bin`, checks them against the release's `SHA256SUMS.txt`, and needs no sudo. Set `LLM_DATA_VERSION=v1.0.0` to pin a release or `LLM_DATA_INSTALL_DIR` to install elsewhere. The script itself covers Linux and macOS on amd64 and arm64; on Windows it tells you to grab the `.exe` from the release page.
+This downloads the release binaries for your OS and architecture into `~/.local/bin`, checks them against the release's `SHA256SUMS.txt`, and needs no sudo. To pin a release, put the variable after the pipe so it reaches `sh`, not `curl`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v1.0.0 sh
+```
+
+Set `LLM_DATA_INSTALL_DIR` to install elsewhere. The script itself covers Linux and macOS on amd64 and arm64; on Windows it tells you to grab the `.exe` from the release page.
 
 Or build from source:
 
