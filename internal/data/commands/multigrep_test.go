@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -200,8 +201,32 @@ func TestMultigrepTruncatesContentInEveryMode(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			out := buf.String()
-			got := strings.Count(out, "y")
-			if tt.fullGot && got != 300 {
+			if tt.name == "plain" {
+				// Plain mode is not JSON: assert on the printed line and its markers.
+				if strings.Count(out, "y") > 100 {
+					t.Errorf("plain content emitted nearly whole (%d y's):\n%s", strings.Count(out, "y"), out)
+				}
+				if !strings.Contains(out, "...") || !strings.Contains(out, "--full") {
+					t.Errorf("a cut plain line gave no marker or next step:\n%s", out)
+				}
+				return
+			}
+			var doc struct {
+				Results map[string]struct {
+					OtherMatches []struct {
+						Content string `json:"content"`
+					} `json:"other_matches"`
+				} `json:"results"`
+			}
+			if err := json.Unmarshal(buf.Bytes(), &doc); err != nil {
+				t.Fatalf("parse JSON: %v\n%s", err, buf.String())
+			}
+			r := doc.Results["needle"]
+			if len(r.OtherMatches) != 1 {
+				t.Fatalf("expected one match, got %d:\n%s", len(r.OtherMatches), buf.String())
+			}
+			got := len(r.OtherMatches[0].Content)
+			if tt.fullGot && got != 307 {
 				t.Errorf("--full returned %d of 300 bytes:\n%s", got, out)
 			}
 			if !tt.fullGot {

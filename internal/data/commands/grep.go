@@ -21,21 +21,38 @@ var (
 	grepNoGitignore bool
 	grepJSON        bool
 	grepMinimal     bool
+	grepFull        bool
 )
 
-// GrepMatch represents a single grep match
+// grepTruncateLimit is the byte limit a matching line is cut to by default,
+// in every output mode (AXI principle 3). A root-level --full flag was
+// rejected on purpose: every subcommand would accept it and only a few
+// honour it, and a flag that is accepted and silently ignored is the bug
+// this repository exists to prevent. The flag is per-command instead.
+const grepTruncateLimit = 200
+
+// GrepMatch represents a single grep match. Truncated and FullLength are set
+// only when the line was cut, so the minimal {file,text} schema is unchanged
+// for every line that fits. FullLength is the whole line's byte count: the
+// size hint that lets a caller decide whether --full is worth it.
 type GrepMatch struct {
-	File string `json:"file,omitempty"`
-	Line int    `json:"line,omitempty"`
-	Text string `json:"text,omitempty"`
+	File       string `json:"file,omitempty"`
+	Line       int    `json:"line,omitempty"`
+	Text       string `json:"text,omitempty"`
+	Truncated  bool   `json:"truncated,omitempty"`
+	FullLength int    `json:"full_length,omitempty"`
 }
 
-// GrepResult represents the complete grep result
+// GrepResult represents the complete grep result. TotalMatches has no
+// omitempty on purpose (AXI principles 4 and 5): a zero must be stated, not
+// indistinguishable from an absent field. With -l it counts files with
+// matches, otherwise matching lines.
 type GrepResult struct {
-	Pattern string      `json:"pattern,omitempty"`
-	Matches []GrepMatch `json:"matches,omitempty"`
-	Files   []string    `json:"files,omitempty"`
-	Help    []string    `json:"help,omitempty"`
+	Pattern      string      `json:"pattern,omitempty"`
+	Matches      []GrepMatch `json:"matches,omitempty"`
+	Files        []string    `json:"files,omitempty"`
+	TotalMatches int         `json:"total_matches"`
+	Help         []string    `json:"help,omitempty"`
 }
 
 // newGrepCmd creates the grep command
@@ -54,6 +71,7 @@ Respects .gitignore patterns by default.`,
 	cmd.Flags().BoolVar(&grepNoGitignore, "no-gitignore", false, "Disable .gitignore filtering")
 	cmd.Flags().BoolVar(&grepJSON, "json", false, "Output as JSON")
 	cmd.Flags().BoolVar(&grepMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&grepFull, "full", false, "Emit whole matching lines instead of truncating them at 200 bytes")
 	return cmd
 }
 
@@ -123,6 +141,7 @@ func runGrep(cmd *cobra.Command, args []string) error {
 		Pattern: pattern,
 	}
 	matchedFiles := make(map[string]bool)
+	truncatedLines := false
 
 	for _, filePath := range files {
 		file, err := os.Open(filePath)
@@ -150,6 +169,15 @@ func runGrep(cmd *cobra.Command, args []string) error {
 					File: filePath,
 					Text: line,
 				}
+				// The truncation itself, not only the marker, must be here: the
+				// structured modes marshal this struct directly, so a whole line
+				// stored here is a whole line emitted in --json and --axi.
+				if !grepFull && len(line) > grepTruncateLimit {
+					match.Text = truncate(line, grepTruncateLimit)
+					match.Truncated = true
+					match.FullLength = len(line)
+					truncatedLines = true
+				}
 				if grepLineNumbers {
 					match.Line = lineNum
 				}
@@ -162,6 +190,15 @@ func runGrep(cmd *cobra.Command, args []string) error {
 
 	if len(result.Matches) == 0 && len(result.Files) == 0 {
 		result.Help = grepZeroMatchHelp(walkedDir)
+	}
+	if truncatedLines {
+		// The caller cannot guess the flag exists; the hint is the next step.
+		result.Help = append(result.Help, "Whole lines: rerun the same grep with --full")
+	}
+	if grepFilesOnly {
+		result.TotalMatches = len(result.Files)
+	} else {
+		result.TotalMatches = len(result.Matches)
 	}
 
 	formatter := output.New(grepJSON, grepMinimal, cmd.OutOrStdout())
@@ -184,6 +221,11 @@ func grepZeroMatchHelp(walkedDir bool) []string {
 
 func printGrepText(w io.Writer, data interface{}) {
 	r := data.(GrepResult)
+
+	// Always stated, including 0: plain mode used to print nothing at all
+	// for a search with no matches, which read as "something went wrong"
+	// rather than "zero matches" (AXI principles 4 and 5).
+	defer fmt.Fprintf(w, "total: %d\n", r.TotalMatches)
 
 	if grepFilesOnly {
 		for _, f := range r.Files {

@@ -25,16 +25,23 @@ var (
 	multigrepMinimal     bool
 	multigrepDefinitions bool
 	multigrepOutputDir   string
+	multigrepFull        bool
 )
 
 type matchInfo struct {
-	File    string `json:"file"`
-	Line    int    `json:"line"`
-	Content string `json:"content"`
+	File      string `json:"file"`
+	Line      int    `json:"line"`
+	Content   string `json:"content"`
+	Truncated bool   `json:"truncated,omitempty"`
 }
 
+// The count fields below carry no omitempty on purpose (AXI principles 4
+// and 5): a keyword with zero matches must print `match_count: 0`, not an
+// absent field that reads the same as a failure. Truncated here means the
+// per-keyword cap (--max-per-keyword); a cut Content line sets
+// matchInfo.Truncated instead.
 type keywordResult struct {
-	MatchCount        int         `json:"match_count,omitempty"`
+	MatchCount        int         `json:"match_count"`
 	MC                *int        `json:"mc,omitempty"`
 	FilesMatched      []string    `json:"files_matched,omitempty"`
 	FM                []string    `json:"fm,omitempty"`
@@ -48,15 +55,15 @@ type keywordResult struct {
 
 // MultigrepResult represents the overall multigrep result
 type MultigrepResult struct {
-	KeywordsSearched    int                       `json:"keywords_searched,omitempty"`
+	KeywordsSearched    int                       `json:"keywords_searched"`
+	KeywordsWithMatches int                       `json:"keywords_with_matches"`
+	TotalMatches        int                       `json:"total_matches"`
 	KS                  *int                      `json:"ks,omitempty"`
-	KeywordsWithMatches int                       `json:"keywords_with_matches,omitempty"`
 	KWM                 *int                      `json:"kwm,omitempty"`
-	TotalMatches        int                       `json:"total_matches,omitempty"`
 	TM                  *int                      `json:"tm,omitempty"`
 	SearchPath          string                    `json:"search_path,omitempty"`
 	SP                  string                    `json:"sp,omitempty"`
-	FilesSearched       int                       `json:"files_searched,omitempty"`
+	FilesSearched       int                       `json:"files_searched"`
 	FS                  *int                      `json:"fs,omitempty"`
 	Results             map[string]*keywordResult `json:"results,omitempty"`
 	R                   map[string]*keywordResult `json:"r,omitempty"`
@@ -86,6 +93,7 @@ Example:
 	cmd.Flags().BoolVar(&multigrepMinimal, "min", false, "Output in minimal/token-optimized format")
 	cmd.Flags().BoolVarP(&multigrepDefinitions, "definitions", "d", false, "Show only definition matches")
 	cmd.Flags().StringVarP(&multigrepOutputDir, "output-dir", "o", "", "Write results to directory (one file per keyword)")
+	cmd.Flags().BoolVar(&multigrepFull, "full", false, "Emit whole matching lines instead of truncating them at 80 characters")
 
 	cmd.MarkFlagRequired("path")
 	cmd.MarkFlagRequired("keywords")
@@ -218,6 +226,9 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 	if totalMatches == 0 {
 		mgResult.Help = multigrepZeroMatchHelp()
 	}
+	if !multigrepFull && anyContentTruncated(results) {
+		mgResult.Help = append(mgResult.Help, "Whole lines: rerun with --full")
+	}
 
 	formatter := output.New(multigrepJSON, multigrepMinimal, cmd.OutOrStdout())
 	return formatter.Print(mgResult, func(w io.Writer, data interface{}) {
@@ -239,15 +250,19 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 			if len(r.DefinitionMatches) > 0 {
 				fmt.Fprintln(w, "  DEFINITIONS:")
 				for _, m := range r.DefinitionMatches {
-					fmt.Fprintf(w, "    → %s:%d: %s\n", m.File, m.Line, truncate(m.Content, 80))
+					fmt.Fprintf(w, "    → %s:%d: %s\n", m.File, m.Line, m.Content)
 				}
 			}
 
 			if !multigrepDefinitions && len(r.OtherMatches) > 0 {
 				fmt.Fprintln(w, "  USAGES (sample):")
 				for _, m := range r.OtherMatches {
-					fmt.Fprintf(w, "    - %s:%d: %s\n", m.File, m.Line, truncate(m.Content, 80))
+					fmt.Fprintf(w, "    - %s:%d: %s\n", m.File, m.Line, m.Content)
 				}
+			}
+
+			if anyContentTruncated(results) {
+				fmt.Fprintln(w, "  (long lines truncated; rerun with --full)")
 			}
 
 			if r.Truncated {
@@ -389,6 +404,14 @@ func searchKeyword(basePath string, files []string, keyword string, defPatterns 
 					Line:    lineNum + 1,
 					Content: strings.TrimSpace(line),
 				}
+				// Cut at collection, not at print time: the structured modes
+				// marshal this struct directly, so a whole line stored here was
+				// a whole line emitted in --json and --axi while plain mode cut
+				// it at 80 -- two different contracts for one flag.
+				if trimmed := strings.TrimSpace(line); !multigrepFull && len(trimmed) > 80 {
+					info.Content = truncate(trimmed, 80)
+					info.Truncated = true
+				}
 
 				if isDefinition {
 					if len(result.DefinitionMatches) < multigrepMaxPerKw {
@@ -413,6 +436,19 @@ func searchKeyword(basePath string, files []string, keyword string, defPatterns 
 	}
 
 	return result
+}
+
+// anyContentTruncated reports whether any match's content line was cut,
+// so the output can say so and offer --full (AXI principle 3).
+func anyContentTruncated(results map[string]*keywordResult) bool {
+	for _, r := range results {
+		for _, m := range append(append([]matchInfo{}, r.DefinitionMatches...), r.OtherMatches...) {
+			if m.Truncated {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func truncate(s string, maxLen int) string {

@@ -22,6 +22,7 @@ var (
 	gitContextJSON        bool
 	gitContextMinimal     bool
 	gitContextPath        string
+	gitContextFull        bool
 )
 
 // GitContext holds the gathered git repository information
@@ -97,6 +98,7 @@ Examples:
 	cmd.Flags().IntVar(&gitContextMaxCommits, "max-commits", 10, "Maximum number of commits to include")
 	cmd.Flags().BoolVar(&gitContextJSON, "json", false, "Output as JSON")
 	cmd.Flags().BoolVar(&gitContextMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&gitContextFull, "full", false, "Emit the whole diff instead of truncating it at 50,000 bytes")
 
 	return cmd
 }
@@ -168,8 +170,9 @@ func runGitContext(cmd *cobra.Command, args []string) error {
 		stagedDiff, _ := runGitOutput(absPath, "diff", "--cached")
 		ctx.Diff = diff + stagedDiff
 
-		// Truncate if too large
-		if len(ctx.Diff) > 50000 {
+		// Truncate if too large, unless --full opted out (AXI principle 3:
+		// a cut must be an explicit, escapable one).
+		if !gitContextFull && len(ctx.Diff) > 50000 {
 			ctx.Diff = ctx.Diff[:50000] + "\n... (diff truncated, too large)"
 		}
 	}
