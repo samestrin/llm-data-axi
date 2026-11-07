@@ -220,63 +220,45 @@ func ExecuteHandler(toolName string, args map[string]interface{}) (string, error
 	return string(output), nil
 }
 
+// commandRegistry maps each command name to its argument builder. It is the
+// only place a command is wired to a builder, so a case for an unregistered
+// command cannot exist, and tests check it against GetToolDefinitions in both
+// directions.
+var commandRegistry = map[string]func(map[string]interface{}) []string{
+	"tree":               buildTreeArgs,
+	"grep":               buildGrepArgs,
+	"multiexists":        buildMultiexistsArgs,
+	"template":           buildTemplateArgs,
+	"discover_tests":     buildDiscoverTestsArgs,
+	"multigrep":          buildMultigrepArgs,
+	"detect":             buildDetectArgs,
+	"project_components": buildProjectComponentsArgs,
+	"count":              buildCountArgs,
+	"git_context":        buildGitContextArgs,
+	"repo_root":          buildRepoRootArgs,
+	"highest":            buildHighestArgs,
+	"plan_type":          buildPlanTypeArgs,
+	"git_changes":        buildGitChangesArgs,
+	"yaml_get":           buildYamlGetArgs,
+	"yaml_set":           buildYamlSetArgs,
+	"yaml_multiget":      buildYamlMultigetArgs,
+	"yaml_multiset":      buildYamlMultisetArgs,
+	"catfiles":           buildCatfilesArgs,
+	"math":               buildMathArgs,
+	"stats":              buildStatsArgs,
+	"runtime":            buildRuntimeArgs,
+	"diff_smell":         buildDiffSmellArgs,
+	"tier_classifier":    buildTierClassifierArgs,
+}
+
 // buildArgs builds CLI arguments for the given tool
 func buildArgs(cmdName string, args map[string]interface{}) ([]string, error) {
-	// Normalize parameter aliases before processing
-	args = normalizeArgs(args)
-
-	switch cmdName {
-	case "tree":
-		return buildTreeArgs(args), nil
-	case "grep":
-		return buildGrepArgs(args), nil
-	case "multiexists":
-		return buildMultiexistsArgs(args), nil
-	case "template":
-		return buildTemplateArgs(args), nil
-	case "discover_tests":
-		return buildDiscoverTestsArgs(args), nil
-	case "multigrep":
-		return buildMultigrepArgs(args), nil
-	case "detect":
-		return buildDetectArgs(args), nil
-	case "project_components":
-		return buildProjectComponentsArgs(args), nil
-	case "count":
-		return buildCountArgs(args), nil
-	case "git_context":
-		return buildGitContextArgs(args), nil
-	case "repo_root":
-		return buildRepoRootArgs(args), nil
-	case "highest":
-		return buildHighestArgs(args), nil
-	case "plan_type":
-		return buildPlanTypeArgs(args), nil
-	case "git_changes":
-		return buildGitChangesArgs(args), nil
-	case "yaml_get":
-		return buildYamlGetArgs(args), nil
-	case "yaml_set":
-		return buildYamlSetArgs(args), nil
-	case "yaml_multiget":
-		return buildYamlMultigetArgs(args), nil
-	case "yaml_multiset":
-		return buildYamlMultisetArgs(args), nil
-	case "catfiles":
-		return buildCatfilesArgs(args), nil
-	case "math":
-		return buildMathArgs(args), nil
-	case "stats":
-		return buildStatsArgs(args), nil
-	case "runtime":
-		return buildRuntimeArgs(args), nil
-	case "diff_smell":
-		return buildDiffSmellArgs(args), nil
-	case "tier_classifier":
-		return buildTierClassifierArgs(args), nil
-	default:
+	build, ok := commandRegistry[cmdName]
+	if !ok {
 		return nil, fmt.Errorf("unknown command: %s", cmdName)
 	}
+	// Normalize parameter aliases before processing
+	return build(normalizeArgs(args)), nil
 }
 
 func buildTreeArgs(args map[string]interface{}) []string {
