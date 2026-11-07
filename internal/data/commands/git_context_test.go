@@ -565,3 +565,58 @@ func TestGetGitRemotes(t *testing.T) {
 		t.Errorf("getGitRemotes(not a repo) = %#v, want nil", got)
 	}
 }
+
+// TestGitContextFullDiffDefendsAXIPrinciple3 defends the --full escape hatch
+// for the 50,000-byte diff cut: without it a large diff was silently chopped
+// with a hint but no way to page or fetch the rest.
+func TestGitContextFullDiffDefendsAXIPrinciple3(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "big.txt")
+	base := strings.Repeat("b", 60_000)
+	if err := os.WriteFile(file, []byte(base), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runGitCmd(t, tmpDir, "add", "big.txt")
+	runGitCmd(t, tmpDir, "commit", "-m", "add big file")
+
+	// Rewrite the whole file so the diff is ~120KB: 60k deletions, 60k additions.
+	changed := strings.Repeat("c", 60_000)
+	if err := os.WriteFile(file, []byte(changed), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	run := func(extra ...string) GitContext {
+		t.Helper()
+		cmd := newGitContextCmd()
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetArgs(append([]string{"--path", tmpDir, "--include-diff", "--json"}, extra...))
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var ctx GitContext
+		if err := json.Unmarshal(buf.Bytes(), &ctx); err != nil {
+			t.Fatalf("parse JSON: %v\n%s", err, buf.String())
+		}
+		return ctx
+	}
+
+	truncated := run()
+	if !strings.Contains(truncated.Diff, "diff truncated") {
+		t.Errorf("expected the default diff to say it was truncated:\n%.200s", truncated.Diff)
+	}
+	if len(truncated.Diff) > 50_500 {
+		t.Errorf("default diff was not cut at the limit: %d bytes", len(truncated.Diff))
+	}
+
+	full := run("--full")
+	if len(full.Diff) <= 50_500 {
+		t.Errorf("--full still returned a cut diff: %d bytes", len(full.Diff))
+	}
+}
