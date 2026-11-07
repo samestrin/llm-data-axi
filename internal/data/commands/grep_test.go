@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -285,4 +286,147 @@ func TestGrepUnreadablePathFails(t *testing.T) {
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("expected an error for a path under a regular file")
 	}
+}
+
+// TestGrepTruncatesLongLinesWithHint defends AXI principle 3 for grep: a
+// matching line used to be emitted whole in every mode, so one long line could
+// cost hundreds of tokens with no way to tell it was partial. The default now
+// cuts the line at a limit and says so (a truncated flag, the full length, a
+// next step); --full opts out.
+func TestGrepTruncatesLongLinesWithHint(t *testing.T) {
+	dir := t.TempDir()
+	longLine := "needle" + strings.Repeat("x", 400)
+	file := filepath.Join(dir, "long.txt")
+	if err := os.WriteFile(file, []byte(longLine+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, mode := range []string{"--json", "--axi"} {
+		t.Run(mode, func(t *testing.T) {
+			stdout, _, code := runGrepCLI(t, "grep", "needle", file, mode)
+			if code != 0 {
+				t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+			}
+			if !strings.Contains(stdout, "truncated") {
+				t.Errorf("a cut line did not say it was truncated:\n%s", stdout)
+			}
+			if !strings.Contains(stdout, "full_length") {
+				t.Errorf("no size hint for the cut line:\n%s", stdout)
+			}
+			if !strings.Contains(stdout, "full") || !strings.Contains(stdout, "--full") {
+				t.Errorf("no --full next step offered:\n%s", stdout)
+			}
+			if strings.Count(stdout, "x") > 220 {
+				t.Errorf("the line was emitted nearly whole (%d x's):\n%s",
+					strings.Count(stdout, "x"), truncForMsg(stdout))
+			}
+		})
+	}
+
+	t.Run("plain", func(t *testing.T) {
+		stdout, _, code := runGrepCLI(t, "grep", "needle", file)
+		if code != 0 {
+			t.Fatalf("exit %d", code)
+		}
+		if !strings.Contains(stdout, "...") {
+			t.Errorf("a cut plain line has no ellipsis marker:\n%s", truncForMsg(stdout))
+		}
+	})
+
+	t.Run("full", func(t *testing.T) {
+		stdout, _, code := runGrepCLI(t, "grep", "needle", file, "--json", "--full")
+		if code != 0 {
+			t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+		}
+		var res struct {
+			Matches []struct {
+				Text      string `json:"text"`
+				Truncated bool   `json:"truncated"`
+			} `json:"matches"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &res); err != nil {
+			t.Fatalf("parse: %v\n%s", err, stdout)
+		}
+		if len(res.Matches) != 1 || len(res.Matches[0].Text) != len(longLine) {
+			t.Errorf("--full did not return the whole line: got %d bytes, want %d",
+				len(res.Matches[0].Text), len(longLine))
+		}
+		if res.Matches[0].Truncated {
+			t.Error("--full still reported the line as truncated")
+		}
+	})
+}
+
+// TestGrepExplicitZeroTotal defends AXI principles 4 and 5 for grep: a search
+// with no matches used to print nothing at all in plain mode and carry no
+// count in any mode, so "no matches" and "something went wrong" read the same.
+// Every mode must now state the zero.
+func TestGrepExplicitZeroTotal(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(file, []byte("foo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, code := runGrepCLI(t, "grep", "zzq", file, "--json")
+	if code != 0 {
+		t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+	}
+	if !strings.Contains(stdout, `"total_matches": 0`) {
+		t.Errorf("--json dropped the zero total:\n%s", stdout)
+	}
+
+	stdout, _, code = runGrepCLI(t, "grep", "zzq", file, "--axi")
+	if code != 0 {
+		t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+	}
+	if !strings.Contains(stdout, "total_matches: 0") {
+		t.Errorf("--axi dropped the zero total:\n%s", stdout)
+	}
+
+	stdout, _, code = runGrepCLI(t, "grep", "zzq", file)
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if !strings.Contains(stdout, "total: 0") {
+		t.Errorf("plain mode said nothing about zero matches:\n%q", stdout)
+	}
+}
+
+// TestGrepCountsMatches defends the non-zero side of principle 4: the total
+// must be the number of matching lines (or files, with -l), not a field that
+// only appears when it is non-zero.
+func TestGrepCountsMatches(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("needle\nneedle again\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("nothing here\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, code := runGrepCLI(t, "grep", "needle", dir, "--json")
+	if code != 0 {
+		t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+	}
+	if !strings.Contains(stdout, `"total_matches": 2`) {
+		t.Errorf("wrong or missing total:\n%s", stdout)
+	}
+
+	stdout, _, code = runGrepCLI(t, "grep", "needle", dir, "-l", "--json")
+	if code != 0 {
+		t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+	}
+	if !strings.Contains(stdout, `"total_matches": 1`) {
+		t.Errorf("-l must count files with matches, not lines:\n%s", stdout)
+	}
+}
+
+// truncForMsg keeps a failure message readable when the payload is one huge
+// line: the point of the assertion is the shape, not 400 bytes of 'x'.
+func truncForMsg(s string) string {
+	if len(s) > 300 {
+		return s[:300] + "..."
+	}
+	return s
 }
