@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **README Install shows the pinned-release command with the variable on the `sh` side of the pipe** (`curl -fsSL .../install.sh | LLM_DATA_VERSION=v1.0.0 sh`). Written as `LLM_DATA_VERSION=v1.0.0 curl ... | sh` the variable reaches `curl`, not `sh`, and the pin is silently ignored. Documentation only (EST-5260, debt row `README.md:26`).
+- **The AXI audit's finding 6d is struck and its subcommand counts corrected.** `yaml push` was deleted in epic 5, so the idempotency finding no longer describes this tool; the audit now lists the 4 live `yaml` subcommands instead of the 10 it probed at audit time. Documentation only (EST-5260, debt row `docs/axi-audit.md:26`).
+
 ## [1.0.1] - 2026-11-07
 
 ### Changed
