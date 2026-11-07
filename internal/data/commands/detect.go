@@ -278,7 +278,3 @@ func containsSubstring(s, substr string) bool {
 	}
 	return false
 }
-
-func init() {
-	RootCmd.AddCommand(newDetectCmd())
-}

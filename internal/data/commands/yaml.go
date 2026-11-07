@@ -650,7 +650,3 @@ func parseNumber(s string) (interface{}, error) {
 
 	return nil, fmt.Errorf("not a number")
 }
-
-func init() {
-	RootCmd.AddCommand(newYamlCmd())
-}

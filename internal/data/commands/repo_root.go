@@ -111,7 +111,3 @@ func printRepoRootText(w io.Writer, data interface{}) {
 		}
 	}
 }
-
-func init() {
-	RootCmd.AddCommand(newRepoRootCmd())
-}

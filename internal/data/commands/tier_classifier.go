@@ -63,10 +63,6 @@ func runTierClassifier(cmd *cobra.Command, _ []string) error {
 	})
 }
 
-func init() {
-	RootCmd.AddCommand(newTierClassifierCmd())
-}
-
 // nestedTierSections maps a tier-keyed package-tiers.yaml section name to the
 // tier it assigns. "patterns" here is the nested schema's tier bucket (named
 // after the "pattern" tier), not the flat schema's glob-rule list of the same

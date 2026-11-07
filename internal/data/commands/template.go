@@ -213,7 +213,3 @@ func runTemplate(cmd *cobra.Command, args []string) error {
 	fmt.Fprint(cmd.OutOrStdout(), result)
 	return nil
 }
-
-func init() {
-	RootCmd.AddCommand(newTemplateCmd())
-}

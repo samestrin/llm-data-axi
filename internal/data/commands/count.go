@@ -340,7 +340,3 @@ func runCountFiles(cmd *cobra.Command, target string, info os.FileInfo) error {
 		fmt.Fprintf(w, "COUNT: %d\n", r.Count)
 	})
 }
-
-func init() {
-	RootCmd.AddCommand(newCountCmd())
-}

@@ -221,7 +221,3 @@ func runStats(cmd *cobra.Command, args []string) error {
 		}
 	})
 }
-
-func init() {
-	RootCmd.AddCommand(newStatsCmd())
-}

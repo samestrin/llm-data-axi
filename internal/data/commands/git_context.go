@@ -400,7 +400,3 @@ func parseMaxCommits(s string) int {
 	n, _ := strconv.Atoi(s)
 	return n
 }
-
-func init() {
-	RootCmd.AddCommand(newGitContextCmd())
-}

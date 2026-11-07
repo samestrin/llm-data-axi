@@ -227,7 +227,3 @@ func outputGitChanges(cmd *cobra.Command, result GitChangesResult) {
 		}
 	}
 }
-
-func init() {
-	RootCmd.AddCommand(newGitChangesCmd())
-}

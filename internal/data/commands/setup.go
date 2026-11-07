@@ -352,7 +352,3 @@ func printSetupText(w io.Writer, data interface{}) {
 		fmt.Fprintf(w, "set up llm-data in %s\n", r.Dir)
 	}
 }
-
-func init() {
-	RootCmd.AddCommand(newSetupCmd())
-}

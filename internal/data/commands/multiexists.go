@@ -138,7 +138,3 @@ func printMultiexistsText(w io.Writer, data interface{}) {
 	fmt.Fprintf(w, "MISSING_COUNT: %d\n", result.MissingCount)
 	fmt.Fprintf(w, "EXIST_COUNT: %d\n", result.ExistCount)
 }
-
-func init() {
-	RootCmd.AddCommand(newMultiexistsCmd())
-}

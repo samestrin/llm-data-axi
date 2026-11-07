@@ -150,7 +150,3 @@ func runMath(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
-
-func init() {
-	RootCmd.AddCommand(newMathCmd())
-}

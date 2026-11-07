@@ -277,7 +277,3 @@ func outputPlanType(cmd *cobra.Command, info PlanTypeResult) {
 		fmt.Fprintf(out, "Work Source: %s\n", info.WorkSource)
 	}
 }
-
-func init() {
-	RootCmd.AddCommand(newPlanTypeCmd())
-}

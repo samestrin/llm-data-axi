@@ -13,22 +13,18 @@ import (
 func TestExtractCommandsAreNotRegistered(t *testing.T) {
 	for _, name := range []string{"extract-links", "extract-relevant"} {
 		t.Run(name, func(t *testing.T) {
-			for _, c := range RootCmd.Commands() {
+			root := NewRootCmd()
+			for _, c := range root.Commands() {
 				if c.Name() == name {
 					t.Fatalf("%s is still registered on the root command", name)
 				}
 			}
 
 			help := new(bytes.Buffer)
-			RootCmd.SetOut(help)
-			RootCmd.SetErr(help)
-			RootCmd.SetArgs([]string{"--help"})
-			t.Cleanup(func() {
-				RootCmd.SetOut(nil)
-				RootCmd.SetErr(nil)
-				RootCmd.SetArgs(nil)
-			})
-			if err := RootCmd.Execute(); err != nil {
+			root.SetOut(help)
+			root.SetErr(help)
+			root.SetArgs([]string{"--help"})
+			if err := root.Execute(); err != nil {
 				t.Fatalf("--help: %v", err)
 			}
 			if !strings.Contains(help.String(), "Available Commands") {
@@ -38,10 +34,11 @@ func TestExtractCommandsAreNotRegistered(t *testing.T) {
 				t.Errorf("--help still lists %s:\n%s", name, help.String())
 			}
 
-			RootCmd.SetOut(new(bytes.Buffer))
-			RootCmd.SetErr(new(bytes.Buffer))
-			RootCmd.SetArgs([]string{name})
-			err := RootCmd.Execute()
+			root = NewRootCmd()
+			root.SetOut(new(bytes.Buffer))
+			root.SetErr(new(bytes.Buffer))
+			root.SetArgs([]string{name})
+			err := root.Execute()
 			if err == nil || !strings.Contains(err.Error(), "unknown command") {
 				t.Errorf("running %s: want an unknown command error, got %v", name, err)
 			}

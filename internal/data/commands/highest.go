@@ -373,7 +373,3 @@ func calculateNext(version string, prefix string) string {
 
 	return version
 }
-
-func init() {
-	RootCmd.AddCommand(newHighestCmd())
-}

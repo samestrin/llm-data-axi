@@ -202,7 +202,3 @@ func isTextFile(content []byte) bool {
 	}
 	return true
 }
-
-func init() {
-	RootCmd.AddCommand(newCatfilesCmd())
-}
