@@ -496,17 +496,28 @@ func TestBuildArgsDispatcher(t *testing.T) {
 	}
 }
 
-// A tool registered in tools.go with no case in buildArgs answers every call
-// with "unknown command". The two lists are maintained by hand and in separate
-// files, so nothing but this test connects them.
-func TestEveryRegisteredToolHasADispatcherCase(t *testing.T) {
+// Defends the one-registry rule both ways: a tool with no builder would be
+// advertised and then fail on call, and a builder with no tool is unreachable
+// dead wiring. With a switch neither could be caught for the second direction.
+func TestToolListAndCommandRegistryMatchExactly(t *testing.T) {
+	tools := map[string]bool{}
 	for _, tool := range GetToolDefinitions() {
 		cmdName := strings.TrimPrefix(tool.Name, ToolPrefix)
-		t.Run(cmdName, func(t *testing.T) {
-			if _, err := buildArgs(cmdName, map[string]interface{}{}); err != nil {
-				t.Errorf("buildArgs(%s) = %v; every registered tool needs a case", cmdName, err)
-			}
-		})
+		tools[cmdName] = true
+		if _, ok := commandRegistry[cmdName]; !ok {
+			t.Errorf("tool %s has no entry in commandRegistry", tool.Name)
+		}
+		if _, err := buildArgs(cmdName, map[string]interface{}{}); err != nil {
+			t.Errorf("buildArgs(%s) = %v; every registered tool must dispatch", cmdName, err)
+		}
+	}
+	for cmdName, build := range commandRegistry {
+		if build == nil {
+			t.Errorf("commandRegistry[%s] has a nil builder", cmdName)
+		}
+		if !tools[cmdName] {
+			t.Errorf("commandRegistry has %q but GetToolDefinitions has no tool for it", cmdName)
+		}
 	}
 }
 
