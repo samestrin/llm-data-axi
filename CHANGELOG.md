@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **`Execute` builds a fresh command tree per invocation** (`NewRootCmd`), replacing the package-level `RootCmd` assembled by `init()`s. `ResetOutputModes` is removed: a new tree re-registers every flag, so a second in-process run without `--axi` can no longer inherit TOON from the first. No change to the shipped binary, which runs once per process.
+
 ## [1.0.0] - 2026-11-03
 
 ### Changed

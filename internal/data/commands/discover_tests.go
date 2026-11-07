@@ -269,7 +269,3 @@ func countColocatedTests(dir string) int {
 
 	return count
 }
-
-func init() {
-	RootCmd.AddCommand(newDiscoverTestsCmd())
-}

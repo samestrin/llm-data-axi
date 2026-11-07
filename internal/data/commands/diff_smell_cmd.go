@@ -45,10 +45,6 @@ summary.verdict is "hard" (any test_only/weakened_assertion → force review),
 	return cmd
 }
 
-func init() {
-	RootCmd.AddCommand(newDiffSmellCmd())
-}
-
 func runDiffSmell(cmd *cobra.Command, _ []string) error {
 	var diffText string
 	if dsDiffPath != "" {

@@ -200,7 +200,3 @@ func printGrepText(w io.Writer, data interface{}) {
 		}
 	}
 }
-
-func init() {
-	RootCmd.AddCommand(newGrepCmd())
-}

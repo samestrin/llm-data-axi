@@ -9,33 +9,16 @@ import (
 	"testing"
 )
 
-// clearHelpFlag undoes cobra leaving --help set after a run that passed it;
-// otherwise the next in-process run prints help whatever its arguments.
-func clearHelpFlag() {
-	if f := RootCmd.Flags().Lookup("help"); f != nil {
-		_ = f.Value.Set("false")
-		f.Changed = false
-	}
-}
-
-// runRootBoth drives the real command tree with stdout and stderr captured
+// runRootBoth drives a fresh command tree with stdout and stderr captured
 // together, so a test can see help text wherever cobra chose to write it.
 func runRootBoth(t *testing.T, args ...string) string {
 	t.Helper()
+	root := NewRootCmd()
 	buf := new(bytes.Buffer)
-	RootCmd.SetOut(buf)
-	RootCmd.SetErr(buf)
-	RootCmd.SetArgs(args)
-	t.Cleanup(func() {
-		ResetOutputModes()
-		RootCmd.SetOut(nil)
-		RootCmd.SetErr(nil)
-		RootCmd.SetArgs(nil)
-		clearHelpFlag()
-	})
-	clearHelpFlag()
-	ResetOutputModes()
-	if err := RootCmd.Execute(); err != nil {
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
 		t.Fatalf("%v: %v", args, err)
 	}
 	return buf.String()
@@ -139,17 +122,11 @@ func TestRootHelpStillPrintsHelp(t *testing.T) {
 func TestRootUnknownCommandStillFails(t *testing.T) {
 	fakeExecutable(t)
 	for _, args := range [][]string{{"no-such-command"}, {"no-such-command", "--help"}} {
-		clearHelpFlag()
-		RootCmd.SetOut(new(bytes.Buffer))
-		RootCmd.SetErr(new(bytes.Buffer))
-		RootCmd.SetArgs(args)
-		t.Cleanup(func() {
-			RootCmd.SetOut(nil)
-			RootCmd.SetErr(nil)
-			RootCmd.SetArgs(nil)
-			clearHelpFlag()
-		})
-		err := RootCmd.Execute()
+		root := NewRootCmd()
+		root.SetOut(new(bytes.Buffer))
+		root.SetErr(new(bytes.Buffer))
+		root.SetArgs(args)
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "unknown command") {
 			t.Errorf("%v: want an unknown command error, got %v", args, err)
 		}
@@ -181,17 +158,12 @@ func TestRootNoArgsFailsWhenExecutableUnresolved(t *testing.T) {
 	orig := executablePath
 	executablePath = func() (string, error) { return "", errors.New("no /proc") }
 	t.Cleanup(func() { executablePath = orig })
-	clearHelpFlag()
+	root := NewRootCmd()
 	buf := new(bytes.Buffer)
-	RootCmd.SetOut(buf)
-	RootCmd.SetErr(buf)
-	RootCmd.SetArgs(nil)
-	t.Cleanup(func() {
-		RootCmd.SetOut(nil)
-		RootCmd.SetErr(nil)
-	})
-	ResetOutputModes()
-	err := RootCmd.Execute()
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs(nil)
+	err := root.Execute()
 	if err == nil || !strings.Contains(err.Error(), "cannot resolve executable path") {
 		t.Errorf("want an executable path error, got %v", err)
 	}
@@ -200,10 +172,10 @@ func TestRootNoArgsFailsWhenExecutableUnresolved(t *testing.T) {
 	}
 }
 
-// Defends ResetOutputModes against pflag's Changed bit: it cleared the bound
-// variables but not Changed, and PersistentPreRun reads Changed, so a bare run
-// after an in-process --json run printed JSON instead of the plain view.
-func TestResetOutputModesClearsChangedFlags(t *testing.T) {
+// Defends the per-invocation tree against pflag's Changed bit: PersistentPreRun
+// reads Changed, so a bare run after an in-process --json run must print the
+// plain view, not JSON.
+func TestFreshTreeIgnoresPreviousChangedFlags(t *testing.T) {
 	fakeExecutable(t)
 	runRootBoth(t, "--json", "--min", "--axi")
 

@@ -284,7 +284,3 @@ func getRawValue(secs float64, format string) float64 {
 		return secs
 	}
 }
-
-func init() {
-	RootCmd.AddCommand(newRuntimeCmd())
-}

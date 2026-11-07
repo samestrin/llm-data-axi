@@ -342,7 +342,3 @@ func printProjectComponentsText(w io.Writer, data interface{}) {
 		fmt.Fprintln(w, "---")
 	}
 }
-
-func init() {
-	RootCmd.AddCommand(newProjectComponentsCmd())
-}

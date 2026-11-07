@@ -15,74 +15,61 @@ import (
 
 // --- HIGH (brad, otto): AXI mode leaks into later invocations
 
-// runRoot drives the real command tree and returns what it wrote.
+// runRoot drives a fresh command tree, as Execute does, and returns what it wrote.
 func runRoot(t *testing.T, args ...string) string {
 	t.Helper()
+	root := NewRootCmd()
 	buf := new(bytes.Buffer)
-	RootCmd.SetOut(buf)
-	RootCmd.SetArgs(args)
-	if err := RootCmd.Execute(); err != nil {
+	root.SetOut(buf)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
 		t.Fatalf("%v: %v", args, err)
 	}
 	return buf.String()
 }
 
-func TestResetOutputModesClearsAXIBetweenInvocations(t *testing.T) {
-	// The fix. Reproduced first, through RootCmd, which owns the persistent
-	// --axi flag:
+func TestSecondInvocationDoesNotInheritAXI(t *testing.T) {
+	// Reproduced first, through the old package-singleton RootCmd:
 	//
 	//   first  (--axi):  "expression: 2+2\nresult: 4\n"
 	//   second (--json): "expression: 3+3\nresult: 6\n"   <- TOON, not JSON
 	//
 	// pflag leaves a bound variable UNTOUCHED when its flag is absent, so the
-	// second invocation inherited the first one's mode. Making the publish
-	// unconditional did not help, because the variable it publishes was already
-	// stale — the reset has to happen before parse.
+	// second invocation inherited the first one's mode. Each invocation now
+	// builds its own tree, and nothing is reset in between.
 	t.Cleanup(func() {
-		ResetOutputModes()
-		RootCmd.SetOut(nil)
+		GlobalAXIOutput, GlobalJSONOutput, GlobalMinOutput = false, false, false
+		output.SetDefaultAXI(false)
 	})
 
-	ResetOutputModes()
 	first := runRoot(t, "math", "2+2", "--axi")
 	if strings.HasPrefix(strings.TrimSpace(first), "{") {
 		t.Fatalf("--axi did not take effect: %q", first)
 	}
 
-	ResetOutputModes()
 	second := runRoot(t, "math", "3+3", "--json")
 	if !strings.HasPrefix(strings.TrimSpace(second), "{") {
-		t.Errorf("--axi leaked past ResetOutputModes:\nfirst  = %q\nsecond = %q", first, second)
+		t.Errorf("--axi leaked into the next invocation:\nfirst  = %q\nsecond = %q", first, second)
 	}
 }
 
-func TestWithoutTheResetTheSingletonRetainsItsMode(t *testing.T) {
-	// KNOWN LIMITATION, pinned as it actually behaves rather than asserted
-	// away. RootCmd is a package-level singleton, so a caller that drives
-	// RootCmd.Execute() directly and skips ResetOutputModes still inherits the
-	// previous invocation's mode.
-	//
-	// Execute() calls the reset, so no shipped binary can reach this, and both
-	// MCP servers exec a fresh binary per tool call. The structural fix is a
-	// RootCmd() constructor like llm-filesystem and llm-semantic use, which is
-	// a refactor of every init() in this package and deliberately out of scope
-	// here.
-	//
-	// If someone makes the singleton stateless, this test fails — and it should
-	// then be tightened to demand the better behaviour, not deleted.
+func TestSecondInvocationWithoutFlagsIsPlain(t *testing.T) {
+	// The case the task names: a run with --axi, then a run with no output flag
+	// at all, must not print TOON. The unconditional publish in PersistentPreRun
+	// is what clears the package default; this pins it together with the fresh
+	// bound variable.
 	t.Cleanup(func() {
-		ResetOutputModes()
-		RootCmd.SetOut(nil)
+		GlobalAXIOutput, GlobalJSONOutput, GlobalMinOutput = false, false, false
+		output.SetDefaultAXI(false)
 	})
 
-	ResetOutputModes()
-	_ = runRoot(t, "math", "2+2", "--axi")
-
-	// No reset here, deliberately.
-	second := runRoot(t, "math", "3+3", "--json")
-	if strings.HasPrefix(strings.TrimSpace(second), "{") {
-		t.Errorf("the singleton no longer retains its mode — good news; "+
-			"tighten this test and drop ResetOutputModes' caveat. got %q", second)
+	axi := runRoot(t, "math", "2+2", "--axi")
+	plain := runRoot(t, "math", "2+2")
+	if plain == axi {
+		t.Errorf("a run without --axi printed the previous run's TOON:\n%q", plain)
+	}
+	if GlobalAXIOutput {
+		t.Error("GlobalAXIOutput is still set after a run without --axi")
 	}
 }
 

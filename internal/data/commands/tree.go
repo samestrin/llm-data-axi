@@ -308,7 +308,3 @@ func printTreeText(w io.Writer, rootPath string, entries []*TreeEntry, prefix st
 		}
 	}
 }
-
-func init() {
-	RootCmd.AddCommand(newTreeCmd())
-}

@@ -438,10 +438,10 @@ func TestSetupStructuredOutput(t *testing.T) {
 // Defends registration: setup is reachable from the root command (the plan
 // keeps registration in setup.go so root.go is not edited).
 func TestSetupIsRegistered(t *testing.T) {
-	for _, c := range RootCmd.Commands() {
+	for _, c := range NewRootCmd().Commands() {
 		if c.Name() == "setup" {
 			return
 		}
 	}
-	t.Error("setup is not registered on RootCmd")
+	t.Error("setup is not registered on the root command")
 }
