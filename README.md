@@ -108,11 +108,10 @@ Set `LLM_DATA_MCP_DEBUG=true` to log each command line and timeout to stderr.
 
 ## Known AXI gaps
 
-The audit in [`docs/axi-audit.md`](docs/axi-audit.md) scored the CLI against the ten AXI principles. These are still **not met**, stated here so no caller learns them the hard way:
+The audit in [`docs/axi-audit.md`](docs/axi-audit.md) scored the CLI against the ten AXI principles. These are still **not met**, stated here so no caller learns them the hard way. The technical-debt record carries one row for each (`grep.go:1` for truncation, `multigrep.go:55` for totals):
 
 - **No truncation.** `grep` emits each matching line whole in every mode, and no command has a `--full` flag. `multigrep` cuts content at 80 characters in plain mode only; `git-context` cuts the diff at 50,000 bytes with no way to page the rest.
 - **No totals on `grep`, and silent zeros elsewhere.** `grep` reports no match count in any mode. `multigrep` carries `total_matches` in `--json`/`--axi` but drops it when it is zero (`omitempty`), and a keyword with no matches drops its `match_count` too. A zero-match `grep` reports no count: plain output is empty, and `--json`/`--axi` carry `pattern` and the `help` list but no `0`.
-- **`yaml push` is not idempotent.** Pushing the same value twice appends it twice, and both runs report success. `yaml init` and `yaml set` are idempotent.
 
 ## Where did `extract-relevant` and `extract-links` go?
 
