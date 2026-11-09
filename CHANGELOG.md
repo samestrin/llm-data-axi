@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-09
+
 ### Changed
 
 - **CI runs the installer harness on macOS too.** A `installer-darwin` job in `install.yml` builds the release directory and runs `tests/install/run.sh` on `macos-latest`, so the Darwin path — where curl sets no quarantine flag and Go links an ad-hoc signature on arm64 — is actually executed on every push instead of never (EST-5260, debt row `install.sh:106`).
