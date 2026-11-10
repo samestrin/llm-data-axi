@@ -53,17 +53,20 @@ type keywordResult struct {
 	T                 *bool       `json:"t,omitempty"`
 }
 
-// MultigrepResult represents the overall multigrep result
+// MultigrepResult represents the overall multigrep result. Every count is a
+// pointer so a set 0 is still printed (AXI principles 4 and 5) while --min,
+// which sets only the short aliases, omits the long names instead of emitting
+// a contradicting 0 beside them.
 type MultigrepResult struct {
-	KeywordsSearched    int                       `json:"keywords_searched"`
-	KeywordsWithMatches int                       `json:"keywords_with_matches"`
-	TotalMatches        int                       `json:"total_matches"`
+	KeywordsSearched    *int                      `json:"keywords_searched,omitempty"`
+	KeywordsWithMatches *int                      `json:"keywords_with_matches,omitempty"`
+	TotalMatches        *int                      `json:"total_matches,omitempty"`
 	KS                  *int                      `json:"ks,omitempty"`
 	KWM                 *int                      `json:"kwm,omitempty"`
 	TM                  *int                      `json:"tm,omitempty"`
 	SearchPath          string                    `json:"search_path,omitempty"`
 	SP                  string                    `json:"sp,omitempty"`
-	FilesSearched       int                       `json:"files_searched"`
+	FilesSearched       *int                      `json:"files_searched,omitempty"`
 	FS                  *int                      `json:"fs,omitempty"`
 	Results             map[string]*keywordResult `json:"results,omitempty"`
 	R                   map[string]*keywordResult `json:"r,omitempty"`
@@ -214,11 +217,11 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		mgResult = MultigrepResult{
-			KeywordsSearched:    keywordsSearchedCount,
-			KeywordsWithMatches: keywordsWithMatches,
-			TotalMatches:        totalMatches,
+			KeywordsSearched:    &keywordsSearchedCount,
+			KeywordsWithMatches: &keywordsWithMatches,
+			TotalMatches:        &totalMatches,
 			SearchPath:          path,
-			FilesSearched:       filesSearched,
+			FilesSearched:       &filesSearched,
 			Results:             results,
 		}
 	}
@@ -261,7 +264,7 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 				}
 			}
 
-			if anyContentTruncated(results) {
+			if contentTruncated(r) {
 				fmt.Fprintln(w, "  (long lines truncated; rerun with --full)")
 			}
 
@@ -442,10 +445,18 @@ func searchKeyword(basePath string, files []string, keyword string, defPatterns 
 // so the output can say so and offer --full (AXI principle 3).
 func anyContentTruncated(results map[string]*keywordResult) bool {
 	for _, r := range results {
-		for _, m := range append(append([]matchInfo{}, r.DefinitionMatches...), r.OtherMatches...) {
-			if m.Truncated {
-				return true
-			}
+		if contentTruncated(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// contentTruncated reports whether one keyword's matches had a line cut.
+func contentTruncated(r *keywordResult) bool {
+	for _, m := range append(append([]matchInfo{}, r.DefinitionMatches...), r.OtherMatches...) {
+		if m.Truncated {
+			return true
 		}
 	}
 	return false

@@ -243,3 +243,62 @@ func TestMultigrepTruncatesContentInEveryMode(t *testing.T) {
 		})
 	}
 }
+
+// TestMultigrepMinimalCountsAgree defends the --min schema: #29 dropped
+// omitempty from the long count fields while --min fills only the short
+// aliases, so `--json --min` (what the MCP server sends) printed `"tm":2`
+// next to `"total_matches":0`. A long field in minimal output must be absent
+// or agree with its alias, never a contradicting 0.
+func TestMultigrepMinimalCountsAgree(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte("alpha\nbeta\n"), 0644)
+
+	cmd := newMultigrepCmd()
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"--path", tmpDir, "--keywords", "alpha,beta", "--json", "--min"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(buf.Bytes(), &doc); err != nil {
+		t.Fatalf("parse JSON: %v\n%s", err, buf.String())
+	}
+	for short, want := range map[string]string{"tm": "2", "ks": "2", "kwm": "2", "fs": "1"} {
+		if got := string(doc[short]); got != want {
+			t.Errorf("%s = %q, want %s:\n%s", short, got, want, buf.String())
+		}
+	}
+	for _, long := range []string{"total_matches", "keywords_searched", "keywords_with_matches", "files_searched"} {
+		if v, ok := doc[long]; ok {
+			t.Errorf("--min emitted long field %s=%s beside its short alias:\n%s", long, v, buf.String())
+		}
+	}
+}
+
+// TestMultigrepTruncationHintPerKeyword defends the plain-mode hint: it
+// tested every keyword's results, so a keyword with 0 matches still printed
+// "(long lines truncated; rerun with --full)" when another keyword was cut.
+func TestMultigrepTruncationHintPerKeyword(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte("needle "+strings.Repeat("y", 300)+"\n"), 0644)
+
+	cmd := newMultigrepCmd()
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"--path", tmpDir, "--keywords", "needle,zzz"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+	needle, zzz, ok := strings.Cut(out, "KEYWORD: zzz")
+	if !ok {
+		t.Fatalf("no zzz section:\n%s", out)
+	}
+	if !strings.Contains(needle, "(long lines truncated; rerun with --full)") {
+		t.Errorf("cut keyword lost its hint:\n%s", out)
+	}
+	if strings.Contains(zzz, "(long lines truncated") {
+		t.Errorf("0-match keyword printed the truncation hint:\n%s", out)
+	}
+}
