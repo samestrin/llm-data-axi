@@ -6,14 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-09
+
 ### Changed
 
-- **CI runs the installer harness on macOS too.** A `installer-darwin` job in `install.yml` builds the release directory and runs `tests/install/run.sh` on `macos-latest`, so the Darwin path — where curl sets no quarantine flag and Go links an ad-hoc signature on arm64 — is actually executed on every push instead of never (EST-5260, debt row `install.sh:106`).
-- **`grep` truncates matching lines with a size hint and a `--full` escape hatch, and reports a match total in every mode.** Lines over 200 bytes are cut in plain, `--json` and `--axi` alike, with `truncated`, `full_length` (the whole line's size) and a `--full` next step; `--full` returns the whole line. `total_matches` is always emitted — including `total: 0` in plain mode, which used to print nothing at all — and counts matching lines, or files with `-l` (EST-5260, debt row `grep.go:1`).
-- **`multigrep` truncates content in every mode and always states its counts, including 0.** The 80-character cut used to apply in plain mode only, so `--json` and `--axi` emitted whole lines; it now applies everywhere, is marked, and `--full` opts out. `total_matches`, `match_count`, `keywords_with_matches`, `keywords_searched` and `files_searched` lost their `omitempty`, so a zero reads as an explicit `0`, not an absent field (EST-5260, debt row `multigrep.go:55`).
-- **`git-context --full` returns the whole diff instead of cutting it at 50,000 bytes.** The cut itself is unchanged and still says so (EST-5260, debt row `grep.go:1`).
-- **README Install shows the pinned-release command with the variable on the `sh` side of the pipe** (`curl -fsSL .../install.sh | LLM_DATA_VERSION=v1.0.0 sh`). Written as `LLM_DATA_VERSION=v1.0.0 curl ... | sh` the variable reaches `curl`, not `sh`, and the pin is silently ignored. Documentation only (EST-5260, debt row `README.md:26`).
-- **The AXI audit's finding 6d is struck and its subcommand counts corrected.** `yaml push` was deleted in epic 5, so the idempotency finding no longer describes this tool; the audit now lists the 4 live `yaml` subcommands instead of the 10 it probed at audit time. Documentation only (EST-5260, debt row `docs/axi-audit.md:26`).
+- **CI runs the installer harness on macOS too.** A `installer-darwin` job in `install.yml` builds the release directory and runs `tests/install/run.sh` on `macos-latest`, so the Darwin path — where curl sets no quarantine flag and Go links an ad-hoc signature on arm64 — is actually executed on every push instead of never.
+- **`grep` truncates matching lines with a size hint and a `--full` escape hatch, and reports a match total in every mode.** Lines over 200 bytes are cut in plain, `--json` and `--axi` alike, with `truncated`, `full_length` (the whole line's size) and a `--full` next step; `--full` returns the whole line. `total_matches` is always emitted — including `total: 0` in plain mode, which used to print nothing at all — and counts matching lines, or files with `-l`.
+- **`multigrep` truncates content in every mode and always states its counts, including 0.** The 80-character cut used to apply in plain mode only, so `--json` and `--axi` emitted whole lines; it now applies everywhere, is marked, and `--full` opts out. `total_matches`, `match_count`, `keywords_with_matches`, `keywords_searched` and `files_searched` lost their `omitempty`, so a zero reads as an explicit `0`, not an absent field.
+- **`git-context --full` returns the whole diff instead of cutting it at 50,000 bytes.** The cut itself is unchanged and still says so.
+- **README Install shows the pinned-release command with the variable on the `sh` side of the pipe** (`curl -fsSL .../install.sh | LLM_DATA_VERSION=v1.0.0 sh`). Written as `LLM_DATA_VERSION=v1.0.0 curl ... | sh` the variable reaches `curl`, not `sh`, and the pin is silently ignored. Documentation only.
+- **The AXI audit's finding 6d is struck and its subcommand counts corrected.** `yaml push` was deleted in epic 5, so the idempotency finding no longer describes this tool; the audit now lists the 4 live `yaml` subcommands instead of the 10 it probed at audit time. Documentation only.
 
 ## [1.0.1] - 2026-11-07
 
