@@ -117,7 +117,7 @@ Set `LLM_DATA_MCP_DEBUG=true` to log each command line and timeout to stderr.
 The audit in [`docs/axi-audit.md`](docs/axi-audit.md) scored the CLI against the ten AXI principles. The two gaps it left open are now closed, so nothing is listed here as unmet. If a new gap appears, state it here and carry a row for it in the technical-debt record rather than letting a caller learn it the hard way.
 
 - **Truncation with a size hint and `--full`** (closed, EST-5260): `grep` cuts matching lines at 200 bytes and says so (`truncated`, `full_length`, a `--full` next step); `multigrep` cuts content at 80 characters in every mode, not plain only; `git-context --full` opts out of the 50,000-byte diff cut.
-- **Totals and explicit zeros** (closed, EST-5260): `grep` reports `total_matches` in every mode, including `total: 0` in plain; `multigrep` always emits `total_matches`, `match_count` and the other counts, including 0, in `--json` and `--axi`.
+- **Totals and explicit zeros** (closed, EST-5260): `grep` reports `total_matches` in every mode, including `total: 0` in plain; `multigrep` always emits `total_matches`, `match_count` and the other counts, including 0, in `--json` and `--axi` (under `--min`, as the short aliases `tm`, `ks`, `kwm` and `fs` only).
 
 ## Where did `extract-relevant` and `extract-links` go?
 
