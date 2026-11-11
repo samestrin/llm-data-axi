@@ -505,6 +505,25 @@ func TestTruncateCutsOnRuneBoundary(t *testing.T) {
 	}
 }
 
+// TestTruncateNoRuneStartBeforeCut defends the back-off loop's stop at 0: a
+// line whose bytes up to the cut are all UTF-8 continuation bytes (Latin-1 or
+// binary content) has no rune start to back off to, and an unbounded loop
+// indexed s[-1] and panicked. Such a line yields just the marker.
+func TestTruncateNoRuneStartBeforeCut(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("truncate panicked on continuation-only bytes: %v", r)
+		}
+	}()
+	got := truncate(strings.Repeat("\x80", 300), 200)
+	if got != "..." {
+		t.Errorf("truncate = %q, want %q", got, "...")
+	}
+	if !utf8.ValidString(got) {
+		t.Errorf("truncate = %q is not valid UTF-8", got)
+	}
+}
+
 // TestGrepPlainModePrintsFullHint defends plain mode's next step: the --full
 // hint went into Help, which printGrepText never printed, so a cut line ended
 // in a bare "..." that read like content with no way to learn about --full.
