@@ -31,6 +31,11 @@ var (
 // this repository exists to prevent. The flag is per-command instead.
 const grepTruncateLimit = 200
 
+// grepFullHint is the next step offered when a matching line was cut. Plain
+// mode prints it too: without it a cut line ends in a bare "..." that reads
+// like content.
+const grepFullHint = "Whole lines: rerun the same grep with --full"
+
 // GrepMatch represents a single grep match. Truncated and FullLength are set
 // only when the line was cut, so the minimal {file,text} schema is unchanged
 // for every line that fits. FullLength is the whole line's byte count: the
@@ -193,7 +198,7 @@ func runGrep(cmd *cobra.Command, args []string) error {
 	}
 	if truncatedLines {
 		// The caller cannot guess the flag exists; the hint is the next step.
-		result.Help = append(result.Help, "Whole lines: rerun the same grep with --full")
+		result.Help = append(result.Help, grepFullHint)
 	}
 	if grepFilesOnly {
 		result.TotalMatches = len(result.Files)
@@ -234,11 +239,16 @@ func printGrepText(w io.Writer, data interface{}) {
 		return
 	}
 
+	truncated := false
 	for _, m := range r.Matches {
 		if grepLineNumbers && m.Line > 0 {
 			fmt.Fprintf(w, "%s:%d:%s\n", m.File, m.Line, m.Text)
 		} else {
 			fmt.Fprintf(w, "%s:%s\n", m.File, m.Text)
 		}
+		truncated = truncated || m.Truncated
+	}
+	if truncated {
+		fmt.Fprintln(w, grepFullHint)
 	}
 }

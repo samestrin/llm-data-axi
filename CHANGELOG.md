@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **`multigrep --json --min` no longer prints a zeroed long count beside its short alias.** Since 1.0.2's explicit-zero change, minimal output carried `"tm":2` next to `"total_matches":0` (and the same for `ks`, `kwm`, `fs`), and the MCP server sends `--json --min`. Minimal output now carries only the short aliases; full output still states every count, including 0.
 - **`multigrep`'s plain-mode `(long lines truncated; rerun with --full)` hint shows only under a keyword whose own lines were cut.** It used to print under every keyword, including ones with 0 matches, whenever any keyword had a cut line.
+- **`grep` and `multigrep` no longer split a multi-byte character at the truncation cut.** The 200-byte (`grep`) and 80-byte (`multigrep`) cuts sliced at a raw byte index, so a line whose cut fell inside a character like `é` emitted half of it: `--json` showed `\ufffd` and the text was not the line's real prefix. The cut now backs off to the previous character boundary and still ends in `...`; `full_length` is unchanged.
+- **Plain `grep` prints the `--full` hint when a line was cut.** The hint was only in `--json` and `--axi`, so a plain cut line ended in a bare `...` that read like content. It now prints `Whole lines: rerun the same grep with --full` after the matches, and only when a line was cut.
 
 ## [1.0.2] - 2026-11-09
 
