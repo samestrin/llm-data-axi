@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/samestrin/llm-data-axi/internal/data/utils"
 	"github.com/samestrin/llm-data-axi/pkg/output"
@@ -462,9 +463,16 @@ func contentTruncated(r *keywordResult) bool {
 	return false
 }
 
+// truncate cuts s to at most maxLen bytes and marks the cut with "...". The
+// cut backs off to a rune start, so a multi-byte rune straddling maxLen is
+// dropped whole rather than split into invalid UTF-8.
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen] + "..."
+	cut := maxLen
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "..."
 }

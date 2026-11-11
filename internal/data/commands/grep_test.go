@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestGrepCommand(t *testing.T) {
@@ -429,4 +430,128 @@ func truncForMsg(s string) string {
 		return s[:300] + "..."
 	}
 	return s
+}
+
+// TestGrepTruncationKeepsUTF8Valid defends the 200-byte cut against splitting
+// a multi-byte rune: truncate sliced at a raw byte index, so a line whose
+// 200th byte fell inside "é" emitted half a rune, which --json turned into
+// U+FFFD and --axi wrote out as invalid UTF-8.
+func TestGrepTruncationKeepsUTF8Valid(t *testing.T) {
+	dir := t.TempDir()
+	// 199 ASCII bytes, then 2-byte runes: the first "é" spans bytes 199-200.
+	longLine := "needle" + strings.Repeat("x", 193) + strings.Repeat("é", 50)
+	file := filepath.Join(dir, "utf8.txt")
+	if err := os.WriteFile(file, []byte(longLine+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, code := runGrepCLI(t, "grep", "needle", file, "--json")
+	if code != 0 {
+		t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+	}
+	var res struct {
+		Matches []struct {
+			Text       string `json:"text"`
+			FullLength int    `json:"full_length"`
+		} `json:"matches"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &res); err != nil {
+		t.Fatalf("parse: %v\n%s", err, stdout)
+	}
+	if len(res.Matches) != 1 {
+		t.Fatalf("expected one match:\n%s", stdout)
+	}
+	text := res.Matches[0].Text
+	if !utf8.ValidString(text) || strings.ContainsRune(text, utf8.RuneError) {
+		t.Errorf("cut split a rune: %q", text)
+	}
+	if !strings.HasSuffix(text, "...") {
+		t.Errorf("cut line lost its ... marker: %q", text)
+	}
+	if res.Matches[0].FullLength != len(longLine) {
+		t.Errorf("full_length = %d, want %d", res.Matches[0].FullLength, len(longLine))
+	}
+
+	stdout, _, code = runGrepCLI(t, "grep", "needle", file, "--axi")
+	if code != 0 {
+		t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+	}
+	if !utf8.ValidString(stdout) {
+		t.Errorf("--axi emitted invalid UTF-8:\n%q", stdout)
+	}
+}
+
+// TestTruncateCutsOnRuneBoundary defends truncate itself: the cut must land
+// on a rune start at or below maxLen, never inside a multi-byte rune.
+func TestTruncateCutsOnRuneBoundary(t *testing.T) {
+	for _, tt := range []struct {
+		in   string
+		max  int
+		want string
+	}{
+		{"abcé", 4, "abc..."},     // "é" is bytes 3-4: the cut at 4 splits it
+		{"abcéd", 5, "abcé..."},   // the cut falls after "é"
+		{"日本語", 4, "日..."},        // 3-byte runes: back off to byte 3
+		{"short", 10, "short"},    // under the limit: untouched
+		{"exactly", 7, "exactly"}, // at the limit: untouched
+	} {
+		got := truncate(tt.in, tt.max)
+		if got != tt.want {
+			t.Errorf("truncate(%q, %d) = %q, want %q", tt.in, tt.max, got, tt.want)
+		}
+		if !utf8.ValidString(got) {
+			t.Errorf("truncate(%q, %d) = %q is not valid UTF-8", tt.in, tt.max, got)
+		}
+	}
+}
+
+// TestTruncateNoRuneStartBeforeCut defends the back-off loop's stop at 0: a
+// line whose bytes up to the cut are all UTF-8 continuation bytes (Latin-1 or
+// binary content) has no rune start to back off to, and an unbounded loop
+// indexed s[-1] and panicked. Such a line yields just the marker.
+func TestTruncateNoRuneStartBeforeCut(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("truncate panicked on continuation-only bytes: %v", r)
+		}
+	}()
+	got := truncate(strings.Repeat("\x80", 300), 200)
+	if got != "..." {
+		t.Errorf("truncate = %q, want %q", got, "...")
+	}
+	if !utf8.ValidString(got) {
+		t.Errorf("truncate = %q is not valid UTF-8", got)
+	}
+}
+
+// TestGrepPlainModePrintsFullHint defends plain mode's next step: the --full
+// hint went into Help, which printGrepText never printed, so a cut line ended
+// in a bare "..." that read like content with no way to learn about --full.
+// The hint must appear when a line was cut and not when none was.
+func TestGrepPlainModePrintsFullHint(t *testing.T) {
+	dir := t.TempDir()
+	long := filepath.Join(dir, "long.txt")
+	if err := os.WriteFile(long, []byte("needle"+strings.Repeat("x", 400)+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	short := filepath.Join(dir, "short.txt")
+	if err := os.WriteFile(short, []byte("needle here\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, code := runGrepCLI(t, "grep", "needle", long)
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if !strings.Contains(stdout, "--full") {
+		t.Errorf("a cut plain line gave no --full hint:\n%s", truncForMsg(stdout))
+	}
+
+	stdout, _, code = runGrepCLI(t, "grep", "needle", short)
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if strings.Contains(stdout, "--full") {
+		t.Errorf("printed the --full hint with nothing cut:\n%s", stdout)
+	}
 }

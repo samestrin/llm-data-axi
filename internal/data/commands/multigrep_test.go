@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestMultigrepCommand(t *testing.T) {
@@ -300,5 +301,43 @@ func TestMultigrepTruncationHintPerKeyword(t *testing.T) {
 	}
 	if strings.Contains(zzz, "(long lines truncated") {
 		t.Errorf("0-match keyword printed the truncation hint:\n%s", out)
+	}
+}
+
+// TestMultigrepTruncationKeepsUTF8Valid defends the 80-byte content cut
+// against splitting a multi-byte rune, which --json turned into U+FFFD.
+func TestMultigrepTruncationKeepsUTF8Valid(t *testing.T) {
+	tmpDir := t.TempDir()
+	// 79 ASCII bytes, then 2-byte runes: the first "é" spans bytes 79-80.
+	line := "needle " + strings.Repeat("y", 72) + strings.Repeat("é", 50)
+	os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte(line+"\n"), 0644)
+
+	cmd := newMultigrepCmd()
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"--path", tmpDir, "--keywords", "needle", "--json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var doc struct {
+		Results map[string]struct {
+			OtherMatches []struct {
+				Content string `json:"content"`
+			} `json:"other_matches"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &doc); err != nil {
+		t.Fatalf("parse JSON: %v\n%s", err, buf.String())
+	}
+	r := doc.Results["needle"]
+	if len(r.OtherMatches) != 1 {
+		t.Fatalf("expected one match:\n%s", buf.String())
+	}
+	content := r.OtherMatches[0].Content
+	if !utf8.ValidString(content) || strings.ContainsRune(content, utf8.RuneError) {
+		t.Errorf("cut split a rune: %q", content)
+	}
+	if !strings.HasSuffix(content, "...") {
+		t.Errorf("cut content lost its ... marker: %q", content)
 	}
 }
