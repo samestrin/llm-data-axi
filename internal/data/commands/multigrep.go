@@ -30,10 +30,11 @@ var (
 )
 
 type matchInfo struct {
-	File      string `json:"file"`
-	Line      int    `json:"line"`
-	Content   string `json:"content"`
-	Truncated bool   `json:"truncated,omitempty"`
+	File       string `json:"file"`
+	Line       int    `json:"line"`
+	Content    string `json:"content"`
+	Truncated  bool   `json:"truncated,omitempty"`
+	FullLength int    `json:"full_length,omitempty"`
 }
 
 // The count fields below carry no omitempty on purpose (AXI principles 4
@@ -403,18 +404,20 @@ func searchKeyword(basePath string, files []string, keyword string, defPatterns 
 					}
 				}
 
+				trimmed := strings.TrimSpace(line)
 				info := matchInfo{
 					File:    relPath,
 					Line:    lineNum + 1,
-					Content: strings.TrimSpace(line),
+					Content: trimmed,
 				}
 				// Cut at collection, not at print time: the structured modes
 				// marshal this struct directly, so a whole line stored here was
 				// a whole line emitted in --json and --axi while plain mode cut
 				// it at 80 -- two different contracts for one flag.
-				if trimmed := strings.TrimSpace(line); !multigrepFull && len(trimmed) > 80 {
+				if !multigrepFull && len(trimmed) > 80 {
 					info.Content = truncate(trimmed, 80)
 					info.Truncated = true
+					info.FullLength = len(trimmed)
 				}
 
 				if isDefinition {
@@ -453,9 +456,20 @@ func anyContentTruncated(results map[string]*keywordResult) bool {
 	return false
 }
 
-// contentTruncated reports whether one keyword's matches had a line cut.
+// contentTruncated reports whether one keyword's displayed matches had a line
+// cut. In -d/--definitions mode the plain printer hides OtherMatches, so they
+// must not raise the hint: a cut usage the caller cannot see is not a cut the
+// caller can act on with --full.
 func contentTruncated(r *keywordResult) bool {
-	for _, m := range append(append([]matchInfo{}, r.DefinitionMatches...), r.OtherMatches...) {
+	for _, m := range r.DefinitionMatches {
+		if m.Truncated {
+			return true
+		}
+	}
+	if multigrepDefinitions {
+		return false
+	}
+	for _, m := range r.OtherMatches {
 		if m.Truncated {
 			return true
 		}
@@ -470,9 +484,17 @@ func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
+	return cutAtRuneStart(s, maxLen) + "..."
+}
+
+// cutAtRuneStart returns the longest prefix of s that is at most maxLen bytes
+// and ends on a rune boundary. It is the shared cut behind truncate() and the
+// git-context diff cut, so neither can split a multi-byte rune. Callers guard
+// len(s) > maxLen before calling.
+func cutAtRuneStart(s string, maxLen int) string {
 	cut := maxLen
 	for cut > 0 && !utf8.RuneStart(s[cut]) {
 		cut--
 	}
-	return s[:cut] + "..."
+	return s[:cut]
 }

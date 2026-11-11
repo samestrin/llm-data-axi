@@ -171,9 +171,11 @@ func runGitContext(cmd *cobra.Command, args []string) error {
 		ctx.Diff = diff + stagedDiff
 
 		// Truncate if too large, unless --full opted out (AXI principle 3:
-		// a cut must be an explicit, escapable one).
+		// a cut must be an explicit, escapable one). The cut backs off to a
+		// rune boundary so a multi-byte character straddling byte 50,000 is
+		// dropped whole, not split into invalid UTF-8.
 		if !gitContextFull && len(ctx.Diff) > 50000 {
-			ctx.Diff = ctx.Diff[:50000] + "\n... (diff truncated, too large)"
+			ctx.Diff = cutAtRuneStart(ctx.Diff, 50000) + "\n... (diff truncated, too large)"
 		}
 	}
 
