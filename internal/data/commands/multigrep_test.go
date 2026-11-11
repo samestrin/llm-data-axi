@@ -341,3 +341,104 @@ func TestMultigrepTruncationKeepsUTF8Valid(t *testing.T) {
 		t.Errorf("cut content lost its ... marker: %q", content)
 	}
 }
+
+// TestMultigrepDefinitionsHintOnlyForDisplayedLines defends the -d hint: in
+// definitions mode the plain printer shows only definitions, but the hint
+// counted OtherMatches too, so a short definition plus a long usage printed
+// "(long lines truncated; rerun with --full)" even though no displayed line
+// was cut and --full -d changed nothing.
+func TestMultigrepDefinitionsHintOnlyForDisplayedLines(t *testing.T) {
+	run := func(dir string, extra ...string) string {
+		t.Helper()
+		cmd := newMultigrepCmd()
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetArgs(append([]string{"--path", dir, "--keywords", "needle"}, extra...))
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return buf.String()
+	}
+
+	// Short definition, long usage: -d displays only the definition, which is
+	// not cut, so no hint may print and --full must be a no-op.
+	shortDef := t.TempDir()
+	os.WriteFile(filepath.Join(shortDef, "test.go"),
+		[]byte("func needle() {}\nneedle "+strings.Repeat("y", 300)+"\n"), 0644)
+
+	defs := run(shortDef, "-d")
+	if strings.Contains(defs, "(long lines truncated") {
+		t.Errorf("-d printed the truncation hint for a hidden, cut usage:\n%s", defs)
+	}
+	if full := run(shortDef, "-d", "--full"); full != defs {
+		t.Errorf("--full -d changed the output although no displayed line was cut:\n%s\n---\n%s", defs, full)
+	}
+	// Without -d the long usage IS displayed and cut, so the hint must stay.
+	if all := run(shortDef); !strings.Contains(all, "(long lines truncated; rerun with --full)") {
+		t.Errorf("a displayed, cut usage lost its hint:\n%s", all)
+	}
+
+	// A cut definition is still displayed under -d, so the hint must stay.
+	longDef := t.TempDir()
+	os.WriteFile(filepath.Join(longDef, "test.go"),
+		[]byte("func needle() { "+strings.Repeat("y", 300)+" }\n"), 0644)
+	if out := run(longDef, "-d"); !strings.Contains(out, "(long lines truncated; rerun with --full)") {
+		t.Errorf("-d dropped the hint for a displayed, cut definition:\n%s", out)
+	}
+}
+
+// TestMultigrepCutLinesCarryFullLength defends the size hint on a cut line:
+// matchInfo gained only `truncated`, so a caller could not tell how much of
+// the line was missing (grep carries full_length). A cut line must state the
+// whole trimmed line's byte count; --full and uncut lines carry neither field.
+func TestMultigrepCutLinesCarryFullLength(t *testing.T) {
+	tmpDir := t.TempDir()
+	longLine := "needle " + strings.Repeat("y", 300) // 307 bytes
+	os.WriteFile(filepath.Join(tmpDir, "test.go"),
+		[]byte(longLine+"\nneedle short\n"), 0644)
+
+	run := func(extra ...string) []map[string]any {
+		t.Helper()
+		cmd := newMultigrepCmd()
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetArgs(append([]string{"--path", tmpDir, "--keywords", "needle", "--json"}, extra...))
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var doc struct {
+			Results map[string]struct {
+				OtherMatches []map[string]any `json:"other_matches"`
+			} `json:"results"`
+		}
+		if err := json.Unmarshal(buf.Bytes(), &doc); err != nil {
+			t.Fatalf("parse JSON: %v\n%s", err, buf.String())
+		}
+		return doc.Results["needle"].OtherMatches
+	}
+
+	matches := run()
+	if len(matches) != 2 {
+		t.Fatalf("expected two matches, got %d", len(matches))
+	}
+	cut, short := matches[0], matches[1]
+	if cut["truncated"] != true {
+		t.Errorf("cut line did not say truncated: %v", cut)
+	}
+	if got, ok := cut["full_length"].(float64); !ok || int(got) != len(longLine) {
+		t.Errorf("full_length = %v, want %d", cut["full_length"], len(longLine))
+	}
+	for _, field := range []string{"truncated", "full_length"} {
+		if _, ok := short[field]; ok {
+			t.Errorf("uncut line carries %s: %v", field, short)
+		}
+	}
+
+	for _, m := range run("--full") {
+		for _, field := range []string{"truncated", "full_length"} {
+			if _, ok := m[field]; ok {
+				t.Errorf("--full line carries %s: %v", field, m)
+			}
+		}
+	}
+}
