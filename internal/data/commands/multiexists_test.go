@@ -36,7 +36,7 @@ func TestMultiexistsCommand(t *testing.T) {
 		},
 		{
 			name:     "verbose mode shows types",
-			args:     []string{existingFile, existingDir, "-v", "--no-fail"},
+			args:     []string{existingFile, existingDir, "--verbose", "--no-fail"},
 			expected: []string{"file", "directory"},
 		},
 		{

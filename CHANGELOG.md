@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **`-v`, `-V` and `--version` print the bare version and exit 0.** A release build prints `1.1.0`, not `llm-data version v1.1.0`. Breaking: `-v` used to be a root `--verbose` that no command read, and `-V` was an unknown flag.
+- **The root `--verbose` and `--format` flags are gone.** Nothing read either, so `grep x . --verbose` ran as if the flag were absent; it is now an unknown-flag usage error. `multiexists --verbose` and `runtime --format` keep their own flags.
+- **`multiexists` drops the `-v` shorthand for `--verbose`.** `multiexists -v` is now rejected as an unknown shorthand flag; use `--verbose`.
+
 ### Fixed
 
 - **`llm-data-mcp` finds `llm-data` beside its own executable when it is not on `PATH`.** The lookup now tries `LLM_DATA_BINARY`, then `PATH`, then the directory of the running `llm-data-mcp`, then `/usr/local/bin/llm-data`, so the installer's default `~/.local/bin` works without a `PATH` entry. A sibling that is a directory or lacks the exec bit is not reported as found. When the binary is nowhere, the startup error names the path tried, the sibling location and `LLM_DATA_BINARY` instead of a bare "not found".
