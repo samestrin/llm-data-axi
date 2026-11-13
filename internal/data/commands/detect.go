@@ -117,27 +117,29 @@ func detectInDir(path string) DetectResult {
 		"pytest_available": false,
 	}
 
-	// Detect by marker files
-	markers := map[string]struct{ stack, lang string }{
-		"package.json":     {"node", "javascript"},
-		"tsconfig.json":    {"node", "typescript"},
-		"pyproject.toml":   {"python", "python"},
-		"setup.py":         {"python", "python"},
-		"requirements.txt": {"python", "python"},
-		"Pipfile":          {"python", "python"},
-		"go.mod":           {"go", "go"},
-		"go.sum":           {"go", "go"},
-		"Cargo.toml":       {"rust", "rust"},
-		"pom.xml":          {"java", "java"},
-		"build.gradle":     {"java", "java"},
-		"Gemfile":          {"ruby", "ruby"},
-		"composer.json":    {"php", "php"},
+	// Detect by marker files. Each table is a slice, not a map, so the first
+	// listed marker wins when a directory has several: ranging a map would let
+	// the answer change from one run to the next.
+	markers := []struct{ marker, stack, lang string }{
+		{"package.json", "node", "javascript"},
+		{"tsconfig.json", "node", "typescript"},
+		{"pyproject.toml", "python", "python"},
+		{"setup.py", "python", "python"},
+		{"requirements.txt", "python", "python"},
+		{"Pipfile", "python", "python"},
+		{"go.mod", "go", "go"},
+		{"go.sum", "go", "go"},
+		{"Cargo.toml", "rust", "rust"},
+		{"pom.xml", "java", "java"},
+		{"build.gradle", "java", "java"},
+		{"Gemfile", "ruby", "ruby"},
+		{"composer.json", "php", "php"},
 	}
 
-	for marker, info := range markers {
-		if fileExists(filepath.Join(path, marker)) {
-			result["stack"] = info.stack
-			result["language"] = info.lang
+	for _, m := range markers {
+		if fileExists(filepath.Join(path, m.marker)) {
+			result["stack"] = m.stack
+			result["language"] = m.lang
 			break
 		}
 	}
@@ -148,41 +150,41 @@ func detectInDir(path string) DetectResult {
 	}
 
 	// Detect package manager
-	pmMarkers := map[string]string{
-		"yarn.lock":         "yarn",
-		"pnpm-lock.yaml":    "pnpm",
-		"package-lock.json": "npm",
-		"poetry.lock":       "poetry",
-		"Pipfile.lock":      "pipenv",
-		"requirements.txt":  "pip",
-		"go.sum":            "go",
-		"Cargo.lock":        "cargo",
-		"Gemfile.lock":      "bundler",
-		"composer.lock":     "composer",
+	pmMarkers := []struct{ marker, pm string }{
+		{"yarn.lock", "yarn"},
+		{"pnpm-lock.yaml", "pnpm"},
+		{"package-lock.json", "npm"},
+		{"poetry.lock", "poetry"},
+		{"Pipfile.lock", "pipenv"},
+		{"requirements.txt", "pip"},
+		{"go.sum", "go"},
+		{"Cargo.lock", "cargo"},
+		{"Gemfile.lock", "bundler"},
+		{"composer.lock", "composer"},
 	}
 
-	for marker, pm := range pmMarkers {
-		if fileExists(filepath.Join(path, marker)) {
-			result["package_manager"] = pm
+	for _, m := range pmMarkers {
+		if fileExists(filepath.Join(path, m.marker)) {
+			result["package_manager"] = m.pm
 			break
 		}
 	}
 
 	// Detect framework
-	frameworkMarkers := map[string]string{
-		"next.config.js":   "nextjs",
-		"next.config.mjs":  "nextjs",
-		"next.config.ts":   "nextjs",
-		"remix.config.js":  "remix",
-		"nuxt.config.js":   "nuxt",
-		"nuxt.config.ts":   "nuxt",
-		"angular.json":     "angular",
-		"svelte.config.js": "sveltekit",
+	frameworkMarkers := []struct{ marker, framework string }{
+		{"next.config.js", "nextjs"},
+		{"next.config.mjs", "nextjs"},
+		{"next.config.ts", "nextjs"},
+		{"remix.config.js", "remix"},
+		{"nuxt.config.js", "nuxt"},
+		{"nuxt.config.ts", "nuxt"},
+		{"angular.json", "angular"},
+		{"svelte.config.js", "sveltekit"},
 	}
 
-	for marker, framework := range frameworkMarkers {
-		if fileExists(filepath.Join(path, marker)) {
-			result["framework"] = framework
+	for _, m := range frameworkMarkers {
+		if fileExists(filepath.Join(path, m.marker)) {
+			result["framework"] = m.framework
 			break
 		}
 	}
