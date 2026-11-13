@@ -634,3 +634,74 @@ func TestGrepLinesReportsReadErrors(t *testing.T) {
 		t.Errorf("read %d lines before the error, want 1", n)
 	}
 }
+
+// TestGrepSkipsDirectorySymlinksInTree defends grep over an ordinary tree that
+// holds a symlink to a directory (pnpm, vendor and venv layouts do).
+// filepath.Walk reports such a link as a file, so grep opened it and the first
+// read returned EISDIR; once read errors were reported instead of dropped,
+// that failed the whole search and hid the real matches. The link is not a
+// file to search, so it is skipped and the run returns its matches.
+func TestGrepSkipsDirectorySymlinksInTree(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "target"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pkg", "a.txt"), []byte("needle here\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("target", filepath.Join(dir, "link")); err != nil {
+		t.Skipf("cannot create a symlink here: %v", err)
+	}
+
+	for _, mode := range [][]string{{"--json"}, nil} {
+		stdout, stderr, code := runGrepCLI(t, append([]string{"grep", "needle", dir}, mode...)...)
+		if code != 0 {
+			t.Fatalf("%v: exit %d; stdout:\n%s\nstderr:\n%s", mode, code, stdout, stderr)
+		}
+		if !strings.Contains(stdout, "needle here") {
+			t.Errorf("%v: the match beside the directory symlink was lost:\n%s", mode, stdout)
+		}
+	}
+}
+
+// TestGrepReadErrorFailsTheRun defends the read-error path in runGrep: a file
+// whose read fails part-way must fail the run and name the file once, not end
+// the scan quietly as if the file had no more matches.
+func TestGrepReadErrorFailsTheRun(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "a.txt")
+	if err := os.WriteFile(file, []byte("needle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	orig := grepOpen
+	t.Cleanup(func() { grepOpen = orig })
+
+	// A bare error gets the file named; an *os.PathError, which is what
+	// os.File.Read returns, already names it and must not be wrapped twice.
+	for _, readErr := range []error{
+		errors.New("boom"),
+		&os.PathError{Op: "read", Path: file, Err: errors.New("boom")},
+	} {
+		grepOpen = func(string) (io.ReadCloser, error) {
+			return io.NopCloser(io.MultiReader(strings.NewReader("needle\n"), iotest.ErrReader(readErr))), nil
+		}
+
+		cmd := newGrepCmd()
+		out := new(bytes.Buffer)
+		cmd.SetOut(out)
+		cmd.SetErr(new(bytes.Buffer))
+		cmd.SetArgs([]string{"needle", file})
+		err := cmd.Execute()
+		if err == nil {
+			t.Fatalf("a failed read reported success:\n%s", out.String())
+		}
+		if msg := err.Error(); strings.Count(msg, file) != 1 || !strings.Contains(msg, "boom") {
+			t.Errorf("err = %q, want it to name %s once and carry the cause", msg, file)
+		}
+		if strings.Contains(out.String(), "total") {
+			t.Errorf("printed a result for a failed search:\n%s", out.String())
+		}
+	}
+}
