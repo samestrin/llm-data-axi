@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -432,6 +433,63 @@ func TestSetupStructuredOutput(t *testing.T) {
 	}
 	if !strings.Contains(out, "unchanged") || strings.Contains(out, "wrote") {
 		t.Errorf("--axi second run does not report unchanged:\n%s", out)
+	}
+}
+
+// committedSkillPath locates skills/llm-data/SKILL.md from this test file,
+// the way tests/mcp_integration finds the module root, so the check does not
+// depend on the working directory the test binary was launched from.
+func committedSkillPath(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot locate this test file")
+	}
+	root := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(thisFile))))
+	return filepath.Join(root, "skills", "llm-data", "SKILL.md")
+}
+
+// Defends the committed installable skill (skills/llm-data/SKILL.md, what
+// `npx skills add samestrin/llm-data-axi --skill llm-data` installs) against
+// drifting from the text setup writes: one byte changed on either side must
+// fail here, so an installed skill and a setup-written skill can never teach
+// an agent different things. The install path itself needs the network and
+// is out of scope (epic 09 advisory); byte agreement is what this repo proves.
+func TestCommittedSkillMatchesSetup(t *testing.T) {
+	project, _ := setupEnv(t)
+	if _, err := runSetupCmd(t, "--path", project); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	written := readFile(t, skillPath(project))
+	committed := readFile(t, committedSkillPath(t))
+
+	if !bytes.Equal(committed, written) {
+		t.Errorf("skills/llm-data/SKILL.md differs from the skill setup writes\ncommitted (%d bytes):\n%s\nsetup wrote (%d bytes):\n%s",
+			len(committed), committed, len(written), written)
+	}
+}
+
+// Defends the front matter that makes the committed file an installable
+// skill: the skills CLI reads name and description from it, and a file
+// without them installs as nothing.
+func TestCommittedSkillFrontMatter(t *testing.T) {
+	s := string(readFile(t, committedSkillPath(t)))
+	lines := strings.Split(s, "\n")
+	if len(lines) < 4 || lines[0] != "---" || lines[1] != "name: llm-data" {
+		t.Fatalf("committed SKILL.md must open with --- and name: llm-data front matter:\n%s", s)
+	}
+	if !strings.HasPrefix(lines[2], "description: ") || strings.TrimSpace(strings.TrimPrefix(lines[2], "description: ")) == "" {
+		t.Errorf("committed SKILL.md front matter has no description:\n%s", s)
+	}
+	closed := false
+	for _, l := range lines[3:] {
+		if l == "---" {
+			closed = true
+			break
+		}
+	}
+	if !closed {
+		t.Errorf("committed SKILL.md front matter is never closed with ---:\n%s", s)
 	}
 }
 

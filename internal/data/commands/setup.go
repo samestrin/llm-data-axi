@@ -18,6 +18,11 @@ import (
 // added to the session's context, so it is the bare run: the home view.
 const setupHookCommand = "llm-data"
 
+// setupSkillContent is the Agent Skill setup writes. It has a committed twin
+// at skills/llm-data/SKILL.md, installable with
+// `npx skills add samestrin/llm-data-axi --skill llm-data`;
+// TestCommittedSkillMatchesSetup fails if the two differ by a byte, so edit
+// both together.
 const setupSkillContent = `---
 name: llm-data
 description: Deterministic file, search and project-analysis commands. Use to search code (grep, multigrep), count or list files (count, tree, catfiles), read and edit YAML, inspect git changes, or detect a project's stack, when you need exact results instead of guesses.

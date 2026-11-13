@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - **A bare `llm-data` shows the repository it runs in.** Next to `bin:` and `description:` the home view now prints `repo_root:`, `project_type:` and `git_changes:`, from the same logic as `repo-root`, `detect` and `git-changes`. Outside a repository it says `repo: no repository`, and only when git itself reports that; git missing, a git error or no answer within 2 seconds prints `repo: git unavailable: <reason>` instead. The run exits 0 in every case. `--json` and `--axi` carry the same fields plus `help[]`.
+- **An installable Agent Skill is committed at `skills/llm-data/SKILL.md`.** `npx skills add samestrin/llm-data-axi --skill llm-data` installs the same skill `llm-data setup` writes into a project's `.claude/skills/`. A test runs `setup` and fails if the committed file and the text it writes differ by a byte, so the two can never drift apart.
 
 ### Changed
 
