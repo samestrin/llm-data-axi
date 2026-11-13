@@ -35,6 +35,10 @@ type matchInfo struct {
 	Content    string `json:"content"`
 	Truncated  bool   `json:"truncated,omitempty"`
 	FullLength int    `json:"full_length,omitempty"`
+
+	// whole is the trimmed line before any cut. Unexported, so it is never
+	// encoded: it exists for --output-dir, whose files carry whole lines.
+	whole string
 }
 
 // The count fields below carry no omitempty on purpose (AXI principles 4
@@ -98,7 +102,7 @@ Example:
 	cmd.Flags().BoolVar(&multigrepMinimal, "min", false, "Output in minimal/token-optimized format")
 	cmd.Flags().BoolVarP(&multigrepDefinitions, "definitions", "d", false, "Show only definition matches")
 	cmd.Flags().StringVarP(&multigrepOutputDir, "output-dir", "o", "", "Write results to directory (one file per keyword)")
-	cmd.Flags().BoolVar(&multigrepFull, "full", false, "Emit whole matching lines instead of truncating them at 80 characters")
+	cmd.Flags().BoolVar(&multigrepFull, "full", false, "Emit whole matching lines instead of truncating them at 80 bytes")
 
 	cmd.MarkFlagRequired("path")
 	cmd.MarkFlagRequired("keywords")
@@ -188,10 +192,10 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 
 			var lines []string
 			for _, m := range r.DefinitionMatches {
-				lines = append(lines, fmt.Sprintf("DEF: %s:%d: %s", m.File, m.Line, m.Content))
+				lines = append(lines, fmt.Sprintf("DEF: %s:%d: %s", m.File, m.Line, m.whole))
 			}
 			for _, m := range r.OtherMatches {
-				lines = append(lines, fmt.Sprintf("USE: %s:%d: %s", m.File, m.Line, m.Content))
+				lines = append(lines, fmt.Sprintf("USE: %s:%d: %s", m.File, m.Line, m.whole))
 			}
 
 			content := strings.Join(lines, "\n")
@@ -266,7 +270,7 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 				}
 			}
 
-			if contentTruncated(r) {
+			if contentTruncated(r, !multigrepDefinitions) {
 				fmt.Fprintln(w, "  (long lines truncated; rerun with --full)")
 			}
 
@@ -409,6 +413,7 @@ func searchKeyword(basePath string, files []string, keyword string, defPatterns 
 					File:    relPath,
 					Line:    lineNum + 1,
 					Content: trimmed,
+					whole:   trimmed,
 				}
 				// Cut at collection, not at print time: the structured modes
 				// marshal this struct directly, so a whole line stored here was
@@ -446,10 +451,12 @@ func searchKeyword(basePath string, files []string, keyword string, defPatterns 
 }
 
 // anyContentTruncated reports whether any match's content line was cut,
-// so the output can say so and offer --full (AXI principle 3).
+// so the output can say so and offer --full (AXI principle 3). It feeds the
+// structured help only, and --json and --axi emit OtherMatches even under -d,
+// so a cut usage counts here whatever -d says.
 func anyContentTruncated(results map[string]*keywordResult) bool {
 	for _, r := range results {
-		if contentTruncated(r) {
+		if contentTruncated(r, true) {
 			return true
 		}
 	}
@@ -457,16 +464,17 @@ func anyContentTruncated(results map[string]*keywordResult) bool {
 }
 
 // contentTruncated reports whether one keyword's displayed matches had a line
-// cut. In -d/--definitions mode the plain printer hides OtherMatches, so they
-// must not raise the hint: a cut usage the caller cannot see is not a cut the
-// caller can act on with --full.
-func contentTruncated(r *keywordResult) bool {
+// cut. withOther says whether OtherMatches are displayed: in -d/--definitions
+// mode the plain printer hides them, so they must not raise its hint there,
+// because a cut usage the caller cannot see is not a cut the caller can act
+// on with --full.
+func contentTruncated(r *keywordResult, withOther bool) bool {
 	for _, m := range r.DefinitionMatches {
 		if m.Truncated {
 			return true
 		}
 	}
-	if multigrepDefinitions {
+	if !withOther {
 		return false
 	}
 	for _, m := range r.OtherMatches {
