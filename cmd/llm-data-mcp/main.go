@@ -5,14 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/samestrin/llm-data-axi/internal/data/mcpserver"
 )
 
+// serverVersion is stamped at build time with -X main.serverVersion. It must
+// stay a var: -X cannot set a const, and silently leaves it at its default.
+var serverVersion = "1.0.0"
+
 const (
 	serverName         = "llm-data-mcp"
-	serverVersion      = "1.0.0"
 	serverInstructions = "llm-data MCP provides generic tools for directory analysis, file searching, YAML querying, git context and project detection. It is a fallback for environments that cannot run the llm-data CLI directly; the CLI is the primary interface."
 )
 
@@ -30,10 +34,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	// release.yml stamps the tag, "v1.1.0"; report the bare version, as
+	// `llm-data --version` does.
+	version := strings.TrimPrefix(serverVersion, "v")
+
 	// Create MCP server using official SDK
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    serverName,
-		Version: serverVersion,
+		Version: version,
 	}, &mcp.ServerOptions{
 		Instructions: serverInstructions,
 	})
@@ -80,7 +88,7 @@ func main() {
 	}
 
 	// Log startup
-	fmt.Fprintf(os.Stderr, "%s v%s started with %d tools\n", serverName, serverVersion, len(tools))
+	fmt.Fprintf(os.Stderr, "%s v%s started with %d tools\n", serverName, version, len(tools))
 
 	// Run server on stdio
 	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {

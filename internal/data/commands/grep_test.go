@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -703,5 +704,172 @@ func TestGrepReadErrorFailsTheRun(t *testing.T) {
 		if strings.Contains(out.String(), "total") {
 			t.Errorf("printed a result for a failed search:\n%s", out.String())
 		}
+	}
+}
+
+// TestGrepLinesCapsLineLength defends against the OOM kill a newline-less file
+// caused: `llm-data grep x /proc/self/pagemap` read one unbounded line until
+// the kernel killed the process. A line over the cap must be an error naming
+// the line, read no further than the cap, and never reach fn.
+func TestGrepLinesCapsLineLength(t *testing.T) {
+	orig := grepMaxLineBytes
+	t.Cleanup(func() { grepMaxLineBytes = orig })
+	grepMaxLineBytes = 100 << 10
+
+	// A line exactly at the cap is still read whole, as is the line after it.
+	atCap := strings.Repeat("x", grepMaxLineBytes)
+	var got []string
+	err := grepLines(strings.NewReader(atCap+"\nnext\n"), func(line string) bool {
+		got = append(got, line)
+		return true
+	})
+	if err != nil {
+		t.Fatalf("a line at the cap failed: %v", err)
+	}
+	if want := []string{atCap, "next"}; !slices.Equal(got, want) {
+		t.Errorf("read %d lines, want the line at the cap and the one after it", len(got))
+	}
+
+	// An endless line stops at the cap instead of growing without bound.
+	endless := &countingReader{r: iotest.OneByteReader(neverNewline{})}
+	calls := 0
+	err = grepLines(io.MultiReader(strings.NewReader("ok\n"), endless), func(string) bool { calls++; return true })
+	if !errors.Is(err, errLineTooLong) {
+		t.Fatalf("err = %v, want errLineTooLong", err)
+	}
+	if !strings.Contains(err.Error(), "line 2") {
+		t.Errorf("err = %q, want it to name line 2", err)
+	}
+	if calls != 1 {
+		t.Errorf("fn called %d times, want 1: the over-long line must not reach it", calls)
+	}
+	if endless.n > 2*grepMaxLineBytes {
+		t.Errorf("read %d bytes of the endless line, want no more than about the %d-byte cap", endless.n, grepMaxLineBytes)
+	}
+}
+
+// neverNewline is a file with no end and no newline, like /proc/self/pagemap.
+type neverNewline struct{}
+
+func (neverNewline) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'x'
+	}
+	return len(p), nil
+}
+
+type countingReader struct {
+	r io.Reader
+	n int
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += n
+	return n, err
+}
+
+// TestGrepOverLongLineFailsNamingTheFile defends the caller's side of the cap:
+// a file with a line over it must fail the run with an error that names the
+// file and the limit, never print a result that reads as "no match".
+func TestGrepOverLongLineFailsNamingTheFile(t *testing.T) {
+	orig := grepMaxLineBytes
+	t.Cleanup(func() { grepMaxLineBytes = orig })
+	grepMaxLineBytes = 1024
+
+	file := filepath.Join(t.TempDir(), "huge.txt")
+	if err := os.WriteFile(file, []byte(strings.Repeat("x", 4096)+"\nneedle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := newGrepCmd()
+	out := new(bytes.Buffer)
+	cmd.SetOut(out)
+	cmd.SetErr(new(bytes.Buffer))
+	cmd.SetArgs([]string{"needle", file})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("an over-long line reported success:\n%s", out.String())
+	}
+	if msg := err.Error(); !strings.Contains(msg, file) || !strings.Contains(msg, "1024") {
+		t.Errorf("err = %q, want it to name %s and the 1024-byte limit", msg, file)
+	}
+	if strings.Contains(out.String(), "total") {
+		t.Errorf("printed a result for a failed search:\n%s", out.String())
+	}
+}
+
+// TestGrepSkipsBinaryFilesAndSaysSo defends two things. A binary file (a NUL
+// byte in its first 8000 bytes, the test git and GNU grep use) is not searched
+// line by line: /proc/self/pagemap is one, and reading it as text is what ran
+// the process out of memory. And the skip is stated in every mode, because a
+// silently skipped file is a "total: 0" that hides a file never searched.
+func TestGrepSkipsBinaryFilesAndSaysSo(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("needle in text\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.bin"), []byte("needle\x00\x01\x02\nneedle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, code := runGrepCLI(t, "grep", "needle", dir, "--json")
+	if code != 0 {
+		t.Fatalf("exit %d; stderr:\n%s", code, stderr)
+	}
+	var res struct {
+		Matches []struct {
+			File string `json:"file"`
+		} `json:"matches"`
+		BinarySkipped []string `json:"binary_skipped"`
+		TotalMatches  int      `json:"total_matches"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &res); err != nil {
+		t.Fatalf("parse: %v\n%s", err, stdout)
+	}
+	if res.TotalMatches != 1 || len(res.Matches) != 1 || filepath.Base(res.Matches[0].File) != "a.txt" {
+		t.Errorf("want the one text match only, got:\n%s", stdout)
+	}
+	if len(res.BinarySkipped) != 1 || filepath.Base(res.BinarySkipped[0]) != "b.bin" {
+		t.Errorf("binary_skipped = %q, want [b.bin]", res.BinarySkipped)
+	}
+
+	stdout, _, code = runGrepCLI(t, "grep", "needle", filepath.Join(dir, "b.bin"))
+	if code != 0 {
+		t.Fatalf("plain mode: exit %d", code)
+	}
+	if !strings.Contains(stdout, "binary skipped: "+filepath.Join(dir, "b.bin")) || !strings.Contains(stdout, "total: 0") {
+		t.Errorf("plain mode must name the skipped binary file beside total: 0:\n%s", stdout)
+	}
+}
+
+// TestGrepPlainModeCapsBinarySkippedLines defends plain output in a tree with
+// many binary files (checked-in images): one line per skipped file would bury
+// the matches. Plain mode names the first few and counts the rest; --json
+// keeps every name.
+func TestGrepPlainModeCapsBinarySkippedLines(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 8 {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("img%d.png", i)), []byte("\x89PNG\x00"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	stdout, _, code := runGrepCLI(t, "grep", "needle", dir)
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if n := strings.Count(stdout, "binary skipped: "+dir); n != grepBinarySkippedShown {
+		t.Errorf("plain mode named %d skipped files, want %d:\n%s", n, grepBinarySkippedShown, stdout)
+	}
+	if !strings.Contains(stdout, fmt.Sprintf("binary skipped: %d more", 8-grepBinarySkippedShown)) {
+		t.Errorf("plain mode must count the files it did not name:\n%s", stdout)
+	}
+
+	stdout, _, _ = runGrepCLI(t, "grep", "needle", dir, "--json")
+	var res struct {
+		BinarySkipped []string `json:"binary_skipped"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &res); err != nil || len(res.BinarySkipped) != 8 {
+		t.Errorf("--json must name all 8 skipped files, got %d (%v)", len(res.BinarySkipped), err)
 	}
 }
