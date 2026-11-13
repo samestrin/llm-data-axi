@@ -46,14 +46,18 @@ func fakeExecutable(t *testing.T) (home string) {
 // Defends AXI principle "content first": a bare `llm-data` used to print the
 // whole cobra help page and exit 0, so an agent spent its first call reading a
 // usage dump instead of learning what the tool is and where it is installed.
+//
+// Run outside any repository, so the view is bin, description and the one
+// line saying there is no repository; home_test.go covers the live fields.
 func TestRootNoArgsShowsHomeView(t *testing.T) {
 	home := fakeExecutable(t)
+	outsideAnyRepo(t)
 
 	out := runRootBoth(t)
 
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("want exactly a bin line and a description line, got %d lines:\n%s", len(lines), out)
+	if len(lines) != 3 {
+		t.Fatalf("want a bin line, a description line and a repo line, got %d lines:\n%s", len(lines), out)
 	}
 	if want := "bin: ~/go/bin/llm-data"; lines[0] != want {
 		t.Errorf("bin line = %q, want %q", lines[0], want)

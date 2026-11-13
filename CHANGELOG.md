@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **A bare `llm-data` shows the repository it runs in.** Next to `bin:` and `description:` the home view now prints `repo_root:`, `project_type:` and `git_changes:`, from the same logic as `repo-root`, `detect` and `git-changes`. Outside a repository it says `repo: no repository`, and only when git itself reports that; git missing, a git error or no answer within 2 seconds prints `repo: git unavailable: <reason>` instead. The run exits 0 in every case. `--json` and `--axi` carry the same fields plus `help[]`.
+
 ### Changed
 
 - **`-v`, `-V` and `--version` print the bare version and exit 0.** A release build prints `1.1.0`, not `llm-data version v1.1.0`. Breaking: `-v` used to be a root `--verbose` that no command read, and `-V` was an unknown flag.
