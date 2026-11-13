@@ -12,6 +12,7 @@ import (
 
 	"github.com/samestrin/llm-data-axi/pkg/output"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // Version is set at build time via ldflags
@@ -86,6 +87,9 @@ output that costs fewer tokens than JSON.`,
 	root.Flags().BoolVarP(&showVersion, "version", "v", false, "Print the version and exit (also -V)")
 	root.Flags().BoolVarP(&showVersion, "version-upper", "V", false, "Print the version and exit")
 	_ = root.Flags().MarkHidden("version-upper")
+
+	// Inherited by every subcommand: cobra looks up the parent chain for one.
+	root.SetFlagErrorFunc(flagError)
 
 	// Global persistent flags (available to all subcommands)
 	root.PersistentFlags().Bool("no-gitignore", false, "Disable .gitignore filtering")
@@ -235,10 +239,71 @@ func tildeHome(path, home string) string {
 
 // Execute runs the root command
 func Execute() {
-	if err := NewRootCmd().Execute(); err != nil {
-		f := output.New(GlobalJSONOutput, GlobalMinOutput, os.Stdout)
-		os.Exit(f.PrintError(err))
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+// run executes one invocation and returns its exit status.
+func run(args []string, stdout, stderr io.Writer) int {
+	root := NewRootCmd()
+	root.SetArgs(args)
+	root.SetOut(stdout)
+	root.SetErr(stderr)
+	cmd, err := root.ExecuteC()
+	if err == nil {
+		return 0
 	}
+	axi, jsonOut, minOut := outputMode(cmd, args)
+	output.SetDefaultAXI(axi)
+	w := stderr
+	if axi || jsonOut {
+		w = stdout
+	}
+	return output.New(jsonOut, minOut, w).PrintError(err)
+}
+
+// outputMode reads --axi, --json and --min from args for the error report.
+//
+// The globals alone are not enough: a usage error stops flag parsing before
+// PersistentPreRun publishes the mode, and at the first bad flag, so in
+// `grep --nope --axi` cobra never saw --axi. The args are parsed again against
+// cmd's flags with unknown flags tolerated, so a flag's value and anything
+// after "--" are still not mistaken for a mode flag.
+func outputMode(cmd *cobra.Command, args []string) (axi, jsonOut, minOut bool) {
+	fs := pflag.NewFlagSet("mode", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.ParseErrorsWhitelist.UnknownFlags = true
+	fs.AddFlagSet(cmd.Flags())
+	fs.AddFlagSet(cmd.InheritedFlags())
+	_ = fs.Parse(args)
+	isSet := func(name string) bool {
+		f := fs.Lookup(name)
+		return f != nil && f.Value.String() == "true"
+	}
+	return GlobalAXIOutput || isSet("axi"),
+		GlobalJSONOutput || isSet("json"),
+		GlobalMinOutput || isSet("min")
+}
+
+// flagError adds the command's valid flags to an unknown-flag error, so a
+// caller can correct the call without a --help round trip. The cobra wording
+// is kept at the front: ExitCodeFor classifies it as a usage error by it.
+func flagError(cmd *cobra.Command, err error) error {
+	msg := err.Error()
+	if !strings.HasPrefix(msg, "unknown flag: ") && !strings.HasPrefix(msg, "unknown shorthand flag: ") {
+		return err
+	}
+	var valid []string
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if f.Hidden {
+			return
+		}
+		name := "--" + f.Name
+		if f.Shorthand != "" {
+			name = "-" + f.Shorthand + "/" + name
+		}
+		valid = append(valid, name)
+	})
+	return fmt.Errorf("%w; valid flags for %s: %s", err, cmd.CommandPath(), strings.Join(valid, ", "))
 }
 
 // splitCSV splits a comma-separated string, trimming blanks.

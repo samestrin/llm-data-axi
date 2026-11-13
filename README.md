@@ -85,7 +85,13 @@ Run `llm-data <command> --help` for the flags.
 
 ### Exit codes, and one stated exception
 
-A command that ran reports 0; a command that failed reports 1 with a structured error (`error: true` plus `message:`) on stdout in `--json` and `--axi`, and on stderr in plain mode. The exception: a malformed invocation — an unknown flag or command — exits **2** with the error on stderr even under `--axi`. That is the go-axi usage-error convention, kept deliberately.
+A command that ran reports 0; a command that failed reports 1 with a structured error (`error: true` plus `message:`) on stdout in `--json` and `--axi`, and on stderr in plain mode. The exception: a malformed invocation — an unknown flag or command — exits **2**, the go-axi usage-error convention, kept deliberately. It is reported the same way as any other error: on stdout in `--json` and `--axi`, on stderr in plain mode. An unknown flag's message also lists the flags that command accepts:
+
+```
+$ llm-data grep --nope --axi
+error: true
+message: "unknown flag: --nope; valid flags for llm-data grep: --axi, -l/--files-with-matches, ..."
+```
 
 ## A bare run: the home view
 
