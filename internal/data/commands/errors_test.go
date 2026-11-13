@@ -169,3 +169,16 @@ func TestMissingFlagValueKeepsCobraMessage(t *testing.T) {
 		t.Errorf("want cobra's message unchanged in TOON, got %q", stdout)
 	}
 }
+
+// Defends the hidden-flag skip in flagError: the root's -V is bound through a
+// hidden "version-upper" flag, an implementation detail that must not be
+// offered to a caller as a flag to type.
+func TestUnknownFlagListOmitsHiddenFlags(t *testing.T) {
+	code, stdout, _ := runCLI(t, "--nope", "--axi")
+	if code != 2 || !strings.Contains(stdout, "-v/--version") {
+		t.Fatalf("exit %d, want 2 and the root's flags listed, got %q", code, stdout)
+	}
+	if strings.Contains(stdout, "version-upper") {
+		t.Errorf("hidden flag listed: %q", stdout)
+	}
+}
