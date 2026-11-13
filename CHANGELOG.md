@@ -6,14 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-### Fixed
-
-- **`grep` finds matches on lines longer than 64 KiB.** A matching line in a minified or generated file stopped the scan, so `llm-data grep needle min.js --full` printed `total: 0` and exited 0. Lines of any length are now read whole, every later line is still searched, and a read that fails part-way is an error naming the file instead of a short result.
-- **`multigrep --output-dir` writes whole lines again.** Since the 80-byte cut moved into the search, the `keyword_*.txt` files held cut lines with no marker. They now carry each matching line whole, while stdout is still cut unless `--full` is given.
-- **`multigrep -d --json` and `-d --axi` offer `--full` when a usage row was cut.** Those encodings still emit `other_matches` under `-d`, but the hint was suppressed as if they were hidden, leaving a cut row with no next step. Only plain output, which hides usages under `-d`, leaves it out. The `--full` help now says the cut is 80 bytes, not characters.
-- **The `llm-data` skill no longer names the removed `yaml list`.** The skill `llm-data setup` writes, and its committed twin at `skills/llm-data/SKILL.md`, said `llm-data yaml get|set|list`; `yaml list` is gone, so an agent following it got an unknown-command error. It now says `llm-data yaml get|set|multiget|multiset`, and a test fails if the skill names any command or subcommand that is not registered.
-- **`detect` and the home view's `project_type` give the same answer on every run when a directory has more than one marker.** A repo with both `package.json` and `go.mod` could report `node` on one run and `go` on the next, because detection took the first hit from an unordered map. `stack`, `package_manager` and `framework` now check their markers in a fixed order and the first one listed wins: `package.json` before `go.mod`, `yarn.lock` before `pnpm-lock.yaml` before `package-lock.json`, and `next.config.*` before the other framework configs.
-
 ## [1.1.0] - 2026-11-13
 
 ### Added
@@ -38,6 +30,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **`git-context` no longer splits a multi-byte character when it cuts a large diff at 50,000 bytes.** The diff cut sliced at a raw byte index, so a diff whose 50,000th byte fell inside a character like `é` emitted half of it: `--json` showed `\ufffd` and plain/`--axi` wrote invalid UTF-8. The cut now backs off to the previous character boundary, the same fix the 200-byte (`grep`) and 80-byte (`multigrep`) line cuts already had.
 - **`multigrep -d` no longer offers `--full` for a line it did not show.** In definitions mode the plain printer hides usage matches, but the truncation hint counted them, so a short definition plus a long usage printed `(long lines truncated; rerun with --full)` even though no displayed line was cut and `--full -d` changed nothing. The hint now reflects only the displayed matches.
 - **`multigrep` cut lines carry `full_length`, like `grep`.** A cut match said `truncated` but not how much of the line was missing; it now also states the whole trimmed line's byte count, so a caller can decide whether `--full` is worth it. Uncut and `--full` lines carry neither field.
+- **`grep` finds matches on lines longer than 64 KiB.** A matching line in a minified or generated file stopped the scan, so `llm-data grep needle min.js --full` printed `total: 0` and exited 0. Lines of any length are now read whole, every later line is still searched, and a read that fails part-way is an error naming the file instead of a short result.
+- **`multigrep --output-dir` writes whole lines again.** Since the 80-byte cut moved into the search, the `keyword_*.txt` files held cut lines with no marker. They now carry each matching line whole, while stdout is still cut unless `--full` is given.
+- **`multigrep -d --json` and `-d --axi` offer `--full` when a usage row was cut.** Those encodings still emit `other_matches` under `-d`, but the hint was suppressed as if they were hidden, leaving a cut row with no next step. Only plain output, which hides usages under `-d`, leaves it out. The `--full` help now says the cut is 80 bytes, not characters.
+- **The `llm-data` skill no longer names the removed `yaml list`.** The skill `llm-data setup` writes, and its committed twin at `skills/llm-data/SKILL.md`, said `llm-data yaml get|set|list`; `yaml list` is gone, so an agent following it got an unknown-command error. It now says `llm-data yaml get|set|multiget|multiset`, and a test fails if the skill names any command or subcommand that is not registered.
+- **`detect` and the home view's `project_type` give the same answer on every run when a directory has more than one marker.** A repo with both `package.json` and `go.mod` could report `node` on one run and `go` on the next, because detection took the first hit from an unordered map. `stack`, `package_manager` and `framework` now check their markers in a fixed order and the first one listed wins: `package.json` before `go.mod`, `yarn.lock` before `pnpm-lock.yaml` before `package-lock.json`, and `next.config.*` before the other framework configs.
 
 ## [1.0.2] - 2026-11-09
 
