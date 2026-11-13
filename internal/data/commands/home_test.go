@@ -265,3 +265,14 @@ esac`)
 		t.Errorf("a failed git status still printed a change count:\n%s", out)
 	}
 }
+
+// Defends a git that fails without a word on stderr (killed by a signal, for
+// example): the reason must still be named, never an empty
+// "git unavailable: ".
+func TestHomeViewGitErrorWithoutStderr(t *testing.T) {
+	fakeExecutable(t)
+	chdirTo(t, t.TempDir())
+	fakeGit(t, `exit 128`)
+
+	assertGitUnavailable(t, "git rev-parse: exit status 128")
+}
