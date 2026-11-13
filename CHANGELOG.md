@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - **The `llm-data` skill no longer names the removed `yaml list`.** The skill `llm-data setup` writes, and its committed twin at `skills/llm-data/SKILL.md`, said `llm-data yaml get|set|list`; `yaml list` is gone, so an agent following it got an unknown-command error. It now says `llm-data yaml get|set|multiget|multiset`, and a test fails if the skill names any command or subcommand that is not registered.
+- **`detect` and the home view's `project_type` give the same answer on every run when a directory has more than one marker.** A repo with both `package.json` and `go.mod` could report `node` on one run and `go` on the next, because detection took the first hit from an unordered map. `stack`, `package_manager` and `framework` now check their markers in a fixed order and the first one listed wins: `package.json` before `go.mod`, `yarn.lock` before `pnpm-lock.yaml` before `package-lock.json`, and `next.config.*` before the other framework configs.
 
 ## [1.1.0] - 2026-11-13
 
