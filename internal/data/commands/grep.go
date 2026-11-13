@@ -41,6 +41,16 @@ const grepTruncateLimit = 200
 // like content.
 const grepFullHint = "Whole lines: rerun the same grep with --full"
 
+// grepMaxLineBytes caps how much of one line grep holds in memory. Without it
+// a file with no newline, /proc/self/pagemap for one, was read as a single
+// line until the kernel killed the process. It is a variable so a test can
+// lower it.
+var grepMaxLineBytes = 64 << 20
+
+// errLineTooLong is a line over grepMaxLineBytes. It fails the run: skipping
+// the rest of the file would be a short result reported as a whole one.
+var errLineTooLong = errors.New("line too long")
+
 // GrepMatch represents a single grep match. Truncated and FullLength are set
 // only when the line was cut, so the minimal {file,text} schema is unchanged
 // for every line that fits. FullLength is the whole line's byte count: the
