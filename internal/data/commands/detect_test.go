@@ -261,3 +261,37 @@ func TestDetectDirs_NoDirsFlag_Unchanged(t *testing.T) {
 		t.Errorf("expected original format 'STACK: go': %s", output)
 	}
 }
+
+// TestDetectInDir_TwoMarkersStable defends against detection depending on Go's
+// random map order: with two markers in one directory, detectInDir used to range
+// a map and keep whichever marker it hit first, so stack, package_manager and
+// framework could flip between runs, and the home view's project_type with them.
+// Each table is checked separately, and looped, because one call can get lucky.
+func TestDetectInDir_TwoMarkersStable(t *testing.T) {
+	cases := []struct {
+		name    string
+		markers []string
+		field   func(DetectResult) string
+		want    string
+	}{
+		{"stack", []string{"go.mod", "package.json"}, func(r DetectResult) string { return r.Stack }, "node"},
+		{"language", []string{"go.mod", "package.json"}, func(r DetectResult) string { return r.Language }, "javascript"},
+		{"package_manager", []string{"package-lock.json", "yarn.lock"}, func(r DetectResult) string { return r.PackageManager }, "yarn"},
+		{"framework", []string{"angular.json", "next.config.js"}, func(r DetectResult) string { return r.Framework }, "nextjs"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for _, m := range tc.markers {
+				if err := os.WriteFile(filepath.Join(dir, m), []byte("{}"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for i := 0; i < 200; i++ {
+				if got := tc.field(detectInDir(dir)); got != tc.want {
+					t.Fatalf("call %d: %s = %q, want %q", i, tc.name, got, tc.want)
+				}
+			}
+		})
+	}
+}

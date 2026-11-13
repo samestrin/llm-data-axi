@@ -85,11 +85,23 @@ Run `llm-data <command> --help` for the flags.
 
 ### Exit codes, and one stated exception
 
-A command that ran reports 0; a command that failed reports 1 with a structured error (`error: true` plus `message:`) on stdout in `--json` and `--axi`, and on stderr in plain mode. The exception: a malformed invocation — an unknown flag or command — exits **2** with the error on stderr even under `--axi`. That is the go-axi usage-error convention, kept deliberately.
+A command that ran reports 0; a command that failed reports 1 with a structured error (`error: true` plus `message:`) on stdout in `--json` and `--axi`, and on stderr in plain mode. The exception: a malformed invocation — an unknown flag or command — exits **2**, the go-axi usage-error convention, kept deliberately. It is reported the same way as any other error: on stdout in `--json` and `--axi`, on stderr in plain mode. An unknown flag's message also lists the flags that command accepts:
+
+```
+$ llm-data grep --nope --axi
+error: true
+message: "unknown flag: --nope; valid flags for llm-data grep: --axi, -l/--files-with-matches, ..."
+```
 
 ## A bare run: the home view
 
-`llm-data` with no arguments prints two lines — `bin:` (the executable path, home directory written as `~`) and `description:` (one sentence) — instead of a help page. `--json` and `--axi` add a `help` list of next steps. `--help` still prints the full help, and an unknown subcommand still fails with exit 2.
+`llm-data` with no arguments prints `bin:` (the executable path, home directory written as `~`) and `description:` (one sentence) instead of a help page, followed by the repository it was run in:
+
+- inside a git repository: `repo_root:` (home written as `~`), `project_type:` (the `detect` stack) and `git_changes:` (the `git-changes` count, `0` for a clean tree);
+- outside one: `repo: no repository`, printed only when git itself says so;
+- when git is missing, fails or does not answer within 2 seconds: `repo: git unavailable: <reason>`, never "no repository".
+
+Every case exits 0. `--json` and `--axi` carry the same fields plus a `help` list of next steps. `--help` still prints the full help, and an unknown subcommand still fails with exit 2.
 
 ## Setup
 
@@ -106,7 +118,7 @@ llm-data setup --dry-run  # show what would be written
 llm-data-mcp        # speaks MCP over stdio
 ```
 
-It resolves `llm-data` from `PATH`, falling back to `/usr/local/bin/llm-data`. Set `LLM_DATA_BINARY` to point it somewhere else.
+It looks for `llm-data` in `LLM_DATA_BINARY` (if set), on `PATH`, beside the `llm-data-mcp` executable, and finally at `/usr/local/bin/llm-data`. The sibling step means an install into `~/.local/bin` (the installer's default) works even when that directory is not on `PATH`. If the binary is nowhere, the startup error names the path tried, the lookup order and `LLM_DATA_BINARY`.
 
 By default it asks the CLI for TOON (`--axi`). To get `--json --min` instead, either set `LLM_DATA_MCP_AXI=false` for the whole server, or pass `"format": "json"` on a single tool call; `"format": "axi"` asks for TOON on one call when the server is set to JSON. Any other `format` value is an error, except on `runtime`, whose `format` is its time format. A `LLM_DATA_MCP_AXI` value that is not a boolean keeps TOON and logs a warning to stderr. The `llm-tools` server appended `--json --min` unconditionally, which made `--axi` unreachable through MCP no matter what the CLI supported.
 

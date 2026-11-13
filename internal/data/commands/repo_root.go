@@ -1,11 +1,16 @@
 package commands
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/samestrin/llm-data-axi/pkg/output"
 	"github.com/spf13/cobra"
@@ -71,7 +76,7 @@ func runRepoRoot(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get repository root using git rev-parse
-	root, err := runGitOutput(absPath, "rev-parse", "--show-toplevel")
+	root, err := repoRootOf(context.Background(), absPath)
 	result := RepoRootResult{}
 
 	if err != nil {
@@ -80,7 +85,7 @@ func runRepoRoot(cmd *cobra.Command, args []string) error {
 			result.Valid = false
 		}
 	} else {
-		result.Root = strings.TrimSpace(root)
+		result.Root = root
 
 		// Optionally validate .git exists
 		if repoRootValidate {
@@ -95,6 +100,57 @@ func runRepoRoot(cmd *cobra.Command, args []string) error {
 
 	formatter := output.New(repoRootJSON, repoRootMinimal, cmd.OutOrStdout())
 	return formatter.Print(result, printRepoRootText)
+}
+
+// errNotARepository is git's own answer that a directory is in no repository.
+// Only that answer earns it: every other git failure keeps its own reason, so
+// a caller can tell "no repository" from "git is broken".
+var errNotARepository = errors.New("not a git repository")
+
+// repoRootOf returns the top level of the repository containing dir.
+func repoRootOf(ctx context.Context, dir string) (string, error) {
+	out, err := runGitCtx(ctx, dir, "rev-parse", "--show-toplevel")
+	return strings.TrimSpace(out), err
+}
+
+// runGitCtx runs git in dir (the working directory when empty) and names why
+// it failed: git missing, ctx's deadline (wrapped, for errors.Is),
+// errNotARepository, or git's own last line of stderr.
+func runGitCtx(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir
+	// The not-a-repository message is matched below, so it must not be
+	// translated.
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	// Without this a child holding git's pipes keeps Wait open past the
+	// deadline.
+	cmd.WaitDelay = 100 * time.Millisecond
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err == nil {
+		return string(out), nil
+	}
+	if errors.Is(err, exec.ErrNotFound) {
+		return "", errors.New("git not found in PATH")
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return "", fmt.Errorf("git %s: %w", args[0], ctxErr)
+	}
+	reason := ""
+	for _, line := range strings.Split(stderr.String(), "\n") {
+		if line = strings.TrimSpace(line); line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "fatal: not a git repository") {
+			return "", errNotARepository
+		}
+		reason = line
+	}
+	if reason == "" {
+		reason = fmt.Sprintf("git %s: %v", args[0], err)
+	}
+	return "", errors.New(reason)
 }
 
 func printRepoRootText(w io.Writer, data interface{}) {

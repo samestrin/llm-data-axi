@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 // Every test here runs setup against real files in t.TempDir(), with HOME
@@ -435,6 +438,63 @@ func TestSetupStructuredOutput(t *testing.T) {
 	}
 }
 
+// committedSkillPath locates skills/llm-data/SKILL.md from this test file,
+// the way tests/mcp_integration finds the module root, so the check does not
+// depend on the working directory the test binary was launched from.
+func committedSkillPath(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot locate this test file")
+	}
+	root := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(thisFile))))
+	return filepath.Join(root, "skills", "llm-data", "SKILL.md")
+}
+
+// Defends the committed installable skill (skills/llm-data/SKILL.md, what
+// `npx skills add samestrin/llm-data-axi --skill llm-data` installs) against
+// drifting from the text setup writes: one byte changed on either side must
+// fail here, so an installed skill and a setup-written skill can never teach
+// an agent different things. The install path itself needs the network and
+// is out of scope (epic 09 advisory); byte agreement is what this repo proves.
+func TestCommittedSkillMatchesSetup(t *testing.T) {
+	project, _ := setupEnv(t)
+	if _, err := runSetupCmd(t, "--path", project); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	written := readFile(t, skillPath(project))
+	committed := readFile(t, committedSkillPath(t))
+
+	if !bytes.Equal(committed, written) {
+		t.Errorf("skills/llm-data/SKILL.md differs from the skill setup writes\ncommitted (%d bytes):\n%s\nsetup wrote (%d bytes):\n%s",
+			len(committed), committed, len(written), written)
+	}
+}
+
+// Defends the front matter that makes the committed file an installable
+// skill: the skills CLI reads name and description from it, and a file
+// without them installs as nothing.
+func TestCommittedSkillFrontMatter(t *testing.T) {
+	s := string(readFile(t, committedSkillPath(t)))
+	lines := strings.Split(s, "\n")
+	if len(lines) < 4 || lines[0] != "---" || lines[1] != "name: llm-data" {
+		t.Fatalf("committed SKILL.md must open with --- and name: llm-data front matter:\n%s", s)
+	}
+	if !strings.HasPrefix(lines[2], "description: ") || strings.TrimSpace(strings.TrimPrefix(lines[2], "description: ")) == "" {
+		t.Errorf("committed SKILL.md front matter has no description:\n%s", s)
+	}
+	closed := false
+	for _, l := range lines[3:] {
+		if l == "---" {
+			closed = true
+			break
+		}
+	}
+	if !closed {
+		t.Errorf("committed SKILL.md front matter is never closed with ---:\n%s", s)
+	}
+}
+
 // Defends registration: setup is reachable from the root command (the plan
 // keeps registration in setup.go so root.go is not edited).
 func TestSetupIsRegistered(t *testing.T) {
@@ -444,4 +504,49 @@ func TestSetupIsRegistered(t *testing.T) {
 		}
 	}
 	t.Error("setup is not registered on the root command")
+}
+
+// Defends the skill text against naming commands that do not exist: it said
+// `llm-data yaml get|set|list` long after `yaml list` was removed, so every
+// agent that installed the skill was taught a command that fails. Each
+// backticked `llm-data ...` span must resolve, word by word, to registered
+// commands, and an a|b|c list of subcommands must name exactly the ones
+// registered, so a subcommand added later cannot go unmentioned either.
+func TestSkillNamesOnlyRealCommands(t *testing.T) {
+	root := NewRootCmd()
+	spans := 0
+	for i, part := range strings.Split(setupSkillContent, "`") {
+		if i%2 == 0 || !strings.HasPrefix(part, "llm-data ") {
+			continue
+		}
+		spans++
+		cmd := root
+		for _, word := range strings.Fields(part)[1:] {
+			if strings.HasPrefix(word, "-") || strings.HasPrefix(word, "<") {
+				break
+			}
+			subs := map[string]*cobra.Command{}
+			for _, c := range cmd.Commands() {
+				if c.IsAvailableCommand() {
+					subs[c.Name()] = c
+				}
+			}
+			named := strings.Split(word, "|")
+			for _, n := range named {
+				if subs[n] == nil {
+					t.Errorf("skill names %q, but %q has no subcommand %q", part, cmd.CommandPath(), n)
+				}
+			}
+			if len(named) > 1 && len(named) != len(subs) {
+				t.Errorf("skill lists %q under %q, but it registers %d subcommands", word, cmd.CommandPath(), len(subs))
+			}
+			if len(named) > 1 || subs[word] == nil {
+				break
+			}
+			cmd = subs[word]
+		}
+	}
+	if spans == 0 {
+		t.Fatal("found no `llm-data ...` spans in the skill text; the parser is broken")
+	}
 }

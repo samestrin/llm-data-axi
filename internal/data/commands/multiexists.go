@@ -49,7 +49,7 @@ Summary:
 		Args: cobra.MinimumNArgs(1),
 		RunE: runMultiexists,
 	}
-	cmd.Flags().BoolVarP(&multiexistsVerbose, "verbose", "v", false, "Show file types")
+	cmd.Flags().BoolVar(&multiexistsVerbose, "verbose", false, "Show file types")
 	cmd.Flags().BoolVar(&multiexistsNoFail, "no-fail", false, "Don't exit with error if files are missing")
 	cmd.Flags().BoolVar(&multiexistsJSON, "json", false, "Output as JSON")
 	cmd.Flags().BoolVar(&multiexistsMinimal, "min", false, "Output in minimal/token-optimized format")

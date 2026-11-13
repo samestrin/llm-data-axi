@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -45,14 +46,18 @@ func fakeExecutable(t *testing.T) (home string) {
 // Defends AXI principle "content first": a bare `llm-data` used to print the
 // whole cobra help page and exit 0, so an agent spent its first call reading a
 // usage dump instead of learning what the tool is and where it is installed.
+//
+// Run outside any repository, so the view is bin, description and the one
+// line saying there is no repository; home_test.go covers the live fields.
 func TestRootNoArgsShowsHomeView(t *testing.T) {
 	home := fakeExecutable(t)
+	outsideAnyRepo(t)
 
 	out := runRootBoth(t)
 
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("want exactly a bin line and a description line, got %d lines:\n%s", len(lines), out)
+	if len(lines) != 3 {
+		t.Fatalf("want a bin line, a description line and a repo line, got %d lines:\n%s", len(lines), out)
 	}
 	if want := "bin: ~/go/bin/llm-data"; lines[0] != want {
 		t.Errorf("bin line = %q, want %q", lines[0], want)
@@ -181,5 +186,84 @@ func TestFreshTreeIgnoresPreviousChangedFlags(t *testing.T) {
 
 	if out := runRootBoth(t); strings.HasPrefix(strings.TrimSpace(out), "{") || !strings.HasPrefix(out, "bin: ") {
 		t.Errorf("bare run after --json is not the plain view:\n%s", out)
+	}
+}
+
+// stampVersion sets Version the way a release build's ldflags do, restoring
+// the default afterwards.
+func stampVersion(t *testing.T, v string) {
+	t.Helper()
+	orig := Version
+	Version = v
+	t.Cleanup(func() { Version = orig })
+}
+
+// Defends the AXI version contract: `-v` was the root --verbose that nothing
+// read, `-V` was an unknown flag, and --version printed
+// "llm-data version v1.0.2". Each spelling must print the bare version and a
+// newline, and nothing else. release.yml stamps the tag name, so the leading
+// "v" has to come off here.
+func TestRootVersionSpellingsPrintBareVersion(t *testing.T) {
+	fakeExecutable(t)
+	for _, stamped := range []string{"v1.1.0", "1.1.0"} {
+		stampVersion(t, stamped)
+		for _, flag := range []string{"-v", "-V", "--version"} {
+			if out := runRootBoth(t, flag); out != "1.1.0\n" {
+				t.Errorf("Version=%q %s: want %q, got %q", stamped, flag, "1.1.0\n", out)
+			}
+		}
+	}
+}
+
+// Defends against a flag that is accepted and silently ignored: the root
+// --verbose and --format were persistent flags no command read, so
+// `grep x . --verbose` ran as if the flag were not there.
+func TestRootVerboseAndFormatAreUnknownFlags(t *testing.T) {
+	fakeExecutable(t)
+	dir := t.TempDir()
+	for _, args := range [][]string{
+		{"grep", "x", dir, "--verbose"},
+		{"grep", "x", dir, "--format", "json"},
+		{"tree", "--path", dir, "--verbose"},
+		{"--format", "json"},
+	} {
+		root := NewRootCmd()
+		root.SetOut(new(bytes.Buffer))
+		root.SetErr(new(bytes.Buffer))
+		root.SetArgs(args)
+		err := root.Execute()
+		if err == nil || !strings.Contains(err.Error(), "unknown flag") {
+			t.Errorf("%v: want an unknown flag error, got %v", args, err)
+		}
+	}
+}
+
+// Defends multiexists after -v became the version: --verbose still shows
+// types, and -v there is rejected by name instead of being swallowed.
+func TestMultiexistsVerboseAfterVersionShorthand(t *testing.T) {
+	fakeExecutable(t)
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	file := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Without --verbose a file prints no type, so "(file)" proves the flag ran.
+	out := runRootBoth(t, "multiexists", file, "--verbose")
+	if !strings.Contains(out, "(file)") {
+		t.Errorf("multiexists --verbose did not show the type:\n%s", out)
+	}
+
+	root := NewRootCmd()
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"multiexists", file, "-v"})
+	err = root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "unknown shorthand flag: 'v'") {
+		t.Errorf("multiexists -v: want an unknown shorthand error naming 'v', got %v\n%s", err, buf.String())
 	}
 }

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -88,12 +89,6 @@ func runGitChanges(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("not a git repository (or any parent up to mount point)")
 	}
 
-	// Run git status --porcelain
-	output, err := runGitStatusPorcelain()
-	if err != nil {
-		return fmt.Errorf("Error executing git status: %w", err)
-	}
-
 	// Normalize path filter
 	pathFilter := gitChangesPath
 	if pathFilter != "" {
@@ -101,8 +96,10 @@ func runGitChanges(cmd *cobra.Command, args []string) error {
 		pathFilter = normalizePathFilter(pathFilter)
 	}
 
-	// Parse the output
-	result := parseGitStatus(output, pathFilter, gitChangesIncludeUntracked, gitChangesStagedOnly)
+	result, err := gitChangesIn(context.Background(), "", pathFilter, gitChangesIncludeUntracked, gitChangesStagedOnly)
+	if err != nil {
+		return fmt.Errorf("Error executing git status: %w", err)
+	}
 
 	// Output based on flags
 	outputGitChanges(cmd, result)
@@ -110,14 +107,15 @@ func runGitChanges(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runGitStatusPorcelain runs git status --porcelain and returns the output
-func runGitStatusPorcelain() (string, error) {
-	cmd := exec.Command("git", "status", "--porcelain")
-	output, err := cmd.Output()
+// gitChangesIn runs git status --porcelain in dir (the working directory when
+// empty) and applies the filters. Porcelain paths are relative to the
+// repository root wherever dir sits inside it.
+func gitChangesIn(ctx context.Context, dir, pathFilter string, includeUntracked, stagedOnly bool) (GitChangesResult, error) {
+	out, err := runGitCtx(ctx, dir, "status", "--porcelain")
 	if err != nil {
-		return "", err
+		return GitChangesResult{}, err
 	}
-	return string(output), nil
+	return parseGitStatus(out, pathFilter, includeUntracked, stagedOnly), nil
 }
 
 // normalizePathFilter normalizes the path filter for matching
