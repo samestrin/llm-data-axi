@@ -14,7 +14,7 @@ func TestMultigrepCommand(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create test files
-	os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(`package main
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(`package main
 
 func processData(input string) string {
 	return input
@@ -24,9 +24,11 @@ func main() {
 	result := processData("test")
 	println(result)
 }
-`), 0644)
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
-	os.WriteFile(filepath.Join(tmpDir, "utils.go"), []byte(`package main
+	if err := os.WriteFile(filepath.Join(tmpDir, "utils.go"), []byte(`package main
 
 const MaxRetries = 3
 
@@ -36,7 +38,9 @@ func helper() {
 		processData("retry")
 	}
 }
-`), 0644)
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	tests := []struct {
 		name     string
@@ -85,7 +89,7 @@ func helper() {
 func TestMultigrepDefinitionPriority(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	os.WriteFile(filepath.Join(tmpDir, "code.ts"), []byte(`
+	if err := os.WriteFile(filepath.Join(tmpDir, "code.ts"), []byte(`
 export const ApiEndpoint = "/api/v1";
 
 function useApiEndpoint() {
@@ -94,7 +98,9 @@ function useApiEndpoint() {
 
 // ApiEndpoint is used here
 console.log(ApiEndpoint);
-`), 0644)
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cmd := newMultigrepCmd()
 	buf := new(bytes.Buffer)
@@ -115,7 +121,9 @@ console.log(ApiEndpoint);
 
 func TestMultigrepJSON(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte("func test() {}"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte("func test() {}"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cmd := newMultigrepCmd()
 	buf := new(bytes.Buffer)
@@ -139,7 +147,9 @@ func TestMultigrepJSON(t *testing.T) {
 // be stated, not indistinguishable from an absent field.
 func TestMultigrepExplicitZeroCounts(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte("func test() {}"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte("func test() {}"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, tt := range []struct {
 		name string
@@ -176,13 +186,15 @@ func TestMultigrepExplicitZeroCounts(t *testing.T) {
 }
 
 // TestMultigrepTruncatesContentInEveryMode defends AXI principle 3: multigrep
-// used to cut match content at 80 characters in plain mode only, so --json and
+// used to cut match content at 80 bytes in plain mode only, so --json and
 // --axi emitted whole lines. The cut now applies in every mode, says it was
 // cut, and --full opts out.
 func TestMultigrepTruncatesContentInEveryMode(t *testing.T) {
 	tmpDir := t.TempDir()
 	longLine := "needle " + strings.Repeat("y", 300)
-	os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte(longLine+"\n"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte(longLine+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, tt := range []struct {
 		name    string
@@ -252,7 +264,9 @@ func TestMultigrepTruncatesContentInEveryMode(t *testing.T) {
 // or agree with its alias, never a contradicting 0.
 func TestMultigrepMinimalCountsAgree(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte("alpha\nbeta\n"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte("alpha\nbeta\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cmd := newMultigrepCmd()
 	buf := new(bytes.Buffer)
@@ -282,7 +296,9 @@ func TestMultigrepMinimalCountsAgree(t *testing.T) {
 // "(long lines truncated; rerun with --full)" when another keyword was cut.
 func TestMultigrepTruncationHintPerKeyword(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte("needle "+strings.Repeat("y", 300)+"\n"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte("needle "+strings.Repeat("y", 300)+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cmd := newMultigrepCmd()
 	buf := new(bytes.Buffer)
@@ -310,7 +326,9 @@ func TestMultigrepTruncationKeepsUTF8Valid(t *testing.T) {
 	tmpDir := t.TempDir()
 	// 79 ASCII bytes, then 2-byte runes: the first "é" spans bytes 79-80.
 	line := "needle " + strings.Repeat("y", 72) + strings.Repeat("é", 50)
-	os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte(line+"\n"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte(line+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cmd := newMultigrepCmd()
 	buf := new(bytes.Buffer)
@@ -363,8 +381,10 @@ func TestMultigrepDefinitionsHintOnlyForDisplayedLines(t *testing.T) {
 	// Short definition, long usage: -d displays only the definition, which is
 	// not cut, so no hint may print and --full must be a no-op.
 	shortDef := t.TempDir()
-	os.WriteFile(filepath.Join(shortDef, "test.go"),
-		[]byte("func needle() {}\nneedle "+strings.Repeat("y", 300)+"\n"), 0644)
+	if err := os.WriteFile(filepath.Join(shortDef, "test.go"),
+		[]byte("func needle() {}\nneedle "+strings.Repeat("y", 300)+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	defs := run(shortDef, "-d")
 	if strings.Contains(defs, "(long lines truncated") {
@@ -380,8 +400,10 @@ func TestMultigrepDefinitionsHintOnlyForDisplayedLines(t *testing.T) {
 
 	// A cut definition is still displayed under -d, so the hint must stay.
 	longDef := t.TempDir()
-	os.WriteFile(filepath.Join(longDef, "test.go"),
-		[]byte("func needle() { "+strings.Repeat("y", 300)+" }\n"), 0644)
+	if err := os.WriteFile(filepath.Join(longDef, "test.go"),
+		[]byte("func needle() { "+strings.Repeat("y", 300)+" }\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	if out := run(longDef, "-d"); !strings.Contains(out, "(long lines truncated; rerun with --full)") {
 		t.Errorf("-d dropped the hint for a displayed, cut definition:\n%s", out)
 	}
@@ -394,8 +416,10 @@ func TestMultigrepDefinitionsHintOnlyForDisplayedLines(t *testing.T) {
 func TestMultigrepCutLinesCarryFullLength(t *testing.T) {
 	tmpDir := t.TempDir()
 	longLine := "needle " + strings.Repeat("y", 300) // 307 bytes
-	os.WriteFile(filepath.Join(tmpDir, "test.go"),
-		[]byte(longLine+"\nneedle short\n"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.go"),
+		[]byte(longLine+"\nneedle short\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	run := func(extra ...string) []map[string]any {
 		t.Helper()
@@ -440,5 +464,77 @@ func TestMultigrepCutLinesCarryFullLength(t *testing.T) {
 				t.Errorf("--full line carries %s: %v", field, m)
 			}
 		}
+	}
+}
+
+// TestMultigrepDefinitionsStructuredKeepsFullHint defends the --full hint in
+// --json and --axi under -d: the plain printer hides usages there, but the
+// structured encodings still emit other_matches, so a cut usage row must
+// still come with a help entry offering --full. Suppressing it everywhere left
+// `multigrep -d --json` with a truncated row and no way forward.
+func TestMultigrepDefinitionsStructuredKeepsFullHint(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "test.go"),
+		[]byte("func needle() {}\nneedle "+strings.Repeat("y", 300)+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, mode := range []string{"--json", "--axi"} {
+		t.Run(mode, func(t *testing.T) {
+			stdout, stderr, code := runGrepCLI(t, "multigrep", "--path", dir, "--keywords", "needle", "-d", mode)
+			if code != 0 {
+				t.Fatalf("exit %d; stderr:\n%s", code, stderr)
+			}
+			if !strings.Contains(stdout, "truncated") {
+				t.Fatalf("expected a truncated usage row in the payload:\n%s", stdout)
+			}
+			if !strings.Contains(stdout, "Whole lines: rerun with --full") {
+				t.Errorf("-d %s emitted a cut row with no --full help:\n%s", mode, stdout)
+			}
+		})
+	}
+}
+
+// TestMultigrepOutputDirKeepsWholeLines defends the --output-dir export
+// contract: moving the 80-byte cut into searchKeyword made the keyword files
+// carry cut lines too, with no full_length and no --full hint in the file, so
+// the export silently shrank. The files must hold whole lines, as before.
+func TestMultigrepOutputDirKeepsWholeLines(t *testing.T) {
+	dir := t.TempDir()
+	def := "func needle() { " + strings.Repeat("d", 300) + " }"
+	use := "needle " + strings.Repeat("u", 300)
+	if err := os.WriteFile(filepath.Join(dir, "test.go"), []byte(def+"\n"+use+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	outDir := filepath.Join(t.TempDir(), "out")
+
+	cmd := newMultigrepCmd()
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"--path", dir, "--keywords", "needle", "--output-dir", outDir, "--json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(outDir, "keyword_needle.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "DEF: test.go:1: " + def + "\nUSE: test.go:2: " + use + "\n"
+	if string(got) != want {
+		t.Errorf("keyword file lost whole lines:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+	// The presented result is still cut: only the export keeps whole lines.
+	if !strings.Contains(buf.String(), `"truncated": true`) {
+		t.Errorf("the stdout result was not cut:\n%s", buf.String())
+	}
+}
+
+// TestMultigrepFullFlagSaysBytes defends the --full help against naming the
+// wrong unit: the cut is measured in bytes, and the help said characters.
+func TestMultigrepFullFlagSaysBytes(t *testing.T) {
+	usage := newMultigrepCmd().Flags().Lookup("full").Usage
+	if !strings.Contains(usage, "80 bytes") || strings.Contains(usage, "characters") {
+		t.Errorf("--full usage = %q, want it to say 80 bytes", usage)
 	}
 }

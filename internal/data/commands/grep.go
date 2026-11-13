@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,6 +24,10 @@ var (
 	grepMinimal     bool
 	grepFull        bool
 )
+
+// grepOpen opens a file for searching. It is a variable so a test can make a
+// read fail part-way, which no file on disk does on demand.
+var grepOpen = func(path string) (io.ReadCloser, error) { return os.Open(path) }
 
 // grepTruncateLimit is the byte limit a matching line is cut to by default,
 // in every output mode (AXI principle 3). A root-level --full flag was
@@ -133,6 +138,14 @@ func runGrep(cmd *cobra.Command, args []string) error {
 				if ignorer != nil && ignorer.IsIgnored(path) {
 					return nil
 				}
+				// Walk reports a symlink as a file whatever it points at. A
+				// link to a directory is not a file to search: opening it and
+				// reading gives EISDIR, which would fail the whole run.
+				if info.Mode()&os.ModeSymlink != 0 {
+					if target, err := os.Stat(path); err == nil && target.IsDir() {
+						return nil
+					}
+				}
 				files = append(files, path)
 				return nil
 			})
@@ -149,17 +162,14 @@ func runGrep(cmd *cobra.Command, args []string) error {
 	truncatedLines := false
 
 	for _, filePath := range files {
-		file, err := os.Open(filePath)
+		file, err := grepOpen(filePath)
 		if err != nil {
 			continue
 		}
 
-		scanner := bufio.NewScanner(file)
 		lineNum := 0
-
-		for scanner.Scan() {
+		readErr := grepLines(file, func(line string) bool {
 			lineNum++
-			line := scanner.Text()
 
 			if re.MatchString(line) {
 				if grepFilesOnly {
@@ -167,7 +177,7 @@ func runGrep(cmd *cobra.Command, args []string) error {
 						result.Files = append(result.Files, filePath)
 						matchedFiles[filePath] = true
 					}
-					break
+					return false
 				}
 
 				match := GrepMatch{
@@ -188,9 +198,20 @@ func runGrep(cmd *cobra.Command, args []string) error {
 				}
 				result.Matches = append(result.Matches, match)
 			}
-		}
+			return true
+		})
 
 		file.Close()
+		// A read that failed part-way is an error, not a file with no more
+		// matches: reporting it as the end of the file is a false zero.
+		if readErr != nil {
+			// An *os.PathError already names the file; say it once.
+			var pathErr *os.PathError
+			if errors.As(readErr, &pathErr) {
+				return readErr
+			}
+			return fmt.Errorf("read %s: %w", filePath, readErr)
+		}
 	}
 
 	if len(result.Matches) == 0 && len(result.Files) == 0 {
@@ -208,6 +229,30 @@ func runGrep(cmd *cobra.Command, args []string) error {
 
 	formatter := output.New(grepJSON, grepMinimal, cmd.OutOrStdout())
 	return formatter.Print(result, printGrepText)
+}
+
+// grepLines calls fn with each line of r, without its "\n" or "\r\n", until
+// fn returns false or r is exhausted. It replaces bufio.Scanner, whose 64 KiB
+// token cap stopped the scan at the first longer line: with Err() unchecked,
+// a match in a minified file read as `total: 0` and exit 0. A line of any
+// length is read whole here, and a read error is returned, never dropped.
+func grepLines(r io.Reader, fn func(line string) bool) error {
+	br := bufio.NewReader(r)
+	for {
+		line, err := br.ReadString('\n')
+		if len(line) > 0 {
+			line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+			if !fn(line) {
+				return nil
+			}
+		}
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
 }
 
 // grepZeroMatchHelp is the next step a search that found nothing offers. It

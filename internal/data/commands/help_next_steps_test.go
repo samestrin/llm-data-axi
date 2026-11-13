@@ -78,8 +78,9 @@ func TestHomeViewCarriesHelp(t *testing.T) {
 	assertAXIHelp(t, runRootBoth(t, "--axi"), wantHomeHelp)
 }
 
-// Defends the plain home view staying two lines: help is for the structured
-// encodings the task names, and TestRootNoArgsShowsHomeView pins the text form.
+// Defends the plain home view omitting help next steps: help is for the
+// structured encodings the task names, and TestRootNoArgsShowsHomeView pins the
+// text form.
 func TestHomeViewPlainTextHasNoHelp(t *testing.T) {
 	fakeExecutable(t)
 	if out := runRootBoth(t); strings.Contains(out, "help") {

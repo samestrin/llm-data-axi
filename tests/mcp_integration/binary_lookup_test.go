@@ -39,16 +39,16 @@ func copyBinary(t *testing.T, src, dst string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer in.Close()
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(errors.Join(err, in.Close()))
 	}
+	// errors.Join keeps a copy failure first and still reports a close
+	// failure beside it, so neither masks the other.
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		t.Fatal(err)
+		t.Fatal(errors.Join(err, out.Close(), in.Close()))
 	}
-	if err := out.Close(); err != nil {
+	if err := errors.Join(out.Close(), in.Close()); err != nil {
 		t.Fatal(err)
 	}
 }

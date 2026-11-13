@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"unicode/utf8"
 )
 
@@ -553,5 +556,152 @@ func TestGrepPlainModePrintsFullHint(t *testing.T) {
 	}
 	if strings.Contains(stdout, "--full") {
 		t.Errorf("printed the --full hint with nothing cut:\n%s", stdout)
+	}
+}
+
+// TestGrepFindsMatchesOnLinesOver64KiB defends grep against a false zero on
+// minified or generated files: bufio.Scanner stops at a line over its 64 KiB
+// token limit, and scanner.Err() was never checked, so `grep needle min.js
+// --full` printed `total: 0` and exited 0 with a real match in the file. A
+// line past that size, and every line after it, must still be searched.
+func TestGrepFindsMatchesOnLinesOver64KiB(t *testing.T) {
+	longLine := "needle" + strings.Repeat("x", 100*1024)
+	file := filepath.Join(t.TempDir(), "min.js")
+	if err := os.WriteFile(file, []byte(longLine+"\nneedle after\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, code := runGrepCLI(t, "grep", "needle", file, "--json", "--full")
+	if code != 0 {
+		t.Fatalf("exit %d; stderr:\n%s", code, stderr)
+	}
+	var res struct {
+		Matches []struct {
+			Text string `json:"text"`
+		} `json:"matches"`
+		TotalMatches int `json:"total_matches"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &res); err != nil {
+		t.Fatalf("parse: %v\n%s", err, truncForMsg(stdout))
+	}
+	if res.TotalMatches != 2 || len(res.Matches) != 2 {
+		t.Fatalf("total_matches = %d with %d matches, want 2 and 2:\n%s",
+			res.TotalMatches, len(res.Matches), truncForMsg(stdout))
+	}
+	if res.Matches[0].Text != longLine {
+		t.Errorf("--full did not return the whole %d-byte line: got %d bytes",
+			len(longLine), len(res.Matches[0].Text))
+	}
+	if res.Matches[1].Text != "needle after" {
+		t.Errorf("line after the long one = %q, want %q", res.Matches[1].Text, "needle after")
+	}
+
+	stdout, _, code = runGrepCLI(t, "grep", "needle", file)
+	if code != 0 || !strings.Contains(stdout, "total: 2") {
+		t.Errorf("plain mode: exit %d, want total: 2:\n%s", code, truncForMsg(stdout))
+	}
+}
+
+// TestGrepLinesKeepScannerLineEndings defends the line reader that replaced
+// bufio.Scanner: a CRLF file's lines must not carry the \r, and a last line
+// with no newline must still be read, exactly as before.
+func TestGrepLinesKeepScannerLineEndings(t *testing.T) {
+	var got []string
+	err := grepLines(strings.NewReader("one\r\ntwo\nthree"), func(line string) bool {
+		got = append(got, line)
+		return true
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"one", "two", "three"}; !slices.Equal(got, want) {
+		t.Errorf("lines = %q, want %q", got, want)
+	}
+}
+
+// TestGrepLinesReportsReadErrors defends against a failed read ending the
+// scan quietly: a read error must reach the caller, not look like the end of
+// a file with no more matches.
+func TestGrepLinesReportsReadErrors(t *testing.T) {
+	boom := errors.New("boom")
+	r := io.MultiReader(strings.NewReader("needle\n"), iotest.ErrReader(boom))
+	n := 0
+	err := grepLines(r, func(string) bool { n++; return true })
+	if !errors.Is(err, boom) {
+		t.Errorf("err = %v, want %v", err, boom)
+	}
+	if n != 1 {
+		t.Errorf("read %d lines before the error, want 1", n)
+	}
+}
+
+// TestGrepSkipsDirectorySymlinksInTree defends grep over an ordinary tree that
+// holds a symlink to a directory (pnpm, vendor and venv layouts do).
+// filepath.Walk reports such a link as a file, so grep opened it and the first
+// read returned EISDIR; once read errors were reported instead of dropped,
+// that failed the whole search and hid the real matches. The link is not a
+// file to search, so it is skipped and the run returns its matches.
+func TestGrepSkipsDirectorySymlinksInTree(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "target"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pkg", "a.txt"), []byte("needle here\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("target", filepath.Join(dir, "link")); err != nil {
+		t.Skipf("cannot create a symlink here: %v", err)
+	}
+
+	for _, mode := range [][]string{{"--json"}, nil} {
+		stdout, stderr, code := runGrepCLI(t, append([]string{"grep", "needle", dir}, mode...)...)
+		if code != 0 {
+			t.Fatalf("%v: exit %d; stdout:\n%s\nstderr:\n%s", mode, code, stdout, stderr)
+		}
+		if !strings.Contains(stdout, "needle here") {
+			t.Errorf("%v: the match beside the directory symlink was lost:\n%s", mode, stdout)
+		}
+	}
+}
+
+// TestGrepReadErrorFailsTheRun defends the read-error path in runGrep: a file
+// whose read fails part-way must fail the run and name the file once, not end
+// the scan quietly as if the file had no more matches.
+func TestGrepReadErrorFailsTheRun(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "a.txt")
+	if err := os.WriteFile(file, []byte("needle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	orig := grepOpen
+	t.Cleanup(func() { grepOpen = orig })
+
+	// A bare error gets the file named; an *os.PathError, which is what
+	// os.File.Read returns, already names it and must not be wrapped twice.
+	for _, readErr := range []error{
+		errors.New("boom"),
+		&os.PathError{Op: "read", Path: file, Err: errors.New("boom")},
+	} {
+		grepOpen = func(string) (io.ReadCloser, error) {
+			return io.NopCloser(io.MultiReader(strings.NewReader("needle\n"), iotest.ErrReader(readErr))), nil
+		}
+
+		cmd := newGrepCmd()
+		out := new(bytes.Buffer)
+		cmd.SetOut(out)
+		cmd.SetErr(new(bytes.Buffer))
+		cmd.SetArgs([]string{"needle", file})
+		err := cmd.Execute()
+		if err == nil {
+			t.Fatalf("a failed read reported success:\n%s", out.String())
+		}
+		if msg := err.Error(); strings.Count(msg, file) != 1 || !strings.Contains(msg, "boom") {
+			t.Errorf("err = %q, want it to name %s once and carry the cause", msg, file)
+		}
+		if strings.Contains(out.String(), "total") {
+			t.Errorf("printed a result for a failed search:\n%s", out.String())
+		}
 	}
 }
