@@ -175,10 +175,25 @@ func tildeHome(path, home string) string {
 
 // Execute runs the root command
 func Execute() {
-	if err := NewRootCmd().Execute(); err != nil {
-		f := output.New(GlobalJSONOutput, GlobalMinOutput, os.Stdout)
-		os.Exit(f.PrintError(err))
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+// run executes one invocation and returns its exit status.
+func run(args []string, stdout, stderr io.Writer) int {
+	root := NewRootCmd()
+	root.SetArgs(args)
+	root.SetOut(stdout)
+	root.SetErr(stderr)
+	cmd, err := root.ExecuteC()
+	if err == nil {
+		return 0
 	}
+	_ = cmd
+	w := stderr
+	if GlobalAXIOutput || GlobalJSONOutput {
+		w = stdout
+	}
+	return output.New(GlobalJSONOutput, GlobalMinOutput, w).PrintError(err)
 }
 
 // splitCSV splits a comma-separated string, trimming blanks.
