@@ -713,10 +713,10 @@ func TestGrepReadErrorFailsTheRun(t *testing.T) {
 func TestGrepLinesCapsLineLength(t *testing.T) {
 	orig := grepMaxLineBytes
 	t.Cleanup(func() { grepMaxLineBytes = orig })
-	grepMaxLineBytes = 1024
+	grepMaxLineBytes = 100 << 10
 
 	// A line exactly at the cap is still read whole, as is the line after it.
-	atCap := strings.Repeat("x", 1024)
+	atCap := strings.Repeat("x", grepMaxLineBytes)
 	var got []string
 	err := grepLines(strings.NewReader(atCap+"\nnext\n"), func(line string) bool {
 		got = append(got, line)

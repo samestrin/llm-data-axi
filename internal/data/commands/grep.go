@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -49,7 +50,7 @@ var grepMaxLineBytes = 64 << 20
 
 // errLineTooLong is a line over grepMaxLineBytes. It fails the run: skipping
 // the rest of the file would be a short result reported as a whole one.
-var errLineTooLong = errors.New("line too long")
+var errLineTooLong = errors.New("longer than the grep line limit")
 
 // GrepMatch represents a single grep match. Truncated and FullLength are set
 // only when the line was cut, so the minimal {file,text} schema is unchanged
@@ -72,7 +73,10 @@ type GrepResult struct {
 	Matches      []GrepMatch `json:"matches,omitempty"`
 	Files        []string    `json:"files,omitempty"`
 	TotalMatches int         `json:"total_matches"`
-	Help         []string    `json:"help,omitempty"`
+	// BinarySkipped names each file passed over as binary: a skipped file
+	// must not look like a searched file with no match.
+	BinarySkipped []string `json:"binary_skipped,omitempty"`
+	Help          []string `json:"help,omitempty"`
 }
 
 // newGrepCmd creates the grep command
@@ -177,8 +181,18 @@ func runGrep(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
+		// A binary file is not text to search line by line: /proc/self/pagemap
+		// read as text ran the process out of memory. The skip is reported, so
+		// a file never searched is not a silent part of "total: 0".
+		br := bufio.NewReaderSize(file, grepBinarySniff)
+		if grepIsBinary(br) {
+			file.Close()
+			result.BinarySkipped = append(result.BinarySkipped, filePath)
+			continue
+		}
+
 		lineNum := 0
-		readErr := grepLines(file, func(line string) bool {
+		readErr := grepLines(br, func(line string) bool {
 			lineNum++
 
 			if re.MatchString(line) {
@@ -244,15 +258,34 @@ func runGrep(cmd *cobra.Command, args []string) error {
 // grepLines calls fn with each line of r, without its "\n" or "\r\n", until
 // fn returns false or r is exhausted. It replaces bufio.Scanner, whose 64 KiB
 // token cap stopped the scan at the first longer line: with Err() unchecked,
-// a match in a minified file read as `total: 0` and exit 0. A line of any
-// length is read whole here, and a read error is returned, never dropped.
+// a match in a minified file read as `total: 0` and exit 0. A line up to
+// grepMaxLineBytes is read whole; a longer one is errLineTooLong, read no
+// further than the cap, and a read error is returned, never dropped.
 func grepLines(r io.Reader, fn func(line string) bool) error {
 	br := bufio.NewReader(r)
+	var long []byte
+	lineNum := 0
 	for {
-		line, err := br.ReadString('\n')
+		chunk, err := br.ReadSlice('\n')
+		n := len(long) + len(chunk)
+		if err == nil {
+			n-- // the "\n" is not part of the line
+		}
+		if n > grepMaxLineBytes {
+			return fmt.Errorf("line %d: %w (%d bytes)", lineNum+1, errLineTooLong, grepMaxLineBytes)
+		}
+		if err == bufio.ErrBufferFull {
+			long = append(long, chunk...)
+			continue
+		}
+		line := chunk
+		if len(long) > 0 {
+			line = append(long, chunk...)
+			long = long[:0]
+		}
 		if len(line) > 0 {
-			line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
-			if !fn(line) {
+			lineNum++
+			if !fn(strings.TrimSuffix(strings.TrimSuffix(string(line), "\n"), "\r")) {
 				return nil
 			}
 		}
@@ -263,6 +296,18 @@ func grepLines(r io.Reader, fn func(line string) bool) error {
 			return err
 		}
 	}
+}
+
+// grepBinarySniff is how much of a file grep checks for a NUL byte before
+// treating it as binary: the same 8000 bytes git and GNU grep look at.
+const grepBinarySniff = 8000
+
+// grepIsBinary reports whether br's file starts like a binary one. It peeks,
+// so the bytes are still there for grepLines. A peek error is not an answer:
+// the file is read as text and grepLines meets the same error.
+func grepIsBinary(br *bufio.Reader) bool {
+	head, _ := br.Peek(grepBinarySniff)
+	return bytes.IndexByte(head, 0) >= 0
 }
 
 // grepZeroMatchHelp is the next step a search that found nothing offers. It
@@ -286,6 +331,11 @@ func printGrepText(w io.Writer, data interface{}) {
 	// for a search with no matches, which read as "something went wrong"
 	// rather than "zero matches" (AXI principles 4 and 5).
 	defer fmt.Fprintf(w, "total: %d\n", r.TotalMatches)
+	defer func() {
+		for _, f := range r.BinarySkipped {
+			fmt.Fprintf(w, "binary skipped: %s\n", f)
+		}
+	}()
 
 	if grepFilesOnly {
 		for _, f := range r.Files {
