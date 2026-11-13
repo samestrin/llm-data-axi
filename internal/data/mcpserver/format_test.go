@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -268,6 +269,132 @@ func TestResolveBinaryPathFallsBackToTheInstallLocation(t *testing.T) {
 	t.Setenv("LLM_DATA_BINARY", "")
 	// An empty PATH makes LookPath fail, which is the branch under test.
 	t.Setenv("PATH", "")
+	// Pin the executable to an empty fixture dir: the sibling step must not
+	// accidentally find a file beside the test binary itself.
+	withExecutable(t, filepath.Join(fixtureDir(t), "llm-data-mcp"))
+	if got := resolveBinaryPath(); got != "/usr/local/bin/llm-data" {
+		t.Errorf("resolveBinaryPath() = %q, want the install-location fallback", got)
+	}
+}
+
+// fixtureDir is t.TempDir with symlinks resolved, so a path built from it
+// matches what os.Executable would report (on macOS /var -> /private/var).
+func fixtureDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// withExecutable points the sibling lookup at a fixture path for one test.
+// The running test binary is not llm-data-mcp, so the executable path must be
+// injectable for the lookup to be testable at all.
+func withExecutable(t *testing.T, path string) {
+	t.Helper()
+	original := osExecutable
+	osExecutable = func() (string, error) { return path, nil }
+	t.Cleanup(func() { osExecutable = original })
+}
+
+func writeBinaryFixture(t *testing.T, path string, mode os.FileMode) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), mode); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Defends epic 09 T4 / AC4: install.sh puts both binaries in ~/.local/bin,
+// which is off PATH in a fresh shell. The server must find llm-data beside
+// its own executable instead of refusing to start.
+func TestResolveBinaryPathFindsTheSiblingBesideTheServerExecutable(t *testing.T) {
+	t.Setenv("LLM_DATA_BINARY", "")
+	t.Setenv("PATH", "")
+	dir := fixtureDir(t)
+	withExecutable(t, filepath.Join(dir, "llm-data-mcp"))
+	writeBinaryFixture(t, filepath.Join(dir, "llm-data"), 0o755)
+
+	if got, want := resolveBinaryPath(), filepath.Join(dir, "llm-data"); got != want {
+		t.Errorf("resolveBinaryPath() = %q, want the sibling %q", got, want)
+	}
+}
+
+// The plan pins PATH before the sibling: a stale llm-data on PATH shadows the
+// sibling, and that order is the accepted trade-off. If the order flips, this
+// test goes red.
+func TestResolveBinaryPathPrefersPATHOverTheSibling(t *testing.T) {
+	t.Setenv("LLM_DATA_BINARY", "")
+	pathDir := fixtureDir(t)
+	writeBinaryFixture(t, filepath.Join(pathDir, "llm-data"), 0o755)
+	t.Setenv("PATH", pathDir)
+
+	exeDir := fixtureDir(t)
+	withExecutable(t, filepath.Join(exeDir, "llm-data-mcp"))
+	writeBinaryFixture(t, filepath.Join(exeDir, "llm-data"), 0o755)
+
+	if got, want := resolveBinaryPath(), filepath.Join(pathDir, "llm-data"); got != want {
+		t.Errorf("resolveBinaryPath() = %q, want the PATH entry %q", got, want)
+	}
+}
+
+// The override must beat every lookup step, not just PATH: CI points it at
+// ./build even when a sibling or a PATH entry exists.
+func TestResolveBinaryPathPrefersTheOverrideOverPATHAndTheSibling(t *testing.T) {
+	const override = "/somewhere/else/llm-data"
+	t.Setenv("LLM_DATA_BINARY", override)
+	pathDir := fixtureDir(t)
+	writeBinaryFixture(t, filepath.Join(pathDir, "llm-data"), 0o755)
+	t.Setenv("PATH", pathDir)
+	exeDir := fixtureDir(t)
+	withExecutable(t, filepath.Join(exeDir, "llm-data-mcp"))
+	writeBinaryFixture(t, filepath.Join(exeDir, "llm-data"), 0o755)
+
+	if got := resolveBinaryPath(); got != override {
+		t.Errorf("resolveBinaryPath() = %q, want the override %q", got, override)
+	}
+}
+
+// A sibling that cannot be exec'd must not be reported as found: the server
+// would start and every tool call would fail — a success report for a broken
+// install. Nothing may report success when it did not succeed.
+func TestResolveBinaryPathSkipsANonExecutableSibling(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no exec bit; usability there is the extension")
+	}
+	t.Setenv("LLM_DATA_BINARY", "")
+	t.Setenv("PATH", "")
+
+	t.Run("file without the exec bit", func(t *testing.T) {
+		dir := fixtureDir(t)
+		withExecutable(t, filepath.Join(dir, "llm-data-mcp"))
+		writeBinaryFixture(t, filepath.Join(dir, "llm-data"), 0o644)
+		if got := resolveBinaryPath(); got != "/usr/local/bin/llm-data" {
+			t.Errorf("resolveBinaryPath() = %q, want the fallback, not the non-executable sibling", got)
+		}
+	})
+
+	t.Run("directory named llm-data", func(t *testing.T) {
+		dir := fixtureDir(t)
+		withExecutable(t, filepath.Join(dir, "llm-data-mcp"))
+		if err := os.Mkdir(filepath.Join(dir, "llm-data"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if got := resolveBinaryPath(); got != "/usr/local/bin/llm-data" {
+			t.Errorf("resolveBinaryPath() = %q, want the fallback, not the directory", got)
+		}
+	})
+}
+
+// When the executable's own location cannot be determined, the lookup must
+// fall through to the install location, not panic or return a bare name.
+func TestResolveBinaryPathFallsBackWhenTheExecutableIsUnknown(t *testing.T) {
+	t.Setenv("LLM_DATA_BINARY", "")
+	t.Setenv("PATH", "")
+	original := osExecutable
+	osExecutable = func() (string, error) { return "", errors.New("no executable") }
+	t.Cleanup(func() { osExecutable = original })
+
 	if got := resolveBinaryPath(); got != "/usr/local/bin/llm-data" {
 		t.Errorf("resolveBinaryPath() = %q, want the install-location fallback", got)
 	}

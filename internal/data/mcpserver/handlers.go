@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -64,21 +66,73 @@ func normalizeArgs(args map[string]interface{}) map[string]interface{} {
 
 // BinaryPath is the path to the llm-data binary.
 //
-// Resolved from PATH at startup, falling back to the standard install location.
-// llm-tools hardcoded "/usr/local/bin/llm-support" with no lookup, so the
-// server refused to start for anyone who installed the CLI anywhere else — and
-// the repo's own end-to-end tests could not run without installing first.
-// LLM_DATA_BINARY overrides both, which is what lets CI point at ./build.
+// Resolved at startup from LLM_DATA_BINARY, then PATH, then the directory of
+// the running llm-data-mcp executable, falling back to the standard install
+// location. llm-tools hardcoded "/usr/local/bin/llm-support" with no lookup,
+// so the server refused to start for anyone who installed the CLI anywhere
+// else — and the repo's own end-to-end tests could not run without installing
+// first. The sibling step covers install.sh's default ~/.local/bin when that
+// directory is not on PATH. LLM_DATA_BINARY overrides every step, which is
+// what lets CI point at ./build.
 var BinaryPath = resolveBinaryPath()
+
+const (
+	// binaryName is the CLI executable the server runs.
+	binaryName = "llm-data"
+	// FallbackBinaryPath is the standard install location, tried last. It is
+	// exported so the startup error in cmd/llm-data-mcp can name it.
+	FallbackBinaryPath = "/usr/local/bin/llm-data"
+)
+
+// osExecutable is indirected so tests can point the sibling lookup at a
+// fixture directory; the running test binary is not llm-data-mcp.
+var osExecutable = os.Executable
 
 func resolveBinaryPath() string {
 	if override := os.Getenv("LLM_DATA_BINARY"); override != "" {
 		return override
 	}
-	if resolved, err := exec.LookPath("llm-data"); err == nil {
+	if resolved, err := exec.LookPath(binaryName); err == nil {
 		return resolved
 	}
-	return "/usr/local/bin/llm-data"
+	if sibling := SiblingBinaryPath(); sibling != "" {
+		if info, err := os.Stat(sibling); err == nil && usableBinaryFile(info) {
+			return sibling
+		}
+	}
+	return FallbackBinaryPath
+}
+
+// SiblingBinaryPath returns the llm-data candidate beside the running
+// llm-data-mcp executable, or "" when the executable's location cannot be
+// determined. It does not check that the file exists: the startup error names
+// the location either way, so an operator can see where a sibling install
+// would be found.
+func SiblingBinaryPath() string {
+	exe, err := osExecutable()
+	if err != nil {
+		return ""
+	}
+	name := binaryName
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return filepath.Join(filepath.Dir(exe), name)
+}
+
+// usableBinaryFile reports whether info describes a file the server could
+// exec. A sibling without the exec bit must not be reported as found: the
+// server would start and every tool call would fail, which is a success
+// report for a broken install. Windows has no exec bit; LookPath checks file
+// extensions there instead.
+func usableBinaryFile(info os.FileInfo) bool {
+	if info.IsDir() {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		return true
+	}
+	return info.Mode()&0111 != 0
 }
 
 // CommandTimeout is the default timeout for command execution
