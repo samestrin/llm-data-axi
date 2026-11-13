@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestGitContextBasic(t *testing.T) {
@@ -618,5 +619,94 @@ func TestGitContextFullDiffDefendsAXIPrinciple3(t *testing.T) {
 	full := run("--full")
 	if len(full.Diff) <= 50_500 {
 		t.Errorf("--full still returned a cut diff: %d bytes", len(full.Diff))
+	}
+}
+
+// TestGitContextDiffCutKeepsUTF8Valid defends the 50,000-byte diff cut against
+// splitting a multi-byte rune: it sliced at a raw byte index, so a diff whose
+// 50,000th byte fell inside "é" emitted half a rune, which --json turned into
+// U+FFFD and plain/--axi wrote out as invalid UTF-8. Same bug #33 fixed in
+// truncate(), at the other cut site.
+func TestGitContextDiffCutKeepsUTF8Valid(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+	file := filepath.Join(tmpDir, "big.txt")
+	// A short old line keeps the added line's content within the first 50,000
+	// bytes of the diff, where the cut lands.
+	if err := os.WriteFile(file, []byte("b\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runGitCmd(t, tmpDir, "add", "big.txt")
+	runGitCmd(t, tmpDir, "commit", "-m", "add big file")
+
+	rawDiff := func() string {
+		t.Helper()
+		cmd := exec.Command("git", "diff")
+		cmd.Dir = tmpDir
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("git diff: %v", err)
+		}
+		return string(out)
+	}
+
+	// Probe with an all-ASCII rewrite to find where the added line's content
+	// starts in the diff (the header carries blob hashes, so its length is not
+	// a constant we can hard-code).
+	if err := os.WriteFile(file, []byte(strings.Repeat("c", 60_000)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	probe := rawDiff()
+	off := strings.Index(probe, "\n+c") + 2
+	if off < 2 {
+		t.Fatalf("could not locate the added line in the diff:\n%.200s", probe)
+	}
+
+	// Size the ASCII prefix so the first "é" (2 bytes) straddles byte 50,000:
+	// its first byte lands at 49,999 and its second at 50,000.
+	k := 50_000 - off - 1
+	content := strings.Repeat("c", k) + strings.Repeat("é", 30_000) + "\n"
+	if err := os.WriteFile(file, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Precondition: the raw diff really does straddle a rune at the cut, so a
+	// pass below cannot be a setup that never exercised the bug.
+	d := rawDiff()
+	if len(d) <= 50_000 || utf8.RuneStart(d[50_000]) {
+		t.Fatalf("setup does not straddle a rune at byte 50,000 (len=%d, off=%d)", len(d), off)
+	}
+
+	run := func(extra ...string) GitContext {
+		t.Helper()
+		cmd := newGitContextCmd()
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetArgs(append([]string{"--path", tmpDir, "--include-diff", "--json"}, extra...))
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var ctx GitContext
+		if err := json.Unmarshal(buf.Bytes(), &ctx); err != nil {
+			t.Fatalf("parse JSON: %v\n%s", err, buf.String())
+		}
+		return ctx
+	}
+
+	cut := run()
+	if !utf8.ValidString(cut.Diff) || strings.ContainsRune(cut.Diff, utf8.RuneError) {
+		t.Errorf("diff cut split a rune at byte 50,000")
+	}
+	if !strings.Contains(cut.Diff, "diff truncated") {
+		t.Errorf("cut diff lost its truncation marker:\n%.200s", cut.Diff)
+	}
+
+	full := run("--full")
+	if !utf8.ValidString(full.Diff) || strings.ContainsRune(full.Diff, utf8.RuneError) {
+		t.Errorf("--full diff is not valid UTF-8")
 	}
 }

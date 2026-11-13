@@ -3,8 +3,10 @@
 # projects that share this toolchain.
 #
 # Linter selection is pinned explicitly (errcheck, govet, ineffassign,
-# staticcheck) so it is identical in CI and in local runs. This is a stable,
-# reproducible subset, not a relaxation introduced to silence findings.
+# staticcheck) so local runs are a stable, reproducible subset, not a
+# relaxation introduced to silence findings. CI does not run golangci-lint:
+# it runs gofmt -s, go vet and go test -race (.github/workflows/test.yml), so
+# this config governs local linting only.
 version: "2"
 
 linters:

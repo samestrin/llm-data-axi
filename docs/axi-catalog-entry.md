@@ -16,10 +16,10 @@ Nothing in the tool makes a network call — a build-time guard (`internal/noweb
 
 Measured by `go run ./benchmarks` over six read-only commands, each run once with `--json` and once with `--axi`, on this repository and on `spf13/cobra@v1.8.0`. Tokens are approximated as bytes/4; "Saved" is the share of JSON bytes TOON does not spend. Full table: `benchmarks/RESULTS.md`.
 
-- **Total across all twelve runs: 326,274 JSON bytes (~81,568 tokens) against 228,619 TOON bytes (~57,154 tokens) — 29.9% saved.**
-- Largest single saving: `stats` on llm-data-axi, 661 JSON bytes → 259 TOON bytes (**60.8%** saved); on cobra, 735 → 268 (**63.5%**).
-- Largest absolute saving: `grep -n "^func " .` on llm-data-axi, 156,918 JSON bytes (~39,229 tokens) → 115,254 TOON bytes (~28,813 tokens), 26.6% saved.
-- `tree --depth 3` on llm-data-axi: 23,697 → 13,577 bytes (42.7% saved); on cobra: 11,202 → 7,507 bytes (33.0%).
+- **Total across all twelve runs: 294,538 JSON bytes (~73,634 tokens) against 198,573 TOON bytes (~49,643 tokens) — 32.6% saved.**
+- Largest single saving: `stats` on llm-data-axi, 623 JSON bytes → 221 TOON bytes (**64.5%** saved); on cobra, 735 → 268 (**63.5%**).
+- Largest absolute saving: `grep -n "^func " .` on llm-data-axi, 128,755 JSON bytes (~32,188 tokens) → 87,314 TOON bytes (~21,828 tokens), 32.2% saved.
+- `tree --depth 3` on llm-data-axi: 20,003 → 9,659 bytes (51.7% saved); on cobra: 11,202 → 7,507 bytes (33.0%).
 
 `tree`, `stats`, `grep` and `multigrep` print absolute paths in both formats, so figures shift with where the repository sits on disk; compare runs made from the same location.
 

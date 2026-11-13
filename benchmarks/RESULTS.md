@@ -18,16 +18,16 @@ Commands:
 
 | Repo | Command | JSON bytes | JSON tokens | TOON bytes | TOON tokens | Saved |
 |---|---|---:|---:|---:|---:|---:|
-| llm-data-axi | `tree` | 23697 | 5924 | 13577 | 3394 | 42.7% |
-| llm-data-axi | `stats` | 661 | 165 | 259 | 64 | 60.8% |
+| llm-data-axi | `tree` | 20003 | 5000 | 9659 | 2414 | 51.7% |
+| llm-data-axi | `stats` | 623 | 155 | 221 | 55 | 64.5% |
 | llm-data-axi | `detect` | 136 | 34 | 97 | 24 | 28.7% |
 | llm-data-axi | `discover-tests` | 223 | 55 | 166 | 41 | 25.6% |
-| llm-data-axi | `grep` | 156918 | 39229 | 115254 | 28813 | 26.6% |
-| llm-data-axi | `multigrep` | 14508 | 3627 | 10214 | 2553 | 29.6% |
+| llm-data-axi | `grep` | 128755 | 32188 | 87314 | 21828 | 32.2% |
+| llm-data-axi | `multigrep` | 14416 | 3604 | 11128 | 2782 | 22.8% |
 | spf13/cobra@v1.8.0 | `tree` | 11202 | 2800 | 7507 | 1876 | 33.0% |
 | spf13/cobra@v1.8.0 | `stats` | 735 | 183 | 268 | 67 | 63.5% |
 | spf13/cobra@v1.8.0 | `detect` | 137 | 34 | 98 | 24 | 28.5% |
 | spf13/cobra@v1.8.0 | `discover-tests` | 215 | 53 | 160 | 40 | 25.6% |
-| spf13/cobra@v1.8.0 | `grep` | 108990 | 27247 | 75809 | 18952 | 30.4% |
-| spf13/cobra@v1.8.0 | `multigrep` | 8852 | 2213 | 5210 | 1302 | 41.1% |
-| **total** |  | 326274 | 81568 | 228619 | 57154 | 29.9% |
+| spf13/cobra@v1.8.0 | `grep` | 109014 | 27253 | 75828 | 18957 | 30.4% |
+| spf13/cobra@v1.8.0 | `multigrep` | 9079 | 2269 | 6127 | 1531 | 32.5% |
+| **total** |  | 294538 | 73634 | 198573 | 49643 | 32.6% |
