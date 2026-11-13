@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -838,5 +839,37 @@ func TestGrepSkipsBinaryFilesAndSaysSo(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "binary skipped: "+filepath.Join(dir, "b.bin")) || !strings.Contains(stdout, "total: 0") {
 		t.Errorf("plain mode must name the skipped binary file beside total: 0:\n%s", stdout)
+	}
+}
+
+// TestGrepPlainModeCapsBinarySkippedLines defends plain output in a tree with
+// many binary files (checked-in images): one line per skipped file would bury
+// the matches. Plain mode names the first few and counts the rest; --json
+// keeps every name.
+func TestGrepPlainModeCapsBinarySkippedLines(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 8 {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("img%d.png", i)), []byte("\x89PNG\x00"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	stdout, _, code := runGrepCLI(t, "grep", "needle", dir)
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if n := strings.Count(stdout, "binary skipped: "+dir); n != grepBinarySkippedShown {
+		t.Errorf("plain mode named %d skipped files, want %d:\n%s", n, grepBinarySkippedShown, stdout)
+	}
+	if !strings.Contains(stdout, fmt.Sprintf("binary skipped: %d more", 8-grepBinarySkippedShown)) {
+		t.Errorf("plain mode must count the files it did not name:\n%s", stdout)
+	}
+
+	stdout, _, _ = runGrepCLI(t, "grep", "needle", dir, "--json")
+	var res struct {
+		BinarySkipped []string `json:"binary_skipped"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &res); err != nil || len(res.BinarySkipped) != 8 {
+		t.Errorf("--json must name all 8 skipped files, got %d (%v)", len(res.BinarySkipped), err)
 	}
 }

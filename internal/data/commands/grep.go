@@ -302,6 +302,10 @@ func grepLines(r io.Reader, fn func(line string) bool) error {
 // treating it as binary: the same 8000 bytes git and GNU grep look at.
 const grepBinarySniff = 8000
 
+// grepBinarySkippedShown is how many skipped binary files plain output names
+// before it counts the rest, so a tree of images does not bury the matches.
+const grepBinarySkippedShown = 5
+
 // grepIsBinary reports whether br's file starts like a binary one. It peeks,
 // so the bytes are still there for grepLines. A peek error is not an answer:
 // the file is read as text and grepLines meets the same error.
@@ -332,7 +336,11 @@ func printGrepText(w io.Writer, data interface{}) {
 	// rather than "zero matches" (AXI principles 4 and 5).
 	defer fmt.Fprintf(w, "total: %d\n", r.TotalMatches)
 	defer func() {
-		for _, f := range r.BinarySkipped {
+		for i, f := range r.BinarySkipped {
+			if i == grepBinarySkippedShown {
+				fmt.Fprintf(w, "binary skipped: %d more\n", len(r.BinarySkipped)-i)
+				break
+			}
 			fmt.Fprintf(w, "binary skipped: %s\n", f)
 		}
 	}()
