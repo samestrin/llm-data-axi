@@ -106,7 +106,7 @@ llm-data setup --dry-run  # show what would be written
 llm-data-mcp        # speaks MCP over stdio
 ```
 
-It resolves `llm-data` from `PATH`, falling back to `/usr/local/bin/llm-data`. Set `LLM_DATA_BINARY` to point it somewhere else.
+It looks for `llm-data` in `LLM_DATA_BINARY` (if set), on `PATH`, beside the `llm-data-mcp` executable, and finally at `/usr/local/bin/llm-data`. The sibling step means an install into `~/.local/bin` (the installer's default) works even when that directory is not on `PATH`. If the binary is nowhere, the startup error names the path tried, the lookup order and `LLM_DATA_BINARY`.
 
 By default it asks the CLI for TOON (`--axi`). To get `--json --min` instead, either set `LLM_DATA_MCP_AXI=false` for the whole server, or pass `"format": "json"` on a single tool call; `"format": "axi"` asks for TOON on one call when the server is set to JSON. Any other `format` value is an error, except on `runtime`, whose `format` is its time format. A `LLM_DATA_MCP_AXI` value that is not a boolean keeps TOON and logs a warning to stderr. The `llm-tools` server appended `--json --min` unconditionally, which made `--axi` unreachable through MCP no matter what the CLI supported.
 

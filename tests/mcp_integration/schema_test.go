@@ -9,6 +9,7 @@ package mcp_integration
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -126,13 +127,24 @@ func expectedIDs(requests []string) map[int]bool {
 func speak(t *testing.T, requests []string) map[int]rpcResponse {
 	t.Helper()
 	cli, mcp := builtBinaries(t)
-
-	cmd := exec.Command(mcp)
 	// Points the server at the freshly built CLI rather than whatever happens
 	// to be installed, so this test cannot pass against a stale binary.
 	// LLM_DATA_MCP_AXI is cleared so an exported value cannot change which
 	// encoding the default-format assertions see.
-	cmd.Env = append(os.Environ(), "LLM_DATA_BINARY="+cli, "LLM_DATA_MCP_AXI=")
+	env := append(os.Environ(), "LLM_DATA_BINARY="+cli, "LLM_DATA_MCP_AXI=")
+	return speakWith(t, mcp, env, requests)
+}
+
+// speakWith is speak against a chosen server binary and environment, so a
+// test can exercise the binary lookup itself (epic 09 T4) instead of the
+// LLM_DATA_BINARY override. stderr is captured: a server that dies at startup
+// says why there, and a failure message without it hides the actual error.
+func speakWith(t *testing.T, mcp string, env []string, requests []string) map[int]rpcResponse {
+	t.Helper()
+	cmd := exec.Command(mcp)
+	cmd.Env = env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -189,12 +201,26 @@ func speak(t *testing.T, requests []string) map[int]rpcResponse {
 
 	select {
 	case <-allSeen:
+	case <-scannerDone:
+		// The server exited, so no further response can arrive. Fail now
+		// rather than waiting out the full timeout on a dead server.
+		mu.Lock()
+		n := len(got)
+		mu.Unlock()
+		if n < len(want) {
+			_ = cmd.Process.Kill()
+			// Wait joins the stderr copy goroutine before the buffer is read.
+			_ = cmd.Wait()
+			t.Fatalf("server exited after %d of %d responses; stderr: %s", n, len(want), stderr.String())
+			return nil
+		}
 	case <-time.After(30 * time.Second):
 		_ = cmd.Process.Kill()
 		<-scannerDone
+		_ = cmd.Wait()
 		mu.Lock()
 		defer mu.Unlock()
-		t.Fatalf("only %d of %d responses arrived within 30s", len(got), len(want))
+		t.Fatalf("only %d of %d responses arrived within 30s; stderr: %s", len(got), len(want), stderr.String())
 		return nil
 	}
 

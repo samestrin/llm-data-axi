@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **`llm-data-mcp` finds `llm-data` beside its own executable when it is not on `PATH`.** The lookup now tries `LLM_DATA_BINARY`, then `PATH`, then the directory of the running `llm-data-mcp`, then `/usr/local/bin/llm-data`, so the installer's default `~/.local/bin` works without a `PATH` entry. A sibling that is a directory or lacks the exec bit is not reported as found. When the binary is nowhere, the startup error names the path tried, the sibling location and `LLM_DATA_BINARY` instead of a bare "not found".
+
 - **`multigrep --json --min` no longer prints a zeroed long count beside its short alias.** Since 1.0.2's explicit-zero change, minimal output carried `"tm":2` next to `"total_matches":0` (and the same for `ks`, `kwm`, `fs`), and the MCP server sends `--json --min`. Minimal output now carries only the short aliases; full output still states every count, including 0.
 - **`multigrep`'s plain-mode `(long lines truncated; rerun with --full)` hint shows only under a keyword whose own lines were cut.** It used to print under every keyword, including ones with 0 matches, whenever any keyword had a cut line.
 - **`grep` and `multigrep` no longer split a multi-byte character at the truncation cut.** The 200-byte (`grep`) and 80-byte (`multigrep`) cuts sliced at a raw byte index, so a line whose cut fell inside a character like `é` emitted half of it: `--json` showed `\ufffd` and the text was not the line's real prefix. The cut now backs off to the previous character boundary and still ends in `...`; `full_length` is unchanged.
