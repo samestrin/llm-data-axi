@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -121,12 +123,54 @@ var homeHelp = []string{
 	"Run `llm-data <command> --help` for one command's flags",
 }
 
-// HomeView is what a bare `llm-data` prints: where the binary is and what it
-// is for, instead of the full cobra help page.
+// HomeView is what a bare `llm-data` prints: where the binary is, what it is
+// for and the repository it was run in, instead of the full cobra help page.
 type HomeView struct {
-	Bin         string   `json:"bin"`
-	Description string   `json:"description"`
-	Help        []string `json:"help,omitempty"`
+	Bin         string `json:"bin"`
+	Description string `json:"description"`
+	RepoRoot    string `json:"repo_root,omitempty"`
+	ProjectType string `json:"project_type,omitempty"`
+	// A pointer so a clean tree prints 0 rather than dropping the field.
+	GitChanges *int `json:"git_changes,omitempty"`
+	// Repo is set only when the repository fields are missing or partial:
+	// "no repository", or "git unavailable: <reason>".
+	Repo string   `json:"repo,omitempty"`
+	Help []string `json:"help,omitempty"`
+}
+
+// fillRepo adds the repository the working directory sits in. Every git
+// failure lands in Repo rather than in an error: the view is still worth
+// printing without it, and the run still exits 0.
+func (v *HomeView) fillRepo(home string) {
+	ctx, cancel := context.WithTimeout(context.Background(), homeGitTimeout)
+	defer cancel()
+
+	root, err := repoRootOf(ctx, "")
+	if errors.Is(err, errNotARepository) {
+		v.Repo = "no repository"
+		return
+	}
+	if err != nil {
+		v.Repo = gitUnavailable(err)
+		return
+	}
+	v.RepoRoot = tildeHome(root, home)
+	v.ProjectType = detectInDir(root).Stack
+
+	changes, err := gitChangesIn(ctx, root, "", true, false)
+	if err != nil {
+		// Never "no repository" here: the root was just found.
+		v.Repo = gitUnavailable(err)
+		return
+	}
+	v.GitChanges = &changes.Count
+}
+
+func gitUnavailable(err error) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Sprintf("git unavailable: no answer within %s", homeGitTimeout)
+	}
+	return "git unavailable: " + err.Error()
 }
 
 // runHome prints the home view. A path that cannot be resolved is an error,
@@ -138,6 +182,7 @@ func runHome(cmd *cobra.Command, args []string) error {
 	}
 	home, _ := os.UserHomeDir()
 	view := HomeView{Bin: tildeHome(exe, home), Description: homeDescription, Help: homeHelp}
+	view.fillRepo(home)
 	return output.New(GlobalJSONOutput, GlobalMinOutput, cmd.OutOrStdout()).Print(view, printHomeText)
 }
 
@@ -145,6 +190,16 @@ func printHomeText(w io.Writer, data interface{}) {
 	v := data.(HomeView)
 	fmt.Fprintf(w, "bin: %s\n", v.Bin)
 	fmt.Fprintf(w, "description: %s\n", v.Description)
+	if v.RepoRoot != "" {
+		fmt.Fprintf(w, "repo_root: %s\n", v.RepoRoot)
+		fmt.Fprintf(w, "project_type: %s\n", v.ProjectType)
+	}
+	if v.GitChanges != nil {
+		fmt.Fprintf(w, "git_changes: %d\n", *v.GitChanges)
+	}
+	if v.Repo != "" {
+		fmt.Fprintf(w, "repo: %s\n", v.Repo)
+	}
 }
 
 // tildeHome writes path with a leading home directory as "~". Only a whole

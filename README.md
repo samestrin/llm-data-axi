@@ -89,7 +89,13 @@ A command that ran reports 0; a command that failed reports 1 with a structured 
 
 ## A bare run: the home view
 
-`llm-data` with no arguments prints two lines — `bin:` (the executable path, home directory written as `~`) and `description:` (one sentence) — instead of a help page. `--json` and `--axi` add a `help` list of next steps. `--help` still prints the full help, and an unknown subcommand still fails with exit 2.
+`llm-data` with no arguments prints `bin:` (the executable path, home directory written as `~`) and `description:` (one sentence) instead of a help page, followed by the repository it was run in:
+
+- inside a git repository: `repo_root:` (home written as `~`), `project_type:` (the `detect` stack) and `git_changes:` (the `git-changes` count, `0` for a clean tree);
+- outside one: `repo: no repository`, printed only when git itself says so;
+- when git is missing, fails or does not answer within 2 seconds: `repo: git unavailable: <reason>`, never "no repository".
+
+Every case exits 0. `--json` and `--axi` carry the same fields plus a `help` list of next steps. `--help` still prints the full help, and an unknown subcommand still fails with exit 2.
 
 ## Setup
 
