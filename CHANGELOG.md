@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **The `llm-data` skill no longer names the removed `yaml list`.** The skill `llm-data setup` writes, and its committed twin at `skills/llm-data/SKILL.md`, said `llm-data yaml get|set|list`; `yaml list` is gone, so an agent following it got an unknown-command error. It now says `llm-data yaml get|set|multiget|multiset`, and a test fails if the skill names any command or subcommand that is not registered.
+
 ## [1.1.0] - 2026-11-13
 
 ### Added
