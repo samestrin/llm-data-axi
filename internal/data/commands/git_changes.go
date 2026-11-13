@@ -3,8 +3,8 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -78,15 +78,13 @@ Examples:
 }
 
 func runGitChanges(cmd *cobra.Command, args []string) error {
-	// Check if git is available
-	if _, err := exec.LookPath("git"); err != nil {
-		return fmt.Errorf("git command not found. Please ensure git is installed and in your PATH")
-	}
-
-	// Check if we're in a git repository
-	checkCmd := exec.Command("git", "rev-parse", "--git-dir")
-	if err := checkCmd.Run(); err != nil {
-		return fmt.Errorf("not a git repository (or any parent up to mount point)")
+	// Check we're in a git repository. Only git's own answer says we are
+	// not; any other failure, git missing or broken, keeps its own reason.
+	if _, err := runGitCtx(context.Background(), "", "rev-parse", "--git-dir"); err != nil {
+		if errors.Is(err, errNotARepository) {
+			return fmt.Errorf("not a git repository (or any parent up to mount point)")
+		}
+		return err
 	}
 
 	// Normalize path filter

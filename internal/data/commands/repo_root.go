@@ -79,6 +79,12 @@ func runRepoRoot(cmd *cobra.Command, args []string) error {
 	root, err := repoRootOf(context.Background(), absPath)
 	result := RepoRootResult{}
 
+	// Only git's own answer is "not a git repository". Any other failure, git
+	// missing or broken, is not an answer about the directory and exits
+	// non-zero with its own reason.
+	if err != nil && !errors.Is(err, errNotARepository) {
+		return fmt.Errorf("repo-root: %w", err)
+	}
 	if err != nil {
 		result.Error = "not a git repository"
 		if repoRootValidate {
