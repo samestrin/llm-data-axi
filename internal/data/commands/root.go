@@ -84,6 +84,7 @@ output that costs fewer tokens than JSON.`,
 	root.Flags().BoolVarP(&showVersion, "version", "v", false, "Print the version and exit (also -V)")
 	root.Flags().BoolVarP(&showVersion, "version-upper", "V", false, "Print the version and exit")
 	_ = root.Flags().MarkHidden("version-upper")
+
 	// Inherited by every subcommand: cobra looks up the parent chain for one.
 	root.SetFlagErrorFunc(flagError)
 

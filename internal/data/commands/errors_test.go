@@ -156,3 +156,16 @@ func TestModeFlagAfterTerminatorIsNotAMode(t *testing.T) {
 		t.Errorf("want the plain error on stderr, got %q", stderr)
 	}
 }
+
+// Defends the guard in flagError: only an unknown flag gets the flag list. A
+// missing value already names the flag the caller used, so its cobra wording
+// must pass through unchanged, still structured on stdout and still exit 2.
+func TestMissingFlagValueKeepsCobraMessage(t *testing.T) {
+	code, stdout, stderr := runCLI(t, "yaml", "get", "--axi", "--file")
+	if code != 2 || stderr != "" {
+		t.Errorf("exit %d stderr %q, want 2 and empty", code, stderr)
+	}
+	if stdout != "error: true\nmessage: \"flag needs an argument: --file\"\n" {
+		t.Errorf("want cobra's message unchanged in TOON, got %q", stdout)
+	}
+}
