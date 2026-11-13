@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/samestrin/llm-data-axi/pkg/output"
 	"github.com/spf13/cobra"
@@ -108,6 +109,10 @@ const homeDescription = "Deterministic commands for reading, searching and resha
 // executablePath is os.Executable, swappable so a test can pin the path the
 // home view reports.
 var executablePath = os.Executable
+
+// homeGitTimeout bounds every git call the home view makes. A bare run is
+// what a session-start hook calls, so a hung git must not hang it.
+var homeGitTimeout = 2 * time.Second
 
 // homeHelp is the next step a bare run offers in --json and --axi. The plain
 // view stays two lines; help there is what --help is for.
