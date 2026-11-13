@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 // Every test here runs setup against real files in t.TempDir(), with HOME
@@ -502,4 +504,49 @@ func TestSetupIsRegistered(t *testing.T) {
 		}
 	}
 	t.Error("setup is not registered on the root command")
+}
+
+// Defends the skill text against naming commands that do not exist: it said
+// `llm-data yaml get|set|list` long after `yaml list` was removed, so every
+// agent that installed the skill was taught a command that fails. Each
+// backticked `llm-data ...` span must resolve, word by word, to registered
+// commands, and an a|b|c list of subcommands must name exactly the ones
+// registered, so a subcommand added later cannot go unmentioned either.
+func TestSkillNamesOnlyRealCommands(t *testing.T) {
+	root := NewRootCmd()
+	spans := 0
+	for i, part := range strings.Split(setupSkillContent, "`") {
+		if i%2 == 0 || !strings.HasPrefix(part, "llm-data ") {
+			continue
+		}
+		spans++
+		cmd := root
+		for _, word := range strings.Fields(part)[1:] {
+			if strings.HasPrefix(word, "-") || strings.HasPrefix(word, "<") {
+				break
+			}
+			subs := map[string]*cobra.Command{}
+			for _, c := range cmd.Commands() {
+				if c.IsAvailableCommand() {
+					subs[c.Name()] = c
+				}
+			}
+			named := strings.Split(word, "|")
+			for _, n := range named {
+				if subs[n] == nil {
+					t.Errorf("skill names %q, but %q has no subcommand %q", part, cmd.CommandPath(), n)
+				}
+			}
+			if len(named) > 1 && len(named) != len(subs) {
+				t.Errorf("skill lists %q under %q, but it registers %d subcommands", word, cmd.CommandPath(), len(subs))
+			}
+			if len(named) > 1 || subs[word] == nil {
+				break
+			}
+			cmd = subs[word]
+		}
+	}
+	if spans == 0 {
+		t.Fatal("found no `llm-data ...` spans in the skill text; the parser is broken")
+	}
 }
