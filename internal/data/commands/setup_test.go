@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -506,16 +507,52 @@ func TestSetupIsRegistered(t *testing.T) {
 	t.Error("setup is not registered on the root command")
 }
 
-// Defends the skill text against naming commands that do not exist: it said
-// `llm-data yaml get|set|list` long after `yaml list` was removed, so every
-// agent that installed the skill was taught a command that fails. Each
-// backticked `llm-data ...` span must resolve, word by word, to registered
-// commands, and an a|b|c list of subcommands must name exactly the ones
-// registered, so a subcommand added later cannot go unmentioned either.
+// Defends the installed skill against naming commands that do not exist: it
+// said `llm-data yaml get|set|list` long after `yaml list` was removed, so
+// every agent that installed the skill was taught a command that fails. The
+// test runs setup and reads the SKILL.md it writes, and the Cobra registry is
+// the oracle: each backticked `llm-data ...` span must resolve, word by word,
+// to registered commands, and an a|b|c list of subcommands must name exactly
+// the ones registered, so a subcommand added later cannot go unmentioned.
 func TestSkillNamesOnlyRealCommands(t *testing.T) {
+	project, _ := setupEnv(t)
+	if _, err := runSetupCmd(t, "--path", project); err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+	problems, spans := skillCommandProblems(NewRootCmd(), string(readFile(t, skillPath(project))))
+	if spans == 0 {
+		t.Fatal("found no `llm-data ...` spans in the installed skill; the parser is broken")
+	}
+	for _, p := range problems {
+		t.Error(p)
+	}
+}
+
+// Defends TestSkillNamesOnlyRealCommands against passing vacuously: the
+// checker must reject the stale `yaml list` it was written for, and a
+// subcommand list that leaves a registered subcommand out.
+func TestSkillCommandProblemsRejectsStaleReferences(t *testing.T) {
 	root := NewRootCmd()
-	spans := 0
-	for i, part := range strings.Split(setupSkillContent, "`") {
+	for _, text := range []string{
+		"Use `llm-data yaml get|set|multiget|multiset|list` here.",
+		"Use `llm-data yaml list <file>` here.",
+		"Use `llm-data yaml get|set` here.",
+		"Use `llm-data nosuchcommand` here.",
+	} {
+		if problems, _ := skillCommandProblems(root, text); len(problems) == 0 {
+			t.Errorf("checker accepted %q", text)
+		}
+	}
+	if problems, spans := skillCommandProblems(root, "Use `llm-data yaml get|set|multiget|multiset` here."); len(problems) != 0 || spans != 1 {
+		t.Errorf("checker rejected the real yaml subcommands: %v (spans %d)", problems, spans)
+	}
+}
+
+// skillCommandProblems checks every backticked `llm-data ...` span in text
+// against the commands registered under root, returning one message per
+// problem and the number of spans it checked.
+func skillCommandProblems(root *cobra.Command, text string) (problems []string, spans int) {
+	for i, part := range strings.Split(text, "`") {
 		if i%2 == 0 || !strings.HasPrefix(part, "llm-data ") {
 			continue
 		}
@@ -534,11 +571,11 @@ func TestSkillNamesOnlyRealCommands(t *testing.T) {
 			named := strings.Split(word, "|")
 			for _, n := range named {
 				if subs[n] == nil {
-					t.Errorf("skill names %q, but %q has no subcommand %q", part, cmd.CommandPath(), n)
+					problems = append(problems, fmt.Sprintf("skill names %q, but %q has no subcommand %q", part, cmd.CommandPath(), n))
 				}
 			}
 			if len(named) > 1 && len(named) != len(subs) {
-				t.Errorf("skill lists %q under %q, but it registers %d subcommands", word, cmd.CommandPath(), len(subs))
+				problems = append(problems, fmt.Sprintf("skill lists %q under %q, but it registers %d subcommands", word, cmd.CommandPath(), len(subs)))
 			}
 			if len(named) > 1 || subs[word] == nil {
 				break
@@ -546,7 +583,5 @@ func TestSkillNamesOnlyRealCommands(t *testing.T) {
 			cmd = subs[word]
 		}
 	}
-	if spans == 0 {
-		t.Fatal("found no `llm-data ...` spans in the skill text; the parser is broken")
-	}
+	return problems, spans
 }
