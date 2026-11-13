@@ -146,6 +146,7 @@ func TestStartupErrorNamesTheTriedPathAndTheOverride(t *testing.T) {
 		absent,                         // the path tried
 		"LLM_DATA_BINARY",              // the override that fixes it
 		filepath.Join(dir, "llm-data"), // the sibling location that was looked at
+		"/usr/local/bin/llm-data",      // the last-resort install location
 	} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("the startup error does not name %q; got:\n%s", want, out)
