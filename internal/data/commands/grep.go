@@ -154,12 +154,9 @@ func runGrep(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		scanner := bufio.NewScanner(file)
 		lineNum := 0
-
-		for scanner.Scan() {
+		readErr := grepLines(file, func(line string) bool {
 			lineNum++
-			line := scanner.Text()
 
 			if re.MatchString(line) {
 				if grepFilesOnly {
@@ -167,7 +164,7 @@ func runGrep(cmd *cobra.Command, args []string) error {
 						result.Files = append(result.Files, filePath)
 						matchedFiles[filePath] = true
 					}
-					break
+					return false
 				}
 
 				match := GrepMatch{
@@ -188,9 +185,15 @@ func runGrep(cmd *cobra.Command, args []string) error {
 				}
 				result.Matches = append(result.Matches, match)
 			}
-		}
+			return true
+		})
 
 		file.Close()
+		// A read that failed part-way is an error, not a file with no more
+		// matches: reporting it as the end of the file is a false zero.
+		if readErr != nil {
+			return fmt.Errorf("read %s: %w", filePath, readErr)
+		}
 	}
 
 	if len(result.Matches) == 0 && len(result.Files) == 0 {
@@ -208,6 +211,30 @@ func runGrep(cmd *cobra.Command, args []string) error {
 
 	formatter := output.New(grepJSON, grepMinimal, cmd.OutOrStdout())
 	return formatter.Print(result, printGrepText)
+}
+
+// grepLines calls fn with each line of r, without its "\n" or "\r\n", until
+// fn returns false or r is exhausted. It replaces bufio.Scanner, whose 64 KiB
+// token cap stopped the scan at the first longer line: with Err() unchecked,
+// a match in a minified file read as `total: 0` and exit 0. A line of any
+// length is read whole here, and a read error is returned, never dropped.
+func grepLines(r io.Reader, fn func(line string) bool) error {
+	br := bufio.NewReader(r)
+	for {
+		line, err := br.ReadString('\n')
+		if len(line) > 0 {
+			line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+			if !fn(line) {
+				return nil
+			}
+		}
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
 }
 
 // grepZeroMatchHelp is the next step a search that found nothing offers. It
