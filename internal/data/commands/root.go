@@ -14,6 +14,13 @@ import (
 // Version is set at build time via ldflags
 var Version = "1.0.0"
 
+// bareVersion is Version without a leading "v". release.yml stamps the tag
+// name, so a release build carries "v1.1.0" and the version flags print
+// "1.1.0".
+func bareVersion() string {
+	return strings.TrimPrefix(Version, "v")
+}
+
 // Global output flags accessible to all commands
 var (
 	GlobalJSONOutput bool
@@ -37,6 +44,7 @@ var (
 // bound variable, so each invocation starts from a clean state with nothing to
 // reset by hand.
 func NewRootCmd() *cobra.Command {
+	var showVersion bool
 	root := &cobra.Command{
 		Use:   "llm-data",
 		Short: "Generic data, file and project analysis tools for LLM workflows",
@@ -46,7 +54,7 @@ workflows.
 
 Designed for fast startup, single binary distribution, and AXI (TOON)
 output that costs fewer tokens than JSON.`,
-		Version: Version,
+		Version: bareVersion(),
 		// No Args validator on purpose: with Args nil, cobra's legacyArgs rejects a
 		// stray word as "unknown command" before it looks at --help. cobra.NoArgs
 		// would let `llm-data typo --help` print help and exit 0.
@@ -67,9 +75,16 @@ output that costs fewer tokens than JSON.`,
 		},
 	}
 
+	// -v, -V and --version print the bare version and nothing else. Both flags
+	// bind showVersion, so cobra's version check, which reads "version", sees
+	// -V too. They are root-local: under a subcommand -v is an unknown flag,
+	// not a silently ignored one.
+	root.SetVersionTemplate("{{.Version}}\n")
+	root.Flags().BoolVarP(&showVersion, "version", "v", false, "Print the version and exit (also -V)")
+	root.Flags().BoolVarP(&showVersion, "version-upper", "V", false, "Print the version and exit")
+	_ = root.Flags().MarkHidden("version-upper")
+
 	// Global persistent flags (available to all subcommands)
-	root.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
-	root.PersistentFlags().String("format", "text", "Output format: text, json")
 	root.PersistentFlags().Bool("no-gitignore", false, "Disable .gitignore filtering")
 	root.PersistentFlags().BoolVar(&GlobalJSONOutput, "json", false, "Output as JSON")
 	root.PersistentFlags().BoolVar(&GlobalMinOutput, "min", false, "Minimal/token-optimized output")

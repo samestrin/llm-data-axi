@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **`-v`, `-V` and `--version` print the bare version and exit 0.** A release build prints `1.1.0`, not `llm-data version v1.1.0`. Breaking: `-v` used to be a root `--verbose` that no command read, and `-V` was an unknown flag.
+- **The root `--verbose` and `--format` flags are gone.** Nothing read either, so `grep x . --verbose` ran as if the flag were absent; it is now an unknown-flag usage error. `multiexists --verbose` and `runtime --format` keep their own flags.
+- **`multiexists` drops the `-v` shorthand for `--verbose`.** `multiexists -v` is now rejected as an unknown shorthand flag; use `--verbose`.
+
 ### Fixed
 
 - **`multigrep --json --min` no longer prints a zeroed long count beside its short alias.** Since 1.0.2's explicit-zero change, minimal output carried `"tm":2` next to `"total_matches":0` (and the same for `ks`, `kwm`, `fs`), and the MCP server sends `--json --min`. Minimal output now carries only the short aliases; full output still states every count, including 0.
