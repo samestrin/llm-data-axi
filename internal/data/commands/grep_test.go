@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"unicode/utf8"
 )
 
@@ -553,5 +556,81 @@ func TestGrepPlainModePrintsFullHint(t *testing.T) {
 	}
 	if strings.Contains(stdout, "--full") {
 		t.Errorf("printed the --full hint with nothing cut:\n%s", stdout)
+	}
+}
+
+// TestGrepFindsMatchesOnLinesOver64KiB defends grep against a false zero on
+// minified or generated files: bufio.Scanner stops at a line over its 64 KiB
+// token limit, and scanner.Err() was never checked, so `grep needle min.js
+// --full` printed `total: 0` and exited 0 with a real match in the file. A
+// line past that size, and every line after it, must still be searched.
+func TestGrepFindsMatchesOnLinesOver64KiB(t *testing.T) {
+	longLine := "needle" + strings.Repeat("x", 100*1024)
+	file := filepath.Join(t.TempDir(), "min.js")
+	if err := os.WriteFile(file, []byte(longLine+"\nneedle after\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, code := runGrepCLI(t, "grep", "needle", file, "--json", "--full")
+	if code != 0 {
+		t.Fatalf("exit %d; stderr:\n%s", code, stderr)
+	}
+	var res struct {
+		Matches []struct {
+			Text string `json:"text"`
+		} `json:"matches"`
+		TotalMatches int `json:"total_matches"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &res); err != nil {
+		t.Fatalf("parse: %v\n%s", err, truncForMsg(stdout))
+	}
+	if res.TotalMatches != 2 || len(res.Matches) != 2 {
+		t.Fatalf("total_matches = %d with %d matches, want 2 and 2:\n%s",
+			res.TotalMatches, len(res.Matches), truncForMsg(stdout))
+	}
+	if res.Matches[0].Text != longLine {
+		t.Errorf("--full did not return the whole %d-byte line: got %d bytes",
+			len(longLine), len(res.Matches[0].Text))
+	}
+	if res.Matches[1].Text != "needle after" {
+		t.Errorf("line after the long one = %q, want %q", res.Matches[1].Text, "needle after")
+	}
+
+	stdout, _, code = runGrepCLI(t, "grep", "needle", file)
+	if code != 0 || !strings.Contains(stdout, "total: 2") {
+		t.Errorf("plain mode: exit %d, want total: 2:\n%s", code, truncForMsg(stdout))
+	}
+}
+
+// TestGrepLinesKeepScannerLineEndings defends the line reader that replaced
+// bufio.Scanner: a CRLF file's lines must not carry the \r, and a last line
+// with no newline must still be read, exactly as before.
+func TestGrepLinesKeepScannerLineEndings(t *testing.T) {
+	var got []string
+	err := grepLines(strings.NewReader("one\r\ntwo\nthree"), func(line string) bool {
+		got = append(got, line)
+		return true
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"one", "two", "three"}; !slices.Equal(got, want) {
+		t.Errorf("lines = %q, want %q", got, want)
+	}
+}
+
+// TestGrepLinesReportsReadErrors defends against a failed read ending the
+// scan quietly: a read error must reach the caller, not look like the end of
+// a file with no more matches.
+func TestGrepLinesReportsReadErrors(t *testing.T) {
+	boom := errors.New("boom")
+	r := io.MultiReader(strings.NewReader("needle\n"), iotest.ErrReader(boom))
+	n := 0
+	err := grepLines(r, func(string) bool { n++; return true })
+	if !errors.Is(err, boom) {
+		t.Errorf("err = %v, want %v", err, boom)
+	}
+	if n != 1 {
+		t.Errorf("read %d lines before the error, want 1", n)
 	}
 }
