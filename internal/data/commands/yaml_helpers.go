@@ -839,9 +839,7 @@ func outputDryRunJSON(cmd *cobra.Command, filePath string, changes []dryRunChang
 			"dry_run": true,
 			"changes": changes,
 		}
-		jsonBytes, _ := json.Marshal(output)
-		fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
-		return nil
+		return printJSONLine(cmd.OutOrStdout(), "dry run "+filePath, output)
 	}
 
 	// Full JSON with formatting

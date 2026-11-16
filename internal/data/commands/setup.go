@@ -510,10 +510,16 @@ func planSettings(path string, raw []byte, hook string) (setupPlan, error) {
 			Type    string `json:"type"`
 			Command string `json:"command"`
 		}
-		group, _ := json.Marshal(map[string][]entry{"hooks": {{Type: "command", Command: hook}}})
+		group, err := json.Marshal(map[string][]entry{"hooks": {{Type: "command", Command: hook}}})
+		if err != nil {
+			return setupPlan{}, err
+		}
 		groups = append(groups, group)
 	}
-	list, _ := json.Marshal(groups)
+	list, err := json.Marshal(groups)
+	if err != nil {
+		return setupPlan{}, err
+	}
 	hooks.set("SessionStart", list)
 	root.set("hooks", hooks.encode())
 

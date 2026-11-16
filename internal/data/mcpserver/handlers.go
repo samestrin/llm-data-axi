@@ -120,6 +120,27 @@ func SiblingBinaryPath() string {
 	return filepath.Join(filepath.Dir(exe), name)
 }
 
+// CheckBinary reports why path is not an llm-data binary the server could
+// exec, or nil. Startup used to check only that the path existed, so a
+// directory or a file without the exec bit started the server and every tool
+// call then failed.
+func CheckBinary(path string) error {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return fmt.Errorf("llm-data binary not found at %s", path)
+	}
+	if err != nil {
+		return fmt.Errorf("llm-data binary at %s: %w", path, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("llm-data binary at %s is a directory", path)
+	}
+	if !usableBinaryFile(info) {
+		return fmt.Errorf("llm-data binary at %s is not executable", path)
+	}
+	return nil
+}
+
 // usableBinaryFile reports whether info describes a file the server could
 // exec. A sibling without the exec bit must not be reported as found: the
 // server would start and every tool call would fail, which is a success
