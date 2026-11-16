@@ -108,9 +108,10 @@ Every case exits 0. `--json` and `--axi` carry the same fields plus a `help` lis
 ```bash
 llm-data setup            # in the project directory
 llm-data setup --dry-run  # show what would be written
+llm-data setup --target claude  # name the agents to register with; claude is the default
 ```
 
-`setup` registers llm-data with Claude Code in the current project: it merges a SessionStart hook (a bare `llm-data`, so the home view lands in the session context) into `.claude/settings.json` — every other key and hook is kept — and writes an Agent Skill at `.claude/skills/llm-data/SKILL.md`. Only files inside the project directory are written; `~/.claude` is never touched, and running it in the home directory itself is refused. It is safe to run again: a second run changes no bytes and says so. It never prompts.
+`setup` registers llm-data with Claude Code in the current project: it merges a SessionStart hook (which runs `llm-data`, so the home view lands in the session context) into `.claude/settings.json` — every other key and hook is kept — and writes an Agent Skill at `.claude/skills/llm-data/SKILL.md`. The hook runs the bare `llm-data` when `PATH` finds it, otherwise the absolute path of the binary that ran `setup`; a hook `setup` wrote earlier that no longer matches, such as the old path after the binary moved, is rewritten in place rather than added again. An unknown `--target` is a usage error (exit 2) and writes nothing. Only files inside the project directory are written; `~/.claude` is never touched, and running it in the home directory itself is refused. It is safe to run again: a second run changes no bytes and says so. It never prompts.
 
 ## The MCP server
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/samestrin/llm-data-axi/pkg/output"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +30,30 @@ func setupEnv(t *testing.T) (project, home string) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Cleanup(func() { assertEmptyDir(t, home) })
+	stubBinary(t, true, "/usr/local/bin/llm-data")
 	return project, home
+}
+
+// stubBinary fixes what setup sees of the running binary: whether llm-data
+// is on PATH, and where the binary itself lives. Without it the hook command
+// would depend on the machine running the tests (AGENTS.md: a local number
+// and a CI number must not disagree).
+func stubBinary(t *testing.T, onPath bool, exe string) {
+	t.Helper()
+	oldLook, oldExe := setupLookPath, setupExecutable
+	t.Cleanup(func() { setupLookPath, setupExecutable = oldLook, oldExe })
+	setupLookPath = func(name string) (string, error) {
+		if !onPath {
+			return "", fmt.Errorf("exec: %q: executable file not found in $PATH", name)
+		}
+		return exe, nil
+	}
+	setupExecutable = func() (string, error) {
+		if exe == "" {
+			return "", fmt.Errorf("executable path unknown")
+		}
+		return exe, nil
+	}
 }
 
 func evalTemp(t *testing.T) string {
@@ -585,4 +609,285 @@ func skillCommandProblems(root *cobra.Command, text string) (problems []string, 
 		}
 	}
 	return problems, spans
+}
+
+// writeSettings seeds .claude/settings.json with content.
+func writeSettings(t *testing.T, project, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(settingsPath(project)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settingsPath(project), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Defends the absolute-path fallback: a binary that is not on PATH must not
+// be registered as a bare `llm-data`, which the session would fail to run
+// while setup reported success.
+func TestSetupFallsBackToAbsolutePathOffPATH(t *testing.T) {
+	project, _ := setupEnv(t)
+	stubBinary(t, false, "/opt/tools/llm-data")
+
+	out, err := runSetupCmd(t, "--path", project)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	cmds := sessionStartCommands(t, readFile(t, settingsPath(project)))
+	if len(cmds) != 1 || cmds[0] != "/opt/tools/llm-data" {
+		t.Errorf("SessionStart commands = %v, want [/opt/tools/llm-data]", cmds)
+	}
+	if !strings.Contains(out, "hook: /opt/tools/llm-data") {
+		t.Errorf("output does not say which hook command it registered:\n%s", out)
+	}
+}
+
+// Defends repair: after the binary moves, the hook setup wrote earlier points
+// at nothing. A second setup must rewrite that one command in place, not add
+// a second hook beside it and not leave the stale one, and must keep every
+// other hook. A third run then changes nothing.
+func TestSetupRepairsHookAfterBinaryMoves(t *testing.T) {
+	project, _ := setupEnv(t)
+	writeSettings(t, project, `{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "echo hi"}]}]}}`)
+
+	stubBinary(t, false, "/old/place/llm-data")
+	if _, err := runSetupCmd(t, "--path", project); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	stubBinary(t, false, "/new/place/llm-data")
+	out, err := runSetupCmd(t, "--path", project)
+	if err != nil {
+		t.Fatalf("run after the move: %v", err)
+	}
+	cmds := sessionStartCommands(t, readFile(t, settingsPath(project)))
+	if len(cmds) != 2 || cmds[0] != "echo hi" || cmds[1] != "/new/place/llm-data" {
+		t.Errorf("SessionStart commands = %v, want [echo hi /new/place/llm-data]", cmds)
+	}
+	if !strings.Contains(out, "wrote "+filepath.Join(".claude", "settings.json")) {
+		t.Errorf("repair run does not report the rewrite:\n%s", out)
+	}
+
+	before := snapshot(t, project)
+	out, err = runSetupCmd(t, "--path", project)
+	if err != nil {
+		t.Fatalf("third run: %v", err)
+	}
+	if strings.Contains(out, "wrote") {
+		t.Errorf("run after the repair claims to have written something:\n%s", out)
+	}
+	for p, b := range snapshot(t, project) {
+		if before[p] != b {
+			t.Errorf("run after the repair changed %s", p)
+		}
+	}
+}
+
+// Defends repair in both directions between the bare command and an absolute
+// path: llm-data dropping off PATH must turn a bare hook into the absolute
+// path, and llm-data arriving on PATH must turn it back.
+func TestSetupRepairsBetweenBareAndAbsolute(t *testing.T) {
+	project, _ := setupEnv(t)
+	if _, err := runSetupCmd(t, "--path", project); err != nil {
+		t.Fatalf("on PATH: %v", err)
+	}
+	stubBinary(t, false, "/home/me/go/bin/llm-data")
+	if _, err := runSetupCmd(t, "--path", project); err != nil {
+		t.Fatalf("off PATH: %v", err)
+	}
+	if cmds := sessionStartCommands(t, readFile(t, settingsPath(project))); len(cmds) != 1 || cmds[0] != "/home/me/go/bin/llm-data" {
+		t.Errorf("off PATH: SessionStart commands = %v, want [/home/me/go/bin/llm-data]", cmds)
+	}
+	stubBinary(t, true, "/usr/local/bin/llm-data")
+	if _, err := runSetupCmd(t, "--path", project); err != nil {
+		t.Fatalf("back on PATH: %v", err)
+	}
+	if cmds := sessionStartCommands(t, readFile(t, settingsPath(project))); len(cmds) != 1 || cmds[0] != "llm-data" {
+		t.Errorf("back on PATH: SessionStart commands = %v, want [llm-data]", cmds)
+	}
+}
+
+// Defends other people's hooks from "repair": only a command that is exactly
+// llm-data (bare, or an absolute path to a binary named llm-data) is ours. A
+// hook that runs llm-data with arguments, or another program, is left alone.
+func TestSetupRepairLeavesForeignHooksAlone(t *testing.T) {
+	project, _ := setupEnv(t)
+	writeSettings(t, project, `{"hooks": {"SessionStart": [{"hooks": [
+		{"type": "command", "command": "llm-data grep TODO ."},
+		{"type": "command", "command": "/usr/bin/llm-data-mcp"},
+		{"type": "command", "command": "echo llm-data"}
+	]}]}}`)
+	stubBinary(t, false, "/opt/llm-data")
+	if _, err := runSetupCmd(t, "--path", project); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	cmds := sessionStartCommands(t, readFile(t, settingsPath(project)))
+	want := []string{"llm-data grep TODO .", "/usr/bin/llm-data-mcp", "echo llm-data", "/opt/llm-data"}
+	if strings.Join(cmds, "\n") != strings.Join(want, "\n") {
+		t.Errorf("SessionStart commands = %q, want %q", cmds, want)
+	}
+}
+
+// Defends against a session that runs the home view twice: two llm-data
+// hooks (one stale, one current) collapse to the current one, and a group
+// left empty by that is removed rather than kept as an empty hook list.
+func TestSetupRepairDropsDuplicateHooks(t *testing.T) {
+	project, _ := setupEnv(t)
+	writeSettings(t, project, `{"hooks": {"SessionStart": [
+		{"hooks": [{"type": "command", "command": "/gone/llm-data"}]},
+		{"hooks": [{"type": "command", "command": "echo hi"}, {"type": "command", "command": "llm-data"}]},
+		{"hooks": [{"type": "command", "command": "llm-data"}]}
+	]}}`)
+	if _, err := runSetupCmd(t, "--path", project); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	raw := readFile(t, settingsPath(project))
+	cmds := sessionStartCommands(t, raw)
+	if len(cmds) != 2 || cmds[0] != "llm-data" || cmds[1] != "echo hi" {
+		t.Errorf("SessionStart commands = %v, want [llm-data echo hi]", cmds)
+	}
+	var s struct {
+		Hooks struct {
+			SessionStart []json.RawMessage `json:"SessionStart"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(raw, &s); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Hooks.SessionStart) != 2 {
+		t.Errorf("SessionStart has %d groups, want 2 (the emptied one removed):\n%s", len(s.Hooks.SessionStart), raw)
+	}
+}
+
+// Defends a binary path with a space in it: the hook is run by a shell, so an
+// unquoted path would split into a command that does not exist. The quoted
+// form must also be recognised as ours on the next run.
+func TestSetupQuotesAPathWithSpaces(t *testing.T) {
+	project, _ := setupEnv(t)
+	stubBinary(t, false, "/Users/me/My Tools/llm-data")
+	if _, err := runSetupCmd(t, "--path", project); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if cmds := sessionStartCommands(t, readFile(t, settingsPath(project))); len(cmds) != 1 || cmds[0] != "'/Users/me/My Tools/llm-data'" {
+		t.Errorf("SessionStart commands = %v, want ['/Users/me/My Tools/llm-data']", cmds)
+	}
+	out, err := runSetupCmd(t, "--path", project)
+	if err != nil || strings.Contains(out, "wrote") {
+		t.Errorf("second run over a quoted path was not a no-op (err %v):\n%s", err, out)
+	}
+	stubBinary(t, false, "/opt/llm-data")
+	if _, err := runSetupCmd(t, "--path", project); err != nil {
+		t.Fatalf("after move: %v", err)
+	}
+	if cmds := sessionStartCommands(t, readFile(t, settingsPath(project))); len(cmds) != 1 || cmds[0] != "/opt/llm-data" {
+		t.Errorf("quoted stale path was not repaired: %v", cmds)
+	}
+}
+
+// Defends against registering a hook nobody can run: off PATH and with no
+// known path of its own, setup must fail and write nothing.
+func TestSetupFailsWhenTheHookCommandCannotBeResolved(t *testing.T) {
+	project, _ := setupEnv(t)
+	stubBinary(t, false, "")
+	_, err := runSetupCmd(t, "--path", project)
+	if err == nil {
+		t.Fatal("setup succeeded with no runnable hook command")
+	}
+	if !strings.Contains(err.Error(), "PATH") {
+		t.Errorf("error does not say why: %v", err)
+	}
+	assertEmptyDir(t, project)
+}
+
+// Defends --dry-run over a stale hook: it reports the repair it would make
+// and leaves the file byte-identical.
+func TestSetupDryRunDoesNotRepair(t *testing.T) {
+	project, _ := setupEnv(t)
+	stale := `{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "/gone/llm-data"}]}]}}`
+	writeSettings(t, project, stale)
+	out, err := runSetupCmd(t, "--path", project, "--dry-run")
+	if err != nil {
+		t.Fatalf("setup --dry-run: %v", err)
+	}
+	if got := string(readFile(t, settingsPath(project))); got != stale {
+		t.Errorf("dry run repaired settings.json:\n%s", got)
+	}
+	if !strings.Contains(out, "would write "+filepath.Join(".claude", "settings.json")) {
+		t.Errorf("dry run does not report the repair it would make:\n%s", out)
+	}
+}
+
+// Defends the target selector: an unknown target is a usage error (exit 2)
+// raised before anything is written, never accepted and ignored. Until the
+// Codex and OpenCode targets exist, naming them is exactly that.
+func TestSetupRejectsAnUnknownTarget(t *testing.T) {
+	for _, arg := range []string{"vscode", "codex", "claude,nope", ""} {
+		t.Run(arg, func(t *testing.T) {
+			project, _ := setupEnv(t)
+			_, err := runSetupCmd(t, "--path", project, "--target", arg)
+			if err == nil {
+				t.Fatalf("--target %q was accepted", arg)
+			}
+			if !strings.Contains(err.Error(), "--target") || !strings.Contains(err.Error(), "claude") {
+				t.Errorf("error does not name the flag and the known targets: %v", err)
+			}
+			if got := output.ExitCodeFor(err); got != 2 {
+				t.Errorf("ExitCodeFor = %d, want 2 (usage error): %v", got, err)
+			}
+			assertEmptyDir(t, project)
+		})
+	}
+}
+
+// Defends "a bare run changes nothing new": with no --target, setup registers
+// Claude Code and nothing else, exactly as an explicit --target claude does;
+// the structured output names the targets and the hook command.
+func TestSetupDefaultTargetIsClaude(t *testing.T) {
+	bare, _ := setupEnv(t)
+	explicit := evalTemp(t)
+
+	out, err := runSetupCmd(t, "--path", bare, "--json")
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+	var res SetupResult
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("--json output is not JSON: %v\n%s", err, out)
+	}
+	if strings.Join(res.Targets, ",") != "claude" || res.Hook != "llm-data" {
+		t.Errorf("bare run JSON targets=%v hook=%q, want [claude] llm-data", res.Targets, res.Hook)
+	}
+	if _, err := runSetupCmd(t, "--path", explicit, "--target", "claude", "--target", "claude"); err != nil {
+		t.Fatalf("--target claude: %v", err)
+	}
+
+	rel := func(dir string) map[string]string {
+		m := map[string]string{}
+		for p, b := range snapshot(t, dir) {
+			r, _ := filepath.Rel(dir, p)
+			m[r] = b
+		}
+		return m
+	}
+	a, b := rel(bare), rel(explicit)
+	if len(a) != 2 || len(a) != len(b) {
+		t.Fatalf("bare run wrote %d files, --target claude %d; want 2 each", len(a), len(b))
+	}
+	for p := range a {
+		if a[p] != b[p] {
+			t.Errorf("%s differs between a bare run and --target claude", p)
+		}
+	}
+}
+
+// Defends the skill text against teaching the pre-epic-11 output contract:
+// TOON is the default and --plain gives text, so an agent told to "add --axi
+// for TOON" is told something that is no longer how the CLI works.
+func TestSkillTextSaysTOONIsTheDefault(t *testing.T) {
+	want := "Output is token-dense TOON by default; add `--plain` for text or `--json` for JSON."
+	if !strings.Contains(setupSkillContent, want) {
+		t.Errorf("skill text does not say %q:\n%s", want, setupSkillContent)
+	}
+	if strings.Contains(setupSkillContent, "Add `--axi`") {
+		t.Errorf("skill text still says TOON needs --axi:\n%s", setupSkillContent)
+	}
 }
