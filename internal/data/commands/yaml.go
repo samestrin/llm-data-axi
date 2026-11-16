@@ -112,13 +112,11 @@ Examples:
 			if jsonOutput {
 				if minOutput {
 					// --json --min: just the value as JSON
-					jsonBytes, _ := json.Marshal(value)
-					fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+					return printJSONLine(cmd.OutOrStdout(), "yaml get "+key, value)
 				} else {
 					// --json: full JSON with key and value
 					output := map[string]interface{}{"key": key, "value": value}
-					jsonBytes, _ := json.Marshal(output)
-					fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+					return printJSONLine(cmd.OutOrStdout(), "yaml get "+key, output)
 				}
 			} else if minOutput {
 				fmt.Fprintln(cmd.OutOrStdout(), formatValue(value))
@@ -248,13 +246,11 @@ Examples:
 				if minOutput {
 					// --json --min: minimal JSON
 					output := map[string]interface{}{"k": key, "s": "set"}
-					jsonBytes, _ := json.Marshal(output)
-					fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+					return printJSONLine(cmd.OutOrStdout(), "yaml set "+key, output)
 				} else {
 					// --json: full JSON
 					output := map[string]interface{}{"key": key, "value": value, "status": "set"}
-					jsonBytes, _ := json.Marshal(output)
-					fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+					return printJSONLine(cmd.OutOrStdout(), "yaml set "+key, output)
 				}
 			} else if minOutput {
 				fmt.Fprintln(cmd.OutOrStdout(), key)
@@ -389,12 +385,10 @@ Examples:
 					for i, key := range orderedKeys {
 						orderedValues[i] = results[key]
 					}
-					jsonBytes, _ := json.Marshal(orderedValues)
-					fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+					return printJSONLine(cmd.OutOrStdout(), "yaml multiget", orderedValues)
 				} else {
 					// --json: full JSON object
-					jsonBytes, _ := json.Marshal(results)
-					fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+					return printJSONLine(cmd.OutOrStdout(), "yaml multiget", results)
 				}
 			} else if minOutput {
 				for _, key := range orderedKeys {
@@ -582,13 +576,11 @@ Examples:
 				if minOutput {
 					// --json --min: minimal JSON with count and status
 					output := map[string]interface{}{"count": len(keys), "status": "ok"}
-					jsonBytes, _ := json.Marshal(output)
-					fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+					return printJSONLine(cmd.OutOrStdout(), "yaml multiset", output)
 				} else {
 					// --json: full JSON with keys, count, and status
 					output := map[string]interface{}{"keys": keys, "count": len(keys), "status": "ok"}
-					jsonBytes, _ := json.Marshal(output)
-					fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+					return printJSONLine(cmd.OutOrStdout(), "yaml multiset", output)
 				}
 			} else if minOutput {
 				fmt.Fprintln(cmd.OutOrStdout(), strings.Join(keys, ","))

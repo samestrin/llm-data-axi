@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -149,11 +148,7 @@ func runMath(cmd *cobra.Command, args []string) error {
 			"expression": expression,
 			"result":     result,
 		}
-		jsonBytes, err := json.Marshal(output)
-		if err != nil {
-			return fmt.Errorf("math: %s: %w", expression, err)
-		}
-		fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+		return printJSONLine(cmd.OutOrStdout(), "math: "+expression, output)
 	} else if mathMin {
 		fmt.Fprintln(cmd.OutOrStdout(), resultStr)
 	} else {
