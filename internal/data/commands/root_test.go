@@ -15,6 +15,7 @@ import (
 func runRootBoth(t *testing.T, args ...string) string {
 	t.Helper()
 	root := NewRootCmd()
+	restoreOutputMode(t)
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
@@ -49,11 +50,12 @@ func fakeExecutable(t *testing.T) (home string) {
 //
 // Run outside any repository, so the view is bin, description and the one
 // line saying there is no repository; home_test.go covers the live fields.
+// Checked in --plain, the text form; the TOON default is in output_mode_test.go.
 func TestRootNoArgsShowsHomeView(t *testing.T) {
 	home := fakeExecutable(t)
 	outsideAnyRepo(t)
 
-	out := runRootBoth(t)
+	out := runRootBoth(t, "--plain")
 
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
 	if len(lines) != 3 {
@@ -128,6 +130,7 @@ func TestRootUnknownCommandStillFails(t *testing.T) {
 	fakeExecutable(t)
 	for _, args := range [][]string{{"no-such-command"}, {"no-such-command", "--help"}} {
 		root := NewRootCmd()
+		restoreOutputMode(t)
 		root.SetOut(new(bytes.Buffer))
 		root.SetErr(new(bytes.Buffer))
 		root.SetArgs(args)
@@ -164,6 +167,7 @@ func TestRootNoArgsFailsWhenExecutableUnresolved(t *testing.T) {
 	executablePath = func() (string, error) { return "", errors.New("no /proc") }
 	t.Cleanup(func() { executablePath = orig })
 	root := NewRootCmd()
+	restoreOutputMode(t)
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
@@ -179,13 +183,18 @@ func TestRootNoArgsFailsWhenExecutableUnresolved(t *testing.T) {
 
 // Defends the per-invocation tree against pflag's Changed bit: PersistentPreRun
 // reads Changed, so a bare run after an in-process --json run must print the
-// plain view, not JSON.
+// TOON default, not JSON, and a --plain run after --axi the plain view.
 func TestFreshTreeIgnoresPreviousChangedFlags(t *testing.T) {
 	fakeExecutable(t)
-	runRootBoth(t, "--json", "--min", "--axi")
+	runRootBoth(t, "--json", "--min")
 
-	if out := runRootBoth(t); strings.HasPrefix(strings.TrimSpace(out), "{") || !strings.HasPrefix(out, "bin: ") {
-		t.Errorf("bare run after --json is not the plain view:\n%s", out)
+	if out := runRootBoth(t); strings.HasPrefix(strings.TrimSpace(out), "{") || !strings.Contains(out, "help[") {
+		t.Errorf("bare run after --json is not the TOON view:\n%s", out)
+	}
+
+	runRootBoth(t, "--axi", "--min")
+	if out := runRootBoth(t, "--plain"); !strings.HasPrefix(out, "bin: ") || strings.Contains(out, "help") {
+		t.Errorf("--plain run after --axi is not the plain view:\n%s", out)
 	}
 }
 
@@ -228,6 +237,7 @@ func TestRootVerboseAndFormatAreUnknownFlags(t *testing.T) {
 		{"--format", "json"},
 	} {
 		root := NewRootCmd()
+		restoreOutputMode(t)
 		root.SetOut(new(bytes.Buffer))
 		root.SetErr(new(bytes.Buffer))
 		root.SetArgs(args)
@@ -252,12 +262,13 @@ func TestMultiexistsVerboseAfterVersionShorthand(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Without --verbose a file prints no type, so "(file)" proves the flag ran.
-	out := runRootBoth(t, "multiexists", file, "--verbose")
+	out := runRootBoth(t, "multiexists", file, "--verbose", "--plain")
 	if !strings.Contains(out, "(file)") {
 		t.Errorf("multiexists --verbose did not show the type:\n%s", out)
 	}
 
 	root := NewRootCmd()
+	restoreOutputMode(t)
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetErr(buf)
