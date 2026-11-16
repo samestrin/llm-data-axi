@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -228,6 +229,9 @@ func TestSetupCodexRefusesUnmergeableConfig(t *testing.T) {
 		"features not a table":     "features = 1\n",
 		"hooks value spans lines":  "[features]\nhooks = [\n  1,\n]\n",
 		"only a features subtable": "[features.x]\ny = 1\n",
+		// The line edit lands inside the string and still decodes; only
+		// the check of the decoded result catches it.
+		"features header inside a string": "notes = \"\"\"\n[features]\n\"\"\"\n[features]\nweb_search = true\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			project, _ := setupEnv(t)
@@ -347,8 +351,12 @@ func TestSetupTargetsLeaveOtherTargetsUntouched(t *testing.T) {
 		if err != nil {
 			t.Fatalf("setup: %v", err)
 		}
-		if !strings.Contains(out, `"targets":["claude","codex"]`) {
-			t.Errorf("JSON does not list both targets in order:\n%s", out)
+		var res SetupResult
+		if err := json.Unmarshal([]byte(out), &res); err != nil {
+			t.Fatalf("--json output is not JSON: %v\n%s", err, out)
+		}
+		if strings.Join(res.Targets, ",") != "claude,codex" || len(res.Files) != 4 {
+			t.Errorf("JSON targets=%v files=%v, want [claude codex] and 4 files", res.Targets, res.Files)
 		}
 		for _, p := range []string{settingsPath(project), codexHooksPath(project)} {
 			if cmds := sessionStartCommands(t, readFile(t, p)); len(cmds) != 1 || cmds[0] != "/opt/llm-data" {
