@@ -86,12 +86,21 @@ The format flags are persistent on the root, so every command accepts them.
 
 ### Exit codes
 
-A command that ran reports 0; a command that failed reports 1 with a structured error (`error: true` plus `message:`) on stdout — in TOON by default, JSON under `--json`, and text (`Error: ...`) under `--plain`. stderr carries diagnostics only. A malformed invocation — an unknown flag or command, or conflicting format flags — exits **2**, the usage-error code the AXI spec itself asks for ("unknown flags must fail loud (exit 2)"). It is reported the same way as any other error, on stdout in the active format. An unknown flag's message also lists the flags that command accepts:
+A command that ran reports 0; a command that failed reports 1 with a structured error (`error: true` plus `message:`) on stdout — in TOON by default, JSON under `--json`, and text (`Error: ...`) under `--plain`. stderr carries diagnostics only. A malformed invocation — an unknown flag or command, a value a flag cannot take, or conflicting format flags — exits **2**, the usage-error code the AXI spec itself asks for ("unknown flags must fail loud (exit 2)"). It is reported the same way as any other error, on stdout in the active format. An unknown flag's error also lists the flags that command accepts, in the message and as a `valid_flags` list in TOON and `--json`:
 
 ```
 $ llm-data grep --nope
 error: true
 message: "unknown flag: --nope; valid flags for llm-data grep: --axi, -l/--files-with-matches, ..."
+valid_flags[10]: "--axi","-l/--files-with-matches",...
+```
+
+A bad value names the flag, the value and what the flag takes:
+
+```
+$ llm-data runtime --start abc
+error: true
+message: "invalid value \"abc\" for --start: want an integer"
 ```
 
 ## A bare run: the home view
@@ -100,7 +109,7 @@ message: "unknown flag: --nope; valid flags for llm-data grep: --axi, -l/--files
 
 - inside a git repository: `repo_root:` (home written as `~`), `project_type:` (the `detect` stack) and `git_changes:` (the `git-changes` count, `0` for a clean tree);
 - outside one: `repo: no repository`, printed only when git itself says so;
-- when git is missing, fails or does not answer within 2 seconds: `repo: git unavailable: <reason>`, never "no repository".
+- when git is missing, fails or does not answer: `repo: git unavailable: <reason>`, never "no repository". Each of the two git calls has 2 seconds, and a timeout names the call, as in `git status gave no answer within 2s`.
 
 Every case exits 0. TOON (the default) and `--json` carry the same fields plus a `help` list of next steps; `--plain` leaves the list out. `--help` still prints the full help, and an unknown subcommand still fails with exit 2.
 

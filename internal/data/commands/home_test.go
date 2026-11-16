@@ -223,9 +223,60 @@ func TestHomeViewGitTimeout(t *testing.T) {
 	t.Cleanup(func() { homeGitTimeout = orig })
 
 	start := time.Now()
-	assertGitUnavailable(t, "no answer within 200ms")
+	assertGitUnavailable(t, "git rev-parse gave no answer within 200ms")
 	if elapsed := time.Since(start); elapsed > 3*time.Second {
 		t.Errorf("two timed-out runs took %v; the limit was not enforced", elapsed)
+	}
+}
+
+// Defends TD b3c1da547b64efbf: the two git calls shared one budget, so a slow
+// rev-parse left git status a fraction of it, and the message still said it
+// had the whole limit. Each call now has its own: two calls that each take
+// 60% of the limit both finish.
+func TestHomeViewEachGitCallHasItsOwnBudget(t *testing.T) {
+	fakeExecutable(t)
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	chdirTo(t, dir)
+	fakeGit(t, `sleep 0.6
+case "$1" in
+rev-parse) pwd ;;
+esac`)
+	orig := homeGitTimeout
+	homeGitTimeout = time.Second
+	t.Cleanup(func() { homeGitTimeout = orig })
+
+	out := runRootBoth(t, "--plain")
+
+	if !strings.Contains(out, "git_changes: 0\n") || strings.Contains(out, "git unavailable") {
+		t.Errorf("git status did not get its own budget:\n%s", out)
+	}
+}
+
+// Defends the timeout message naming the call that ran out, so "no answer
+// within" is said of the call that actually had that long.
+func TestHomeViewStatusTimeoutNamesTheCall(t *testing.T) {
+	fakeExecutable(t)
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	chdirTo(t, dir)
+	fakeGit(t, `case "$1" in
+rev-parse) pwd ;;
+*) exec sleep 5 ;;
+esac`)
+	orig := homeGitTimeout
+	homeGitTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { homeGitTimeout = orig })
+
+	out := runRootBoth(t, "--plain")
+
+	want := "repo: git unavailable: git status gave no answer within 200ms\n"
+	if !strings.Contains(out, want) || !strings.Contains(out, "repo_root: "+dir+"\n") {
+		t.Errorf("want the root and %q:\n%s", want, out)
 	}
 }
 

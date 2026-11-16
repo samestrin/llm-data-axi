@@ -14,9 +14,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Command output is now TOON by default instead of plain text.** Every command emits token-dense TOON when no output flag is given; `--axi` still explicitly selects TOON and `--json` still selects JSON. **Breaking:** callers that need the previous plain-text output must now pass `--plain`.
+- **Conflicting output flags are rejected.** Combining `--plain` with `--json` or `--axi` is now a usage error (exit 2) that names the conflicting flags, instead of silently choosing one output format.
 - **The skill `setup` writes says TOON is the default output.** It told agents to add `--axi` for TOON; it now says output is TOON by default and `--plain` gives text. The committed `skills/llm-data/SKILL.md` matches.
 
 ### Fixed
+
+- **Errors are printed on stdout in every output format.** Runtime and usage failures now use the command's selected format—TOON by default, JSON with `--json`, or plain text with `--plain`—so a caller reading stdout always receives the error instead of an empty stream. Existing exit codes are unchanged, and stderr remains reserved for diagnostics.
+- **A bad flag value says what the flag takes.** `llm-data runtime --start abc` reported `invalid argument "abc" for "--start" flag: strconv.ParseInt: parsing "abc": invalid syntax`. It now reports `invalid value "abc" for --start: want an integer` (or `true or false`, `a number`, `a duration such as 30s or 5m`, or `integer out of range`), still exit 2. A custom value such as `setup --target` keeps its own reason. A `--json` or `--plain` given after the bad value is now honoured: the error used to come out as TOON.
+- **An unknown flag's valid flags are data.** The TOON and `--json` error now carries a `valid_flags` list next to the message, so a caller no longer splits the sentence to read them. The message still lists them.
+- **The home view's git timeout names the call that timed out.** Both git calls shared one 2-second budget, but the message always said `no answer within 2s`, even for a `git status` left a fraction of it. Each call now has its own 2 seconds, and the message says which call gave no answer, such as `git status gave no answer within 2s`.
+- **`--version-upper` is no longer an accepted spelling.** It existed only because pflag needs a long name for `-V`, and nothing documented it. `-V` still prints the version; `--version-upper` is an unknown flag (exit 2).
 
 - **`setup` no longer registers a hook the session cannot run.** The Claude Code SessionStart hook was always the bare `llm-data`, which fails when the binary is not on `PATH`. It is now the bare command only when `PATH` finds it, and otherwise the absolute path of the binary that ran `setup`. A hook `setup` wrote earlier that no longer matches (the old path after the binary moved, or a bare command once `llm-data` leaves `PATH`) is rewritten in place, and a second llm-data hook is removed. With neither, `setup` fails and writes nothing.
 
