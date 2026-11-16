@@ -9,9 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/samestrin/llm-data-axi/pkg/output"
 	"github.com/spf13/cobra"
 )
@@ -78,6 +81,7 @@ type setupTarget struct {
 // setupTargets lists every target in the order setup plans them.
 var setupTargets = []setupTarget{
 	{name: "claude", plan: planClaude},
+	{name: "codex", plan: planCodex},
 }
 
 func setupTargetNames() []string {
@@ -166,24 +170,30 @@ func newSetupCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Register llm-data with Claude Code in this project",
-		Long: `Register llm-data with each --target agent in this project. claude (the
-default) writes a SessionStart hook into .claude/settings.json (merged: every
-other key and hook is kept) and an Agent Skill at
-.claude/skills/llm-data/SKILL.md.
+		Short: "Register llm-data with Claude Code or Codex in this project",
+		Long: `Register llm-data with each --target agent in this project.
+
+  claude  (the default) a SessionStart hook in .claude/settings.json and an
+          Agent Skill at .claude/skills/llm-data/SKILL.md
+  codex   a SessionStart hook in .codex/hooks.json and [features] hooks = true
+          in .codex/config.toml, without which Codex ignores hooks.json
+
+Every file is merged: other keys, hooks, comments and tables are kept.
 
 The hook runs the bare llm-data when PATH finds it, otherwise this binary's
 absolute path. A hook setup wrote earlier that no longer matches, such as the
 old path after the binary moved, is repaired in place.
 
 Only files inside the project directory are written; the user-wide ~/.claude
-is never touched, and running setup in the home directory itself is refused.
+and ~/.codex are never touched, and running setup in the home directory itself
+is refused.
 Safe to run again: a second run changes no bytes and says so. Never prompts.
 
 Examples:
   llm-data setup
   llm-data setup --dry-run
   llm-data setup --target claude
+  llm-data setup --target claude,codex
   llm-data setup --path /path/to/project`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -295,9 +305,126 @@ func planClaude(dir, hook string) ([]setupPlan, error) {
 	return []setupPlan{settings, skill}, nil
 }
 
+// planCodex plans Codex's two files: the SessionStart hook in
+// .codex/hooks.json, which has the shape of Claude Code's settings and is
+// merged the same way, and [features] hooks = true in .codex/config.toml,
+// without which Codex does not run hooks.json.
+func planCodex(dir, hook string) ([]setupPlan, error) {
+	hooksRel := filepath.Join(".codex", "hooks.json")
+	configRel := filepath.Join(".codex", "config.toml")
+
+	raw, err := readProjectFile(dir, hooksRel)
+	if err != nil {
+		return nil, err
+	}
+	rawConfig, err := readProjectFile(dir, configRel)
+	if err != nil {
+		return nil, err
+	}
+	hooks, err := planSettings(filepath.Join(dir, hooksRel), raw, hook)
+	if err != nil {
+		return nil, err
+	}
+	hooks.rel = hooksRel
+	config, err := planCodexConfig(filepath.Join(dir, configRel), rawConfig)
+	if err != nil {
+		return nil, err
+	}
+	config.rel = configRel
+	return []setupPlan{hooks, config}, nil
+}
+
+var (
+	tomlTableHeaderRE = regexp.MustCompile(`^\s*\[`)
+	tomlFeaturesRE    = regexp.MustCompile(`^\s*\[\s*features\s*\]\s*(#.*)?$`)
+	tomlHooksKeyRE    = regexp.MustCompile(`^\s*hooks\s*=`)
+	tomlHooksBoolRE   = regexp.MustCompile(`^(\s*hooks\s*=\s*)(?:true|false)(\s*(?:#.*)?)$`)
+)
+
+// planCodexConfig computes config.toml with features.hooks = true, without
+// writing. It edits lines rather than re-encoding, so comments, key order and
+// formatting survive, then decodes the result and refuses unless the only
+// change is features.hooks = true. A config that already has it is left
+// byte-for-byte alone. raw is nil when the file does not exist.
+func planCodexConfig(path string, raw []byte) (setupPlan, error) {
+	before := map[string]any{}
+	if _, err := toml.Decode(string(raw), &before); err != nil {
+		return setupPlan{}, fmt.Errorf("%s is not valid TOML: %w; refusing to overwrite", path, err)
+	}
+	features, hasFeatures := before["features"]
+	if fm, ok := features.(map[string]any); ok && fm["hooks"] == true {
+		return setupPlan{content: raw}, nil
+	}
+
+	lines := strings.SplitAfter(string(raw), "\n")
+	header := slices.IndexFunc(lines, func(l string) bool {
+		return tomlFeaturesRE.MatchString(strings.TrimRight(l, "\r\n"))
+	})
+	var out string
+	switch {
+	case header >= 0:
+		end := len(lines)
+		for j := header + 1; j < len(lines); j++ {
+			if tomlTableHeaderRE.MatchString(lines[j]) {
+				end = j
+				break
+			}
+		}
+		eol := "\n"
+		if strings.HasSuffix(lines[header], "\r\n") {
+			eol = "\r\n"
+		}
+		if j := slices.IndexFunc(lines[header+1:end], tomlHooksKeyRE.MatchString); j >= 0 {
+			line := lines[header+1+j]
+			body := strings.TrimRight(line, "\r\n")
+			if m := tomlHooksBoolRE.FindStringSubmatch(body); m != nil {
+				body = m[1] + "true" + m[2]
+			} else {
+				body = "hooks = true"
+			}
+			lines[header+1+j] = body + line[len(strings.TrimRight(line, "\r\n")):]
+		} else {
+			if !strings.HasSuffix(lines[header], "\n") {
+				lines[header] += eol
+			}
+			lines = slices.Insert(lines, header+1, "hooks = true"+eol)
+		}
+		out = strings.Join(lines, "")
+	case hasFeatures:
+		return setupPlan{}, fmt.Errorf("%s sets features outside a [features] table; refusing to overwrite; add hooks = true to it by hand", path)
+	default:
+		out = string(raw)
+		if out != "" && !strings.HasSuffix(out, "\n") {
+			out += "\n"
+		}
+		if out != "" {
+			out += "\n"
+		}
+		out += "[features]\nhooks = true\n"
+	}
+
+	after := map[string]any{}
+	if _, err := toml.Decode(out, &after); err != nil {
+		return setupPlan{}, fmt.Errorf("%s: cannot add [features] hooks = true by line edit: %w; refusing to overwrite; add it by hand", path, err)
+	}
+	fm, _ := after["features"].(map[string]any)
+	ok := fm["hooks"] == true
+	delete(fm, "hooks")
+	if !hasFeatures && len(fm) == 0 {
+		delete(after, "features")
+	}
+	if bf, isMap := before["features"].(map[string]any); isMap {
+		delete(bf, "hooks")
+	}
+	if !ok || !reflect.DeepEqual(before, after) {
+		return setupPlan{}, fmt.Errorf("%s: cannot add [features] hooks = true without changing other keys; refusing to overwrite; add it by hand", path)
+	}
+	return setupPlan{content: []byte(out), changed: true}, nil
+}
+
 // setupProjectDir resolves path to an existing directory that is not the home
-// directory. In the home directory, .claude/settings.json is the user-wide
-// settings file, which is out of scope.
+// directory. In the home directory, .claude/settings.json and .codex are the
+// user-wide settings, which are out of scope.
 func setupProjectDir(path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -312,7 +439,7 @@ func setupProjectDir(path string) (string, error) {
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		if h, err := filepath.EvalSymlinks(home); err == nil && h == dir {
-			return "", fmt.Errorf("%s is the home directory; setup writes project settings only, never ~/.claude", abs)
+			return "", fmt.Errorf("%s is the home directory; setup writes project settings only, never ~/.claude or ~/.codex", abs)
 		}
 	}
 	return dir, nil
@@ -383,10 +510,16 @@ func planSettings(path string, raw []byte, hook string) (setupPlan, error) {
 			Type    string `json:"type"`
 			Command string `json:"command"`
 		}
-		group, _ := json.Marshal(map[string][]entry{"hooks": {{Type: "command", Command: hook}}})
+		group, err := json.Marshal(map[string][]entry{"hooks": {{Type: "command", Command: hook}}})
+		if err != nil {
+			return setupPlan{}, err
+		}
 		groups = append(groups, group)
 	}
-	list, _ := json.Marshal(groups)
+	list, err := json.Marshal(groups)
+	if err != nil {
+		return setupPlan{}, err
+	}
 	hooks.set("SessionStart", list)
 	root.set("hooks", hooks.encode())
 

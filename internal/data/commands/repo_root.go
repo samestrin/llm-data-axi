@@ -23,11 +23,15 @@ var (
 	repoRootMinimal  bool
 )
 
-// RepoRootResult represents the repo root result
+// RepoRootResult represents the repo root result.
+//
+// GitRepository is always present. Outside a repository it is the answer,
+// exit 0: an "error" key there contradicted the exit code, so a caller
+// reading the payload saw a failure and one reading the status a success.
 type RepoRootResult struct {
-	Root  string `json:"root,omitempty"`
-	Valid bool   `json:"valid,omitempty"`
-	Error string `json:"error,omitempty"`
+	Root          string `json:"root,omitempty"`
+	GitRepository bool   `json:"git_repository"`
+	Valid         bool   `json:"valid,omitempty"`
 }
 
 // newRepoRootCmd creates the repo-root command
@@ -40,9 +44,14 @@ func newRepoRootCmd() *cobra.Command {
 Returns the absolute path to the repository root, suitable for anchoring
 all subsequent path operations in LLM prompts.
 
-Output format:
+Output format (--plain):
   ROOT: /absolute/path/to/repo
   VALID: TRUE|FALSE (with --validate)
+
+Outside a repository it exits 0 and says so: git_repository: false in the
+default TOON output and in --json, GIT_REPOSITORY: FALSE with --plain. TOON
+and --json always carry git_repository. A git failure other than git's own
+"not a git repository" answer exits 1 with git's reason.
 
 Examples:
   llm-data repo-root
@@ -85,13 +94,9 @@ func runRepoRoot(cmd *cobra.Command, args []string) error {
 	if err != nil && !errors.Is(err, errNotARepository) {
 		return fmt.Errorf("repo-root: %w", err)
 	}
-	if err != nil {
-		result.Error = "not a git repository"
-		if repoRootValidate {
-			result.Valid = false
-		}
-	} else {
+	if err == nil {
 		result.Root = root
+		result.GitRepository = true
 
 		// Optionally validate .git exists
 		if repoRootValidate {
@@ -161,9 +166,10 @@ func runGitCtx(ctx context.Context, dir string, args ...string) (string, error) 
 
 func printRepoRootText(w io.Writer, data interface{}) {
 	r := data.(RepoRootResult)
-	fmt.Fprintf(w, "ROOT: %s\n", r.Root)
-	if r.Error != "" {
-		fmt.Fprintf(w, "ERROR: %s\n", r.Error)
+	if r.GitRepository {
+		fmt.Fprintf(w, "ROOT: %s\n", r.Root)
+	} else {
+		fmt.Fprintf(w, "GIT_REPOSITORY: FALSE\n")
 	}
 	if repoRootValidate {
 		if r.Valid {

@@ -100,9 +100,7 @@ func runGitChanges(cmd *cobra.Command, args []string) error {
 	}
 
 	// Output based on flags
-	outputGitChanges(cmd, result)
-
-	return nil
+	return outputGitChanges(cmd, result)
 }
 
 // gitChangesIn runs git status --porcelain in dir (the working directory when
@@ -189,27 +187,24 @@ func parseGitStatus(output string, pathFilter string, includeUntracked bool, sta
 }
 
 // outputGitChanges outputs the result in the requested format
-func outputGitChanges(cmd *cobra.Command, result GitChangesResult) {
+func outputGitChanges(cmd *cobra.Command, result GitChangesResult) error {
 	out := cmd.OutOrStdout()
 
 	// AXI first. `files` is never null: parseGitStatus is the only constructor
 	// and always sets Files to []string{}.
 	if GlobalAXIOutput {
-		// Reported rather than discarded: an encode failure that printed
-		// nothing and still exited 0 is the silent-empty-success trap this
-		// whole change exists to close. This helper returns nothing, so stderr
-		// is the only channel available without reshaping its callers.
-		if err := output.EncodeAXI(out, result); err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "Error: %v\n", err)
-		}
-		return
+		return output.EncodeAXI(out, result)
 	}
 	if gitChangesJSON && gitChangesMin {
 		// Compact JSON with only count
 		fmt.Fprintf(out, "{\"count\":%d}\n", result.Count)
 	} else if gitChangesJSON {
-		// Full JSON output
-		output, _ := json.MarshalIndent(result, "", "  ")
+		// Full JSON output. An encode failure is returned, never dropped: a
+		// dropped one printed an empty line and exited 0.
+		output, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("git-changes: %w", err)
+		}
 		fmt.Fprintln(out, string(output))
 	} else if gitChangesMin {
 		// Just the count
@@ -222,4 +217,5 @@ func outputGitChanges(cmd *cobra.Command, result GitChangesResult) {
 			fmt.Fprintln(out, file)
 		}
 	}
+	return nil
 }
