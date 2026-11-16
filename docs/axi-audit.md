@@ -4,7 +4,7 @@ A hand audit of `llm-data` at `bf977af` (epic 11 T1-T5 merged) against the ten p
 
 The first audit (epic 03 T1, at `e32edfe`) found principles 3, 4, 5, 7, 8 and 9 unmet and 6 partly met. Those gaps were closed by epic 03 (missing-path error, home view, `help[]`, `setup`, MCP TOON default), epic 09 (usage errors structured on stdout, live home view, committed skill) and the truncation/totals work recorded as EST-5260. Epic 11 closed the last three shared gaps: TOON is the default output (T1), errors go to stdout in every format including `--plain` (T2), and `setup` registers Claude Code, Codex and OpenCode through one shared path helper (T3-T5).
 
-**Summary:** all ten principles met, with two stated, justified remainders: no session-end lifecycle-capture hook (under 7) and `help[]` scoped to the home view and empty or truncated search results (under 9). Both are listed below with their reason. Exit 2 for a usage error is not a gap: the spec itself asks for it ("Unknown flags must fail loud (exit 2)"; the axi skill: "0 = success (including no-ops), 1 = error, 2 = usage error").
+**Summary:** principles 1-8 and 10 are met; 9 is partly met within a stated scope. Two remainders are stated and justified: no session-end lifecycle-capture hook (under 7) and `help[]` scoped to the home view and empty or truncated search results (under 9). Both are listed below with their reason. Exit 2 for a usage error is not a gap: the spec itself asks for it ("Unknown flags must fail loud (exit 2)"; the axi skill: "0 = success (including no-ops), 1 = error, 2 = usage error").
 
 | # | Principle (axi.md) | Verdict | Evidence | Closed by |
 |---|---|---|---|---|
@@ -22,7 +22,7 @@ The first audit (epic 03 T1, at `e32edfe`) found principles 3, 4, 5, 7, 8 and 9 
 ## Remaining, justified
 
 - **No session-end lifecycle-capture hook (principle 7).** The axi skill's integration rules recommend session-end hooks that capture what happened (transcripts, files touched, specs referenced) so future session-start context gets richer. `llm-data` keeps no session state: it is a set of deterministic, read-mostly commands with no transcript, no record of files touched and nothing of its own to capture. A session-end hook would have to invent state the tool does not have. The session-start half — the home view in Claude Code, Codex and OpenCode — is implemented.
-- **`help[]` is scoped, not universal (principle 9).** `help[]` sits where a result leaves an agent without a next step: the home view, an empty search, and a truncated line or diff. Widening it to every command's output was deliberately left as future work when it was introduced (epic 03); it is a new task, not a defect of the existing hints.
+- **`help[]` is scoped, not universal (principle 9).** `help[]` sits where a result leaves an agent without a next step: the home view, an empty search, and a truncated search line. Widening it to every command's output was deliberately left as future work when it was introduced (epic 03); it is a new task, not a defect of the existing hints.
 
 ## History
 

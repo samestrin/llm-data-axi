@@ -18,10 +18,10 @@ Nothing in the tool makes a network call — a build-time guard (`internal/noweb
 
 ## AXI conformance
 
-The hand audit in [`docs/axi-audit.md`](axi-audit.md) scores every principle as met, with two stated, justified remainders:
+The hand audit in [`docs/axi-audit.md`](axi-audit.md) scores every principle as met except two stated, justified remainders (principle 9 is partly met within its stated scope):
 
 - **No session-end lifecycle-capture hook.** `llm-data` keeps no session state — no transcript, no record of files touched — so there is nothing for a session-end hook to capture. The session-start integration (home view as context) ships for all three default app targets.
-- **`help[]` next steps are scoped, not universal.** They sit where a result leaves an agent without a next step: the home view, empty search results and truncated content. Widening them to every command is deliberately left as future work.
+- **`help[]` next steps are scoped, not universal.** They sit where a result leaves an agent without a next step: the home view, empty search results and truncated search lines. Widening them to every command is deliberately left as future work.
 
 ## Token figures
 
