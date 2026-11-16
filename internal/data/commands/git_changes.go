@@ -47,10 +47,11 @@ and optionally list modified, staged, and untracked files. Path filtering
 allows focusing on specific directories like '.planning/'.
 
 Output modes:
-  Default:    Multi-line text with COUNT and FILES sections
-  --json:     JSON object with count and files array
-  --min:      Just the count number
-  --json --min: Minimal JSON with count only
+  Default:      TOON with the count and files
+  --plain:      Multi-line text with COUNT and FILES sections
+  --json:       JSON object with count and files array
+  --min:        Shortens --plain and --json output: with --plain, just the
+                count number; with --json, count only. No effect on TOON.
 
 Filtering options:
   --path:             Filter to files matching this path prefix
@@ -62,7 +63,7 @@ Examples:
   llm-data git-changes --path .planning/
   llm-data git-changes --staged-only
   llm-data git-changes --include-untracked=false
-  llm-data git-changes --min
+  llm-data git-changes --plain --min
   llm-data git-changes --json --min`,
 		Args: cobra.NoArgs,
 		RunE: runGitChanges,

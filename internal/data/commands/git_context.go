@@ -88,7 +88,7 @@ Examples:
   llm-data git-context --include-diff
   llm-data git-context --since 2025-12-01 --max-commits 10
   llm-data git-context --json
-  llm-data git-context --min
+  llm-data git-context --plain --min
   llm-data git-context --min --json`,
 		Args: cobra.NoArgs,
 		RunE: runGitContext,
