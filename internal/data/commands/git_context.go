@@ -99,7 +99,7 @@ Examples:
 	cmd.Flags().StringVar(&gitContextSince, "since", "", "Only include commits since date (YYYY-MM-DD)")
 	cmd.Flags().IntVar(&gitContextMaxCommits, "max-commits", 10, "Maximum number of commits to include")
 	cmd.Flags().BoolVar(&gitContextJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&gitContextMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&gitContextMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	cmd.Flags().BoolVar(&gitContextFull, "full", false, "Emit the whole diff instead of truncating it at 50,000 bytes")
 
 	return cmd

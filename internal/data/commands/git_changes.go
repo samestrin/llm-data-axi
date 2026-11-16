@@ -73,7 +73,7 @@ Examples:
 	cmd.Flags().BoolVar(&gitChangesIncludeUntracked, "include-untracked", true, "Include untracked files")
 	cmd.Flags().BoolVar(&gitChangesStagedOnly, "staged-only", false, "Only show staged changes")
 	cmd.Flags().BoolVar(&gitChangesJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&gitChangesMin, "min", false, "Minimal output (count only)")
+	cmd.Flags().BoolVar(&gitChangesMin, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 
 	return cmd
 }

@@ -68,7 +68,7 @@ Examples:
 
 	cmd.Flags().StringVar(&planTypePath, "path", ".", "Plan directory path")
 	cmd.Flags().BoolVar(&planTypeJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&planTypeMin, "min", false, "Minimal output (type only)")
+	cmd.Flags().BoolVar(&planTypeMin, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 
 	return cmd
 }
