@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -17,6 +18,13 @@ import (
 // setupHookCommand is what Claude Code runs at session start. Its stdout is
 // added to the session's context, so it is the bare run: the home view.
 const setupHookCommand = "llm-data"
+
+// setupLookPath and setupExecutable are how setup sees the running binary;
+// tests replace them so the hook command does not depend on the test machine.
+var (
+	setupLookPath   = exec.LookPath
+	setupExecutable = os.Executable
+)
 
 // setupSkillContent is the Agent Skill setup writes. It has a committed twin
 // at skills/llm-data/SKILL.md, installable with
@@ -48,6 +56,8 @@ type SetupFile struct {
 // SetupResult is setup's output.
 type SetupResult struct {
 	Dir     string      `json:"dir"`
+	Targets []string    `json:"targets"`
+	Hook    string      `json:"hook"`
 	DryRun  bool        `json:"dry_run,omitempty"`
 	Changed bool        `json:"changed"`
 	Files   []SetupFile `json:"files"`
