@@ -86,22 +86,23 @@ func TestUnknownFlagUnderJSONIsJSONOnStdout(t *testing.T) {
 	}
 }
 
-// Pins plain mode: under --plain a usage error stays on stderr, stdout stays
-// empty, and the exit code is still 2. (With no format flag the mode is TOON,
-// which TestUnknownFlagWithNoFormatFlagIsTOON covers.)
-func TestUnknownFlagPlainStaysOnStderr(t *testing.T) {
+// Pins plain mode: under --plain a usage error is plain text on stdout, the
+// stream a successful run prints to, stderr stays empty, and the exit code is
+// still 2. It was on stderr until epic 11 T2. (With no format flag the mode is
+// TOON, which TestUnknownFlagWithNoFormatFlagIsTOON covers.)
+func TestUnknownFlagPlainIsTextOnStdout(t *testing.T) {
 	code, stdout, stderr := runCLI(t, "grep", "--nope", "--plain")
 	if code != 2 {
 		t.Errorf("exit %d, want 2", code)
 	}
-	if stdout != "" {
-		t.Errorf("stdout must be empty in plain mode, got %q", stdout)
+	if stderr != "" {
+		t.Errorf("stderr must be empty in plain mode, got %q", stderr)
 	}
-	if !strings.HasPrefix(stderr, "Error: unknown flag: --nope") {
-		t.Errorf("want the plain error on stderr, got %q", stderr)
+	if !strings.HasPrefix(stdout, "Error: unknown flag: --nope") {
+		t.Errorf("want the plain error on stdout, got %q", stdout)
 	}
-	if !strings.Contains(stderr, "--ignore-case") {
-		t.Errorf("plain error must list grep's flags too, got %q", stderr)
+	if !strings.Contains(stdout, "--ignore-case") {
+		t.Errorf("plain error must list grep's flags too, got %q", stdout)
 	}
 }
 
@@ -146,11 +147,11 @@ func TestRuntimeErrorUnderAXIExitsOne(t *testing.T) {
 // also have made the run a --plain/--json conflict.
 func TestModeFlagAfterTerminatorIsNotAMode(t *testing.T) {
 	code, stdout, stderr := runCLI(t, "grep", "--nope", "--plain", "--", "--json")
-	if code != 2 || stdout != "" {
-		t.Errorf("exit %d stdout %q, want 2 and empty", code, stdout)
+	if code != 2 || stderr != "" {
+		t.Errorf("exit %d stderr %q, want 2 and empty", code, stderr)
 	}
-	if !strings.HasPrefix(stderr, "Error: unknown flag: --nope") {
-		t.Errorf("want the plain error on stderr, got %q", stderr)
+	if !strings.HasPrefix(stdout, "Error: unknown flag: --nope") {
+		t.Errorf("want the plain error on stdout, got %q", stdout)
 	}
 }
 

@@ -306,6 +306,10 @@ func Execute() {
 }
 
 // run executes one invocation and returns its exit status.
+//
+// A failure is reported on stdout in the run's own format: TOON by default,
+// JSON under --json, text under --plain. A caller reads one stream whatever
+// happened, and stderr is left to diagnostics.
 func run(args []string, stdout, stderr io.Writer) int {
 	root := NewRootCmd()
 	root.SetArgs(args)
@@ -317,11 +321,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	axi, jsonOut, minOut := outputMode(cmd, args)
 	output.SetDefaultAXI(axi)
-	w := stderr
-	if axi || jsonOut {
-		w = stdout
-	}
-	return output.New(jsonOut, minOut, w).PrintError(err)
+	return output.New(jsonOut, minOut, stdout).PrintError(err)
 }
 
 // flagOn reports whether cmd's flag name was given and is true. A flag the

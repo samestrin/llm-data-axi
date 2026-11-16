@@ -329,9 +329,8 @@ func (f *Formatter) PrintSection(title string) {
 	}
 }
 
-// PrintError outputs an error respecting JSON and Minimal modes.
-// In JSON mode, outputs to stdout for parsing. In text mode, outputs to stderr.
-// Returns the exit code (always 1 for errors).
+// PrintError writes an error to f.Writer in the formatter's mode: TOON, JSON
+// or text. Returns the exit code ExitCodeFor classifies.
 func (f *Formatter) PrintError(err error) int {
 	if f.AXI {
 		// Emitted in the same encoding as a success, so a consumer reading one
@@ -363,17 +362,15 @@ func (f *Formatter) PrintError(err error) int {
 			fmt.Fprintln(f.Writer, string(output))
 		}
 	} else {
-		// Text mode - use stderr
-		w := f.Writer
-		if w == os.Stdout {
-			w = os.Stderr
-		}
+		// Text mode writes to f.Writer like the others. It used to swap
+		// os.Stdout for os.Stderr, which left a caller reading stdout under
+		// --plain with nothing but the exit code.
 		if f.Minimal {
 			// Minimal: just the error message
-			fmt.Fprintln(w, err.Error())
+			fmt.Fprintln(f.Writer, err.Error())
 		} else {
 			// Default: "Error: " prefix
-			fmt.Fprintf(w, "Error: %v\n", err)
+			fmt.Fprintf(f.Writer, "Error: %v\n", err)
 		}
 	}
 	// Classified rather than always 1: AXI requires a malformed invocation to
