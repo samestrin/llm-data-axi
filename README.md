@@ -43,18 +43,18 @@ make install   # build, then install to /usr/local/bin (may need sudo)
 
 ```bash
 # does any of this exist
-llm-data multiexists src/main.go docs/README.md --axi
+llm-data multiexists src/main.go docs/README.md
 
 # what kind of project is this
-llm-data detect --path . --axi
+llm-data detect --path .
 
 # search
 llm-data grep "func New" internal/ -n
-llm-data multigrep --keywords "retry,backoff,timeout" --path . --axi
+llm-data multigrep --keywords "retry,backoff,timeout" --path .
 
 # git
-llm-data git-changes --axi
-llm-data git-context --max-commits 5 --axi
+llm-data git-changes
+llm-data git-context --max-commits 5
 llm-data repo-root
 
 # config
@@ -74,21 +74,22 @@ Run `llm-data <command> --help` for the flags.
 
 | Flag | Output |
 |---|---|
-| `--axi` | TOON — token-dense, the format to give a model |
+| *(none)* | TOON — token-dense, the default |
+| `--axi` | TOON (accepted alias; the same output as no flag) |
 | `--json` | JSON |
-| `--min` | minimal / token-optimized |
-| *(none)* | human-readable text |
+| `--plain` | plain text (the default before TOON was) |
+| `--min` | shorter `--json` or `--plain` output; no effect on TOON |
 
-`--axi` wins when combined with `--json`. TOON encoding goes through [go-axi](https://github.com/samestrin/go-axi), which guards against the failure mode the raw codec has: a type it cannot encode does not error, it emits **empty output**, and a command then silently prints nothing.
+`--plain` cannot be combined with `--json` or `--axi`: the combination is a usage error (exit 2) whose message names both flags. `--axi` wins when combined with `--json`. TOON encoding goes through [go-axi](https://github.com/samestrin/go-axi), which guards against the failure mode the raw codec has: a type it cannot encode does not error, it emits **empty output**, and a command then silently prints nothing.
 
-`--axi` is a persistent flag on the root, so every command accepts it.
+The format flags are persistent on the root, so every command accepts them.
 
-### Exit codes, and one stated exception
+### Exit codes
 
-A command that ran reports 0; a command that failed reports 1 with a structured error (`error: true` plus `message:`) on stdout in `--json` and `--axi`, and on stderr in plain mode. The exception: a malformed invocation — an unknown flag or command — exits **2**, the go-axi usage-error convention, kept deliberately. It is reported the same way as any other error: on stdout in `--json` and `--axi`, on stderr in plain mode. An unknown flag's message also lists the flags that command accepts:
+A command that ran reports 0; a command that failed reports 1 with a structured error (`error: true` plus `message:`) on stdout — in TOON by default, JSON under `--json`, and text (`Error: ...`) under `--plain`. stderr carries diagnostics only. A malformed invocation — an unknown flag or command, or conflicting format flags — exits **2**, the usage-error code the AXI spec itself asks for ("unknown flags must fail loud (exit 2)"). It is reported the same way as any other error, on stdout in the active format. An unknown flag's message also lists the flags that command accepts:
 
 ```
-$ llm-data grep --nope --axi
+$ llm-data grep --nope
 error: true
 message: "unknown flag: --nope; valid flags for llm-data grep: --axi, -l/--files-with-matches, ..."
 ```
@@ -101,7 +102,7 @@ message: "unknown flag: --nope; valid flags for llm-data grep: --axi, -l/--files
 - outside one: `repo: no repository`, printed only when git itself says so;
 - when git is missing, fails or does not answer within 2 seconds: `repo: git unavailable: <reason>`, never "no repository".
 
-Every case exits 0. `--json` and `--axi` carry the same fields plus a `help` list of next steps. `--help` still prints the full help, and an unknown subcommand still fails with exit 2.
+Every case exits 0. TOON (the default) and `--json` carry the same fields plus a `help` list of next steps; `--plain` leaves the list out. `--help` still prints the full help, and an unknown subcommand still fails with exit 2.
 
 ## Setup
 
@@ -129,10 +130,12 @@ Set `LLM_DATA_MCP_DEBUG=true` to log each command line and timeout to stderr.
 
 ## Known AXI gaps
 
-The audit in [`docs/axi-audit.md`](docs/axi-audit.md) scored the CLI against the ten AXI principles. The two gaps it left open are now closed, so nothing is listed here as unmet. If a new gap appears, state it here and carry a row for it in the technical-debt record rather than letting a caller learn it the hard way.
+The audit in [`docs/axi-audit.md`](docs/axi-audit.md) scores the CLI against the ten AXI principles. Every principle is met except two stated, justified remainders:
 
-- **Truncation with a size hint and `--full`** (closed, EST-5260): `grep` cuts matching lines at 200 bytes and `multigrep` content at 80 bytes, in every mode, each marking the cut (`truncated`, `full_length`) with a `--full` next step; `git-context --full` opts out of the 50,000-byte diff cut, which backs off to a character boundary.
-- **Totals and explicit zeros** (closed, EST-5260): `grep` reports `total_matches` in every mode, including `total: 0` in plain; `multigrep` always emits `total_matches`, `match_count` and the other counts, including 0, in `--json` and `--axi` (under `--min`, as the short aliases `tm`, `ks`, `kwm` and `fs` only).
+- **No session-end lifecycle-capture hook.** `llm-data` keeps no session state — no transcript, no record of files touched — so there is nothing for a session-end hook to capture. The session-start integration (the home view as context) ships for Claude Code, Codex and OpenCode through `setup`.
+- **`help[]` next steps are scoped, not universal.** They sit where a result leaves an agent without a next step: the home view, empty search results and truncated content. Widening them to every command is deliberately left as future work.
+
+If a new gap appears, state it here and carry a row for it in the technical-debt record rather than letting a caller learn it the hard way.
 
 ## Where did `extract-relevant` and `extract-links` go?
 
