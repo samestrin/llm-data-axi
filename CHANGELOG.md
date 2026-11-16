@@ -14,9 +14,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Command output is now TOON by default instead of plain text.** Every command emits token-dense TOON when no output flag is given; `--axi` still explicitly selects TOON and `--json` still selects JSON. **Breaking:** callers that need the previous plain-text output must now pass `--plain`.
+- **Conflicting output flags are rejected.** Combining `--plain` with `--json` or `--axi` is now a usage error (exit 2) that names the conflicting flags, instead of silently choosing one output format.
 - **The skill `setup` writes says TOON is the default output.** It told agents to add `--axi` for TOON; it now says output is TOON by default and `--plain` gives text. The committed `skills/llm-data/SKILL.md` matches.
 
 ### Fixed
+
+- **Errors are printed on stdout in every output format.** Runtime and usage failures now use the command's selected format—TOON by default, JSON with `--json`, or plain text with `--plain`—so a caller reading stdout always receives the error instead of an empty stream. Existing exit codes are unchanged, and stderr remains reserved for diagnostics.
 
 - **`setup` no longer registers a hook the session cannot run.** The Claude Code SessionStart hook was always the bare `llm-data`, which fails when the binary is not on `PATH`. It is now the bare command only when `PATH` finds it, and otherwise the absolute path of the binary that ran `setup`. A hook `setup` wrote earlier that no longer matches (the old path after the binary moved, or a bare command once `llm-data` leaves `PATH`) is rewritten in place, and a second llm-data hook is removed. With neither, `setup` fails and writes nothing.
 
