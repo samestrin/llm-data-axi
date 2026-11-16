@@ -7,7 +7,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime/debug"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -141,14 +144,13 @@ and has no effect on TOON, which is already token-dense.`,
 		},
 	}
 
-	// -v, -V and --version print the bare version and nothing else. Both flags
-	// bind showVersion, so cobra's version check, which reads "version", sees
-	// -V too. They are root-local: under a subcommand -v is an unknown flag,
-	// not a silently ignored one.
+	// -v, -V and --version print the bare version and nothing else. -V has no
+	// flag of its own: pflag would need a long name for it, and that name would
+	// be one more accepted spelling. run rewrites it to -v instead (see
+	// versionShorthand). The flag is root-local: under a subcommand -v is an
+	// unknown flag, not a silently ignored one.
 	root.SetVersionTemplate("{{.Version}}\n")
 	root.Flags().BoolVarP(&showVersion, "version", "v", false, "Print the version and exit (also -V)")
-	root.Flags().BoolVarP(&showVersion, "version-upper", "V", false, "Print the version and exit")
-	_ = root.Flags().MarkHidden("version-upper")
 
 	// Inherited by every subcommand: cobra looks up the parent chain for one.
 	root.SetFlagErrorFunc(flagError)
@@ -194,8 +196,9 @@ const homeDescription = "Deterministic commands for reading, searching and resha
 // home view reports.
 var executablePath = os.Executable
 
-// homeGitTimeout bounds every git call the home view makes. A bare run is
-// what a session-start hook calls, so a hung git must not hang it.
+// homeGitTimeout bounds each git call the home view makes. A bare run is
+// what a session-start hook calls, so a hung git must not hang it. Each call
+// has its own budget, so the timeout message is true of the call it names.
 var homeGitTimeout = 2 * time.Second
 
 // homeHelp is the next step a bare run offers in TOON and --json. The --plain
@@ -224,33 +227,45 @@ type HomeView struct {
 // failure lands in Repo rather than in an error: the view is still worth
 // printing without it, and the run still exits 0.
 func (v *HomeView) fillRepo(home string) {
-	ctx, cancel := context.WithTimeout(context.Background(), homeGitTimeout)
-	defer cancel()
-
-	root, err := repoRootOf(ctx, "")
+	var root string
+	err := withGitBudget(func(ctx context.Context) (err error) {
+		root, err = repoRootOf(ctx, "")
+		return err
+	})
 	if errors.Is(err, errNotARepository) {
 		v.Repo = "no repository"
 		return
 	}
 	if err != nil {
-		v.Repo = gitUnavailable(err)
+		v.Repo = gitUnavailable("git rev-parse", err)
 		return
 	}
 	v.RepoRoot = tildeHome(root, home)
 	v.ProjectType = detectInDir(root).Stack
 
-	changes, err := gitChangesIn(ctx, root, "", true, false)
+	var changes GitChangesResult
+	err = withGitBudget(func(ctx context.Context) (err error) {
+		changes, err = gitChangesIn(ctx, root, "", true, false)
+		return err
+	})
 	if err != nil {
 		// Never "no repository" here: the root was just found.
-		v.Repo = gitUnavailable(err)
+		v.Repo = gitUnavailable("git status", err)
 		return
 	}
 	v.GitChanges = &changes.Count
 }
 
-func gitUnavailable(err error) string {
+// withGitBudget runs one git call under its own homeGitTimeout.
+func withGitBudget(call func(ctx context.Context) error) error {
+	ctx, cancel := context.WithTimeout(context.Background(), homeGitTimeout)
+	defer cancel()
+	return call(ctx)
+}
+
+func gitUnavailable(call string, err error) string {
 	if errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Sprintf("git unavailable: no answer within %s", homeGitTimeout)
+		return fmt.Sprintf("git unavailable: %s gave no answer within %s", call, homeGitTimeout)
 	}
 	return "git unavailable: " + err.Error()
 }
@@ -312,7 +327,7 @@ func Execute() {
 // happened, and stderr is left to diagnostics.
 func run(args []string, stdout, stderr io.Writer) int {
 	root := NewRootCmd()
-	root.SetArgs(args)
+	root.SetArgs(versionShorthand(root, args))
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	cmd, err := root.ExecuteC()
@@ -322,6 +337,27 @@ func run(args []string, stdout, stderr io.Writer) int {
 	axi, jsonOut, minOut := outputMode(cmd, args)
 	output.SetDefaultAXI(axi)
 	return output.New(jsonOut, minOut, stdout).PrintError(err)
+}
+
+// versionShorthand rewrites -V to -v when the run is the root command, so -V
+// prints the version without a flag of its own (see NewRootCmd). Every root
+// flag is a bool and the root takes no arguments, so a "-V" token before "--"
+// can only be the flag. Under a subcommand args are left alone, and -V there
+// stays an unknown flag, as -v does.
+func versionShorthand(root *cobra.Command, args []string) []string {
+	if cmd, _, err := root.Find(args); err != nil || cmd != root {
+		return args
+	}
+	out := slices.Clone(args)
+	for i, a := range out {
+		if a == "--" {
+			break
+		}
+		if a == "-V" {
+			out[i] = "-v"
+		}
+	}
+	return out
 }
 
 // flagOn reports whether cmd's flag name was given and is true. A flag the
@@ -360,13 +396,20 @@ func formatConflict(plain, jsonOn, axi bool) error {
 // PersistentPreRun publishes the mode, and at the first bad flag, so in
 // `grep --nope --axi` cobra never saw --axi. The args are parsed again against
 // cmd's flags with unknown flags tolerated, so a flag's value and anything
-// after "--" are still not mistaken for a mode flag.
+// after "--" are still not mistaken for a mode flag. Each flag is copied with
+// a value that accepts anything, so a value the real flag refused (the error
+// being reported) does not stop the parse before a later --json.
 func outputMode(cmd *cobra.Command, args []string) (axi, jsonOut, minOut bool) {
 	fs := pflag.NewFlagSet("mode", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.ParseErrorsWhitelist.UnknownFlags = true
-	fs.AddFlagSet(cmd.Flags())
-	fs.AddFlagSet(cmd.InheritedFlags())
+	copyFlag := func(f *pflag.Flag) {
+		if fs.Lookup(f.Name) == nil {
+			fs.AddFlag(&pflag.Flag{Name: f.Name, Shorthand: f.Shorthand, NoOptDefVal: f.NoOptDefVal, Value: &anyValue{typ: f.Value.Type()}})
+		}
+	}
+	cmd.Flags().VisitAll(copyFlag)
+	cmd.InheritedFlags().VisitAll(copyFlag)
 	_ = fs.Parse(args)
 	isSet := func(name string) bool {
 		f := fs.Lookup(name)
@@ -379,11 +422,27 @@ func outputMode(cmd *cobra.Command, args []string) (axi, jsonOut, minOut bool) {
 		GlobalMinOutput || isSet("min")
 }
 
-// flagError adds the command's valid flags to an unknown-flag error, so a
-// caller can correct the call without a --help round trip. The cobra wording
-// is kept at the front: ExitCodeFor classifies it as a usage error by it.
+// anyValue is a flag value that accepts any string, for outputMode's re-read.
+type anyValue struct{ val, typ string }
+
+func (v *anyValue) Set(s string) error { v.val = s; return nil }
+func (v *anyValue) String() string     { return v.val }
+func (v *anyValue) Type() string       { return v.typ }
+
+// flagError rewrites the two flag errors a caller can act on.
+//
+// An unknown flag gains the command's valid flags, in the message and as a
+// valid_flags list, so a caller can correct the call without a --help round
+// trip. The cobra wording is kept at the front: ExitCodeFor classifies it as
+// a usage error by it.
+//
+// A bad value for a typed flag says what the flag takes, instead of naming
+// the Go parser that refused it (see invalidValue).
 func flagError(cmd *cobra.Command, err error) error {
 	msg := err.Error()
+	if bad := invalidValue(cmd, msg); bad != nil {
+		return bad
+	}
 	if !strings.HasPrefix(msg, "unknown flag: ") && !strings.HasPrefix(msg, "unknown shorthand flag: ") {
 		return err
 	}
@@ -398,7 +457,74 @@ func flagError(cmd *cobra.Command, err error) error {
 		}
 		valid = append(valid, name)
 	})
-	return fmt.Errorf("%w; valid flags for %s: %s", err, cmd.CommandPath(), strings.Join(valid, ", "))
+	return &unknownFlagError{err: err, cmdPath: cmd.CommandPath(), valid: valid}
+}
+
+// unknownFlagError is an unknown flag with the flags the command does accept.
+type unknownFlagError struct {
+	err     error
+	cmdPath string
+	valid   []string
+}
+
+func (e *unknownFlagError) Error() string {
+	return fmt.Sprintf("%v; valid flags for %s: %s", e.err, e.cmdPath, strings.Join(e.valid, ", "))
+}
+
+func (e *unknownFlagError) Unwrap() error { return e.err }
+
+// ErrorFields puts the valid flags next to the message in TOON and JSON.
+func (e *unknownFlagError) ErrorFields() map[string]any {
+	return map[string]any{"valid_flags": e.valid}
+}
+
+// invalidValuePattern is pflag's error for a value its parser refused:
+// invalid argument "abc" for "--start" flag: strconv.ParseInt: parsing ...
+// The flag is "--name", or "-s, --name" when it has a shorthand.
+var invalidValuePattern = regexp.MustCompile(`^invalid argument (".*") for "(?:-., )?--([^"]+)" flag: (.*)$`)
+
+// valueWants says what each built-in flag type takes. A type not listed
+// (a custom flag.Value) keeps its own reason, which it wrote for a person.
+var valueWants = map[string]string{
+	"bool":     "true or false",
+	"int":      "an integer",
+	"int8":     "an integer",
+	"int16":    "an integer",
+	"int32":    "an integer",
+	"int64":    "an integer",
+	"uint":     "a non-negative integer",
+	"uint8":    "a non-negative integer",
+	"uint16":   "a non-negative integer",
+	"uint32":   "a non-negative integer",
+	"uint64":   "a non-negative integer",
+	"float32":  "a number",
+	"float64":  "a number",
+	"duration": "a duration such as 30s or 5m",
+}
+
+// invalidValue rewrites pflag's invalid-value error to name the flag, the
+// value and what the flag takes, as a usage error. It returns nil for any
+// other message, or one it cannot read, which then passes through as cobra
+// wrote it (still exit 2: ExitCodeFor matches the original wording).
+func invalidValue(cmd *cobra.Command, msg string) error {
+	m := invalidValuePattern.FindStringSubmatch(msg)
+	if m == nil {
+		return nil
+	}
+	value, err := strconv.Unquote(m[1])
+	if err != nil {
+		return nil
+	}
+	name, reason := m[2], m[3]
+	if f := cmd.Flags().Lookup(name); f != nil {
+		if want, ok := valueWants[f.Value.Type()]; ok {
+			reason = "want " + want
+			if strings.HasSuffix(m[3], "value out of range") {
+				reason = strings.TrimPrefix(strings.TrimPrefix(want, "a "), "an ") + " out of range"
+			}
+		}
+	}
+	return &output.UsageError{Msg: fmt.Sprintf("invalid value %q for --%s: %s", value, name, reason)}
 }
 
 // splitCSV splits a comma-separated string, trimming blanks.

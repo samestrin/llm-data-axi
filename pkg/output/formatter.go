@@ -8,6 +8,7 @@ package output
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -337,27 +338,27 @@ func (f *Formatter) PrintError(err error) int {
 		// stream never has to switch parsers to learn that the command failed.
 		// The exit code is classified independently of the output mode: a
 		// display flag must not change the process status.
-		_ = EncodeAXI(f.Writer, map[string]interface{}{
+		_ = EncodeAXI(f.Writer, withErrorFields(err, map[string]interface{}{
 			"error":   true,
 			"message": err.Error(),
-		})
+		}))
 		return ExitCodeFor(err)
 	}
 	if f.JSON {
 		if f.Minimal {
 			// Minimal JSON: abbreviated keys, single line
-			result := map[string]interface{}{
+			result := withErrorFields(err, map[string]interface{}{
 				"err": true,
 				"msg": err.Error(),
-			}
+			})
 			output, _ := json.Marshal(result)
 			fmt.Fprintln(f.Writer, string(output))
 		} else {
 			// Pretty JSON
-			result := map[string]interface{}{
+			result := withErrorFields(err, map[string]interface{}{
 				"error":   true,
 				"message": err.Error(),
-			}
+			})
 			output, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Fprintln(f.Writer, string(output))
 		}
@@ -376,6 +377,34 @@ func (f *Formatter) PrintError(err error) int {
 	// Classified rather than always 1: AXI requires a malformed invocation to
 	// exit 2, and this return value is what every CLI hands to os.Exit.
 	return ExitCodeFor(err)
+}
+
+// FieldsError is an error that carries data next to its message, such as the
+// flags a command accepts. PrintError adds the fields to the TOON and JSON
+// error object, so a caller reads them as data rather than parsing them out of
+// the message. Text mode prints the message only, which must say the same.
+type FieldsError interface {
+	error
+	ErrorFields() map[string]any
+}
+
+// withErrorFields adds the fields of the first FieldsError in err's chain to
+// base. The error flag and the message are the formatter's under either
+// spelling, so a field never takes those keys, even in the mode that does not
+// use them.
+func withErrorFields(err error, base map[string]interface{}) map[string]interface{} {
+	var fe FieldsError
+	if !errors.As(err, &fe) {
+		return base
+	}
+	for k, v := range fe.ErrorFields() {
+		switch k {
+		case "error", "message", "err", "msg":
+			continue
+		}
+		base[k] = v
+	}
+	return base
 }
 
 // ErrorResult is a helper for creating error responses in handlers.
