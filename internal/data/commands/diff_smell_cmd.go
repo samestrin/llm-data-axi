@@ -40,7 +40,7 @@ summary.verdict is "hard" (any test_only/weakened_assertion → force review),
 	cmd.Flags().StringVar(&dsDiffPath, "diff", "", "Path to a unified diff file ('-' for stdin); takes precedence over --repo/--rev")
 	cmd.Flags().StringVar(&dsRepo, "repo", ".", "Repository to read the commit diff from when --diff is not given")
 	cmd.Flags().StringVar(&dsRev, "rev", "HEAD", "Commit to scan via 'git show <rev>' when --diff is not given")
-	cmd.Flags().BoolVar(&dsJSON, "json", true, "Output as JSON (default true)")
+	cmd.Flags().BoolVar(&dsJSON, "json", false, "Output as JSON")
 	cmd.Flags().BoolVar(&dsMin, "min", false, "Minimal output format")
 	return cmd
 }

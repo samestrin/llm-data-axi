@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -446,6 +447,9 @@ func searchKeyword(basePath string, files []string, keyword string, defPatterns 
 	for f := range filesMatchedSet {
 		result.FilesMatched = append(result.FilesMatched, f)
 	}
+	// Sorted, because a map's order is random: the same search printed its
+	// files in a different order on each run.
+	sort.Strings(result.FilesMatched)
 
 	return result
 }

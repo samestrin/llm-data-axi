@@ -19,6 +19,7 @@ import (
 func runRoot(t *testing.T, args ...string) string {
 	t.Helper()
 	root := NewRootCmd()
+	restoreOutputMode(t)
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
 	root.SetArgs(args)
@@ -53,23 +54,30 @@ func TestSecondInvocationDoesNotInheritAXI(t *testing.T) {
 	}
 }
 
-func TestSecondInvocationWithoutFlagsIsPlain(t *testing.T) {
-	// The case the task names: a run with --axi, then a run with no output flag
-	// at all, must not print TOON. The unconditional publish in PersistentPreRun
-	// is what clears the package default; this pins it together with the fresh
-	// bound variable.
+func TestSecondInvocationWithPlainIsPlain(t *testing.T) {
+	// The case the task names: a run with --axi, then a --plain run, must not
+	// print TOON. (Before TOON was the default the second run had no flag at
+	// all; --plain is how that text is asked for now.) The unconditional
+	// publish in PersistentPreRun is what clears the package default; this
+	// pins it together with the fresh bound variable.
 	t.Cleanup(func() {
 		GlobalAXIOutput, GlobalJSONOutput, GlobalMinOutput = false, false, false
 		output.SetDefaultAXI(false)
 	})
 
 	axi := runRoot(t, "math", "2+2", "--axi")
-	plain := runRoot(t, "math", "2+2")
+	plain := runRoot(t, "math", "2+2", "--plain")
 	if plain == axi {
-		t.Errorf("a run without --axi printed the previous run's TOON:\n%q", plain)
+		t.Errorf("a --plain run printed the previous run's TOON:\n%q", plain)
 	}
 	if GlobalAXIOutput {
-		t.Error("GlobalAXIOutput is still set after a run without --axi")
+		t.Error("GlobalAXIOutput is still set after a --plain run")
+	}
+
+	// And the other way: a run with no flag after --json is TOON, not JSON.
+	runRoot(t, "math", "2+2", "--json")
+	if bare := runRoot(t, "math", "2+2"); bare != axi {
+		t.Errorf("a run with no flag after --json is not the TOON default:\n%q", bare)
 	}
 }
 
