@@ -199,3 +199,70 @@ func TestMathCommandMinOutput(t *testing.T) {
 		})
 	}
 }
+
+// TestMathNonFiniteResultIsAnErrorInEveryFormat defends against a non-finite
+// result reading as success. `math "1/0" --json` exited 0 with an EMPTY stdout
+// (the json.Marshal error was dropped), --axi leaked the internal message
+// "json: unsupported value: +Inf", and plain printed `RESULT: +Inf` with exit
+// 0. Every format now reports a structured error naming the expression and
+// the value, exit 1, and never an empty stdout under --json or --axi.
+func TestMathNonFiniteResultIsAnErrorInEveryFormat(t *testing.T) {
+	for _, tc := range []struct {
+		expr, value, reason string
+	}{
+		{"1/0", "+Inf", "division by zero"},
+		{"-1/0", "-Inf", "division by zero"},
+		{"0/0", "NaN", "not a number"},
+		{"sqrt(-1)", "NaN", "not a number"},
+	} {
+		for _, mode := range [][]string{nil, {"--min"}, {"--json"}, {"--json", "--min"}, {"--axi"}} {
+			args := append([]string{"math", tc.expr}, mode...)
+			code, stdout, stderr := runCLI(t, args...)
+			if code != 1 {
+				t.Errorf("%v: exit %d, want 1\nstdout=%q stderr=%q", args, code, stdout, stderr)
+			}
+			// Plain errors go to stderr; --json and --axi errors to stdout.
+			msg := stdout + stderr
+			for _, want := range []string{tc.expr, tc.value, tc.reason} {
+				if !strings.Contains(msg, want) {
+					t.Errorf("%v: error does not name %q:\nstdout=%q stderr=%q", args, want, stdout, stderr)
+				}
+			}
+			if strings.Contains(msg, "unsupported value") {
+				t.Errorf("%v: leaked the encoder's internal message: %q", args, msg)
+			}
+			if strings.Contains(msg, "RESULT:") {
+				t.Errorf("%v: printed a result for a non-finite value: %q", args, msg)
+			}
+			structured := len(mode) > 0 && (mode[0] == "--json" || mode[0] == "--axi")
+			if structured {
+				if strings.TrimSpace(stdout) == "" {
+					t.Errorf("%v: empty stdout", args)
+				}
+				if mode[0] == "--json" {
+					var got map[string]interface{}
+					if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+						t.Errorf("%v: stdout is not JSON: %v\n%s", args, err, stdout)
+					}
+				} else if !strings.Contains(stdout, "error: true") {
+					t.Errorf("%v: not a TOON error: %q", args, stdout)
+				}
+			}
+		}
+	}
+}
+
+// TestMathFiniteResultStillSucceeds is the other side of the non-finite
+// check: an ordinary result, including a large finite one and a negative
+// zero, must not be mistaken for a non-finite one.
+func TestMathFiniteResultStillSucceeds(t *testing.T) {
+	for _, expr := range []string{"1/2", "10^300", "(-0.0)", "sqrt(4)"} {
+		for _, mode := range [][]string{nil, {"--json"}, {"--axi"}} {
+			args := append([]string{"math", expr}, mode...)
+			code, stdout, stderr := runCLI(t, args...)
+			if code != 0 || strings.TrimSpace(stdout) == "" {
+				t.Errorf("%v: exit %d stdout=%q stderr=%q", args, code, stdout, stderr)
+			}
+		}
+	}
+}
