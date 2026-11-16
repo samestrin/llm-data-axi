@@ -818,9 +818,9 @@ func TestSetupDryRunDoesNotRepair(t *testing.T) {
 
 // Defends the target selector: an unknown target is a usage error (exit 2)
 // raised before anything is written, never accepted and ignored. Until the
-// Codex and OpenCode targets exist, naming them is exactly that.
+// OpenCode target exists, naming it is exactly that.
 func TestSetupRejectsAnUnknownTarget(t *testing.T) {
-	for _, arg := range []string{"vscode", "codex", "claude,nope", ""} {
+	for _, arg := range []string{"vscode", "opencode", "claude,nope", "codex,nope", ""} {
 		t.Run(arg, func(t *testing.T) {
 			project, _ := setupEnv(t)
 			_, err := runSetupCmd(t, "--path", project, "--target", arg)

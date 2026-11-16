@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - **`llm-data setup --target` names the agents to register with.** It takes a comma-separated or repeated list; the default is `claude`, so a bare `llm-data setup` writes what it did before. An unknown target is a usage error (exit 2) and nothing is written.
+- **`llm-data setup --target codex` registers llm-data with Codex.** It merges the SessionStart hook into `.codex/hooks.json` and sets `[features] hooks = true` in `.codex/config.toml`, keeping every other hook, key and comment. The hook command is chosen and repaired exactly as for Claude Code, and `--dry-run` reports both files without writing. A `config.toml` that cannot be changed by a line edit alone (invalid TOML, or `features` as a dotted key or inline table) is refused and nothing is written. The default target is still `claude` alone.
 
 ### Changed
 
