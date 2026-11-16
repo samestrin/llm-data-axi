@@ -5,7 +5,7 @@ description: Deterministic file, search and project-analysis commands. Use to se
 
 # llm-data
 
-Run `llm-data --help` for the full command list. Add `--axi` for token-dense TOON output, or `--json` for JSON.
+Run `llm-data --help` for the full command list. Output is token-dense TOON by default; add `--plain` for text or `--json` for JSON.
 
 - `llm-data grep <pattern> <path>...` and `llm-data multigrep` search files; a missing path is an error, not "no matches".
 - `llm-data tree`, `llm-data count` and `llm-data catfiles` list, count and read files.
