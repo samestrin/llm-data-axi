@@ -86,7 +86,7 @@ The format flags are persistent on the root, so every command accepts them.
 
 ### Exit codes
 
-A command that ran reports 0; a command that failed reports 1 with a structured error (`error: true` plus `message:`) on stdout — in TOON by default, JSON under `--json`, and text (`Error: ...`) under `--plain`. stderr carries diagnostics only, with one known exception: `template --strict` reports an undefined variable on stderr while still exiting 0 (see Known AXI gaps). A malformed invocation — an unknown flag or command, a value a flag cannot take, or conflicting format flags — exits **2**, the usage-error code the AXI spec itself asks for ("unknown flags must fail loud (exit 2)"). It is reported the same way as any other error, on stdout in the active format. An unknown flag's error also lists the flags that command accepts, in the message and as a `valid_flags` list in TOON and `--json`:
+A command that ran reports 0; a command that failed reports 1 with a structured error (`error: true` plus `message:`) on stdout — in TOON by default, JSON under `--json`, and text (`Error: ...`) under `--plain`. stderr carries diagnostics only, with three known exceptions that report a failure on stderr while still exiting 0: `template --strict` with an undefined variable, `catfiles` dropping an unreadable or stat-failed file, and `multigrep --output-dir` failing to write a per-keyword file (see Known AXI gaps). A malformed invocation — an unknown flag or command, a value a flag cannot take, or conflicting format flags — exits **2**, the usage-error code the AXI spec itself asks for ("unknown flags must fail loud (exit 2)"). It is reported the same way as any other error, on stdout in the active format. An unknown flag's error also lists the flags that command accepts, in the message and as a `valid_flags` list in TOON and `--json`:
 
 ```
 $ llm-data grep --nope
@@ -139,10 +139,12 @@ Set `LLM_DATA_MCP_DEBUG=true` to log each command line and timeout to stderr.
 
 ## Known AXI gaps
 
-The audit in [`docs/axi-audit.md`](docs/axi-audit.md) scores the CLI against the ten AXI principles. Every principle is met except three stated, justified remainders:
+The audit in [`docs/axi-audit.md`](docs/axi-audit.md) scores the CLI against the ten AXI principles. Every principle is met except five stated, justified remainders:
 
 - **No session-end lifecycle-capture hook.** `llm-data` keeps no session state — no transcript, no record of files touched — so there is nothing for a session-end hook to capture. The session-start integration (the home view as context) ships for Claude Code, Codex and OpenCode through `setup`.
 - **`template --strict` does not fail on an undefined variable.** It prints `ERROR: Undefined variable: <name>` on stderr, keeps the placeholder and exits 0 with `status: success`, despite the flag's "Error on undefined variables" help. Pre-existing behaviour, filed as technical debt; fixing it is a behaviour change, not a docs change.
+- **`catfiles` drops an unreadable file with only a stderr warning.** Run as non-root on a directory containing a file it cannot read, it prints `WARNING: Cannot read file: <path>` on stderr, drops the file and exits 0; when that is the only file, TOON stdout is empty, `--json` prints `{}` and `--plain` prints nothing. A file that fails `os.Stat` (for example one that vanished mid-run) is dropped with no message at all. Pre-existing behaviour, filed as HIGH technical debt; fixing it is a behaviour change, not a docs change.
+- **`multigrep --output-dir` reports success when a per-keyword file cannot be written.** With an unwritable output directory it prints `Warning: failed to write <path>: ... permission denied` on stderr and exits 0, while stdout still reports `keywords_with_matches` as if the per-keyword files existed. Pre-existing behaviour, filed as HIGH technical debt; fixing it is a behaviour change, not a docs change.
 - **`help[]` next steps are scoped, not universal.** They sit where a result leaves an agent without a next step: the home view, empty search results and truncated search lines. Widening them to every command is deliberately left as future work.
 
 If a new gap appears, state it here and carry a row for it in the technical-debt record rather than letting a caller learn it the hard way.
