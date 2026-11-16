@@ -48,6 +48,10 @@ Output format:
   ROOT: /absolute/path/to/repo
   VALID: TRUE|FALSE (with --validate)
 
+Outside a repository it prints GIT_REPOSITORY: FALSE and exits 0; --json and
+--axi always carry git_repository. A git failure other than git's own
+"not a git repository" answer exits 1 with git's reason.
+
 Examples:
   llm-data repo-root
   llm-data repo-root --path /path/to/subdir
