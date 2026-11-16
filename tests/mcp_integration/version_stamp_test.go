@@ -49,3 +49,33 @@ func TestReleaseStampSetsTheServerVersion(t *testing.T) {
 		t.Errorf("serverInfo.version = %q, want the stamped 9.8.7", res.ServerInfo.Version)
 	}
 }
+
+// TestUnstampedBuildReportsDevNotAStaleRelease defends the go-install version
+// bug: serverVersion defaulted to the literal "1.0.0", so a build without
+// ldflags (`go install ...@v1.1.0` runs none) told MCP clients it was release
+// 1.0.0 — a wrong version, not just an unknown one. A local `go build` records
+// "(devel)", which is not a version, so the honest "dev" default must survive.
+func TestUnstampedBuildReportsDevNotAStaleRelease(t *testing.T) {
+	root := repoRoot(t)
+	cli, _ := builtBinaries(t)
+	mcp := filepath.Join(t.TempDir(), "llm-data-mcp")
+	build := exec.Command("go", "build", "-o", mcp, "./cmd/llm-data-mcp")
+	build.Dir = root
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+
+	env := append(os.Environ(), "LLM_DATA_BINARY="+cli, "LLM_DATA_MCP_AXI=")
+	resp := speakWith(t, mcp, env, []string{initRequest})[1]
+	var res struct {
+		ServerInfo struct {
+			Version string `json:"version"`
+		} `json:"serverInfo"`
+	}
+	if err := json.Unmarshal(resp.Result, &res); err != nil {
+		t.Fatalf("parse initialize result: %v\n%s", err, resp.Result)
+	}
+	if res.ServerInfo.Version != "dev" {
+		t.Errorf("serverInfo.version = %q, want %q from an unstamped build", res.ServerInfo.Version, "dev")
+	}
+}
