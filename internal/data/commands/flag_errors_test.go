@@ -26,7 +26,9 @@ var invalidValueCases = []struct {
 	{"bool", []string{"grep", "--ignore-case=maybe", "x", "."}, `invalid value "maybe" for --ignore-case: want true or false`},
 	{"bool shorthand", []string{"grep", "-i=maybe", "x", "."}, `invalid value "maybe" for --ignore-case: want true or false`},
 	// A custom value's own reason is already written for a person, so it stays.
-	{"custom value", []string{"setup", "--target", "nope", "--dry-run"}, `invalid value "nope" for --target: unknown target "nope" (known: claude)`},
+	// The known list is read from setupTargets, so adding a target does not
+	// break this case.
+	{"custom value", []string{"setup", "--target", "nope", "--dry-run"}, `invalid value "nope" for --target: unknown target "nope" (known: ` + strings.Join(setupTargetNames(), ", ") + `)`},
 }
 
 // Defends EST-6633 item 1: a bad flag VALUE came back as
