@@ -129,7 +129,8 @@ func TestRepoRootOutsideARepositoryIsAFactNotAnError(t *testing.T) {
 		mode []string
 		want string
 	}{
-		{nil, "GIT_REPOSITORY: FALSE"},
+		{[]string{"--plain"}, "GIT_REPOSITORY: FALSE"},
+		{nil, "git_repository: false"},
 		{[]string{"--json"}, `"git_repository": false`},
 		{[]string{"--json", "--min"}, `"git_repository":false`},
 		{[]string{"--axi"}, "git_repository: false"},
@@ -170,7 +171,8 @@ func TestRepoRootInsideARepositorySaysSo(t *testing.T) {
 		mode []string
 		want []string
 	}{
-		{nil, []string{"ROOT: " + dir}},
+		{[]string{"--plain"}, []string{"ROOT: " + dir}},
+		{nil, []string{"git_repository: true", dir}},
 		{[]string{"--json"}, []string{`"git_repository": true`, `"root": "` + dir + `"`}},
 		{[]string{"--axi"}, []string{"git_repository: true", dir}},
 	} {
@@ -207,7 +209,7 @@ func TestGitContextSaysNotARepositoryOnlyWhenGitDoes(t *testing.T) {
 		"broken config":    {"fatal: bad config line 1 in file .git/config", 128, "bad config line 1", false},
 	} {
 		fakeGitOnPath(t, tc.stderr, tc.code)
-		for _, mode := range [][]string{nil, {"--json"}, {"--axi"}} {
+		for _, mode := range [][]string{nil, {"--plain"}, {"--json"}, {"--axi"}} {
 			args := append([]string{"git-context", "--path", dir}, mode...)
 			code, stdout, stderr := runCLI(t, args...)
 			if code != 1 {

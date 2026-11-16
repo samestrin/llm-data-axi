@@ -44,12 +44,13 @@ func newRepoRootCmd() *cobra.Command {
 Returns the absolute path to the repository root, suitable for anchoring
 all subsequent path operations in LLM prompts.
 
-Output format:
+Output format (--plain):
   ROOT: /absolute/path/to/repo
   VALID: TRUE|FALSE (with --validate)
 
-Outside a repository it prints GIT_REPOSITORY: FALSE and exits 0; --json and
---axi always carry git_repository. A git failure other than git's own
+Outside a repository it exits 0 and says so: git_repository: false in the
+default TOON output and in --json, GIT_REPOSITORY: FALSE with --plain. TOON
+and --json always carry git_repository. A git failure other than git's own
 "not a git repository" answer exits 1 with git's reason.
 
 Examples:

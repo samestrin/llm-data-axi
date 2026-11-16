@@ -215,7 +215,7 @@ func TestMathNonFiniteResultIsAnErrorInEveryFormat(t *testing.T) {
 		{"0/0", "NaN", "not a number"},
 		{"sqrt(-1)", "NaN", "not a number"},
 	} {
-		for _, mode := range [][]string{nil, {"--min"}, {"--json"}, {"--json", "--min"}, {"--axi"}} {
+		for _, mode := range [][]string{nil, {"--plain"}, {"--plain", "--min"}, {"--json"}, {"--json", "--min"}, {"--axi"}} {
 			args := append([]string{"math", tc.expr}, mode...)
 			code, stdout, stderr := runCLI(t, args...)
 			if code != 1 {
@@ -234,12 +234,13 @@ func TestMathNonFiniteResultIsAnErrorInEveryFormat(t *testing.T) {
 			if strings.Contains(msg, "RESULT:") {
 				t.Errorf("%v: printed a result for a non-finite value: %q", args, msg)
 			}
-			structured := len(mode) > 0 && (mode[0] == "--json" || mode[0] == "--axi")
+			// TOON is the default, so no flag is structured too.
+			structured := len(mode) == 0 || mode[0] == "--json" || mode[0] == "--axi"
 			if structured {
 				if strings.TrimSpace(stdout) == "" {
 					t.Errorf("%v: empty stdout", args)
 				}
-				if mode[0] == "--json" {
+				if len(mode) > 0 && mode[0] == "--json" {
 					var got map[string]interface{}
 					if err := json.Unmarshal([]byte(stdout), &got); err != nil {
 						t.Errorf("%v: stdout is not JSON: %v\n%s", args, err, stdout)
@@ -257,7 +258,7 @@ func TestMathNonFiniteResultIsAnErrorInEveryFormat(t *testing.T) {
 // zero, must not be mistaken for a non-finite one.
 func TestMathFiniteResultStillSucceeds(t *testing.T) {
 	for _, expr := range []string{"1/2", "10^300", "(-0.0)", "sqrt(4)"} {
-		for _, mode := range [][]string{nil, {"--json"}, {"--axi"}} {
+		for _, mode := range [][]string{nil, {"--plain"}, {"--json"}, {"--axi"}} {
 			args := append([]string{"math", expr}, mode...)
 			code, stdout, stderr := runCLI(t, args...)
 			if code != 0 || strings.TrimSpace(stdout) == "" {
