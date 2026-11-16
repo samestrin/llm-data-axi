@@ -10,7 +10,7 @@
 
 Twenty-two commands for inspecting a codebase and its data (`llm-data --help` lists them all): `tree`, `stats`, `detect`, `discover-tests`, `grep`, `multigrep`, `count`, `catfiles`, `yaml get/set/multiget/multiset`, `math`, `runtime`, `git-changes`, `git-context`, `repo-root`, `setup` and more. Most are read-only; the writers are `yaml set` and `yaml multiset` (the target YAML file, in place), `setup` (agent-integration files inside the project), `template --output` (the rendered file) and `multigrep --output-dir` (one result file per keyword).
 
-Output is token-dense TOON by default. `--json` prints JSON, `--plain` prints plain text, and `--axi` is an accepted alias for the default. `--min` shortens `--json` and `--plain` output and has no effect on TOON; `--plain` combined with `--json` or `--axi` is a usage error (exit 2) naming both flags. Errors go to stdout in the active format, with exit codes 0 (success), 1 (error) and 2 (usage error). The MCP server asks the CLI for TOON by default.
+Output is token-dense TOON by default. `--json` prints JSON, `--plain` prints plain text, and `--axi` is an accepted alias for the default. `--min` shortens `--json` and `--plain` output and has no effect on TOON; `--plain` combined with `--json` or `--axi` is a usage error (exit 2) naming both flags. Errors go to stdout in the active format, with exit codes 0 (success), 1 (error) and 2 (usage error); the one known exception is `template --strict`, which reports an undefined variable on stderr and still exits 0 (a stated remainder below). The MCP server asks the CLI for TOON by default.
 
 A bare `llm-data` run prints a home view — the binary path, a one-sentence description and the repository it runs in — and `llm-data setup` registers the CLI with Claude Code, Codex and OpenCode in the current project (`--target`, comma-separated or repeated; the default is `claude` alone).
 
@@ -18,9 +18,10 @@ Nothing in the tool makes a network call — a build-time guard (`internal/noweb
 
 ## AXI conformance
 
-The hand audit in [`docs/axi-audit.md`](axi-audit.md) scores every principle as met except two stated, justified remainders (principle 9 is partly met within its stated scope):
+The hand audit in [`docs/axi-audit.md`](axi-audit.md) scores every principle as met except three stated, justified remainders (principle 9 is partly met within its stated scope):
 
 - **No session-end lifecycle-capture hook.** `llm-data` keeps no session state — no transcript, no record of files touched — so there is nothing for a session-end hook to capture. The session-start integration (home view as context) ships for all three default app targets.
+- **`template --strict` reports undefined variables on stderr and exits 0.** It keeps the placeholder and prints `status: success`, despite the flag's "Error on undefined variables" help. Pre-existing behaviour, filed as technical debt because fixing it is a behaviour change, not a docs change.
 - **`help[]` next steps are scoped, not universal.** They sit where a result leaves an agent without a next step: the home view, empty search results and truncated search lines. Widening them to every command is deliberately left as future work.
 
 ## Token figures
