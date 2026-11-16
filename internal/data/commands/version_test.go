@@ -75,8 +75,9 @@ func TestRootVersionUsesModuleVersionWhenUnstamped(t *testing.T) {
 	stampVersion(t, defaultVersion)
 	fakeBuildInfo(t, &debug.BuildInfo{Main: debug.Module{Version: "v1.1.0"}}, true)
 	for _, flag := range []string{"-v", "-V", "--version"} {
-		if out := runRootBoth(t, flag); out != "1.1.0\n" {
-			t.Errorf("%s on a go-install build: want %q, got %q", flag, "1.1.0\n", out)
+		// Through run: -V is rewritten there, before cobra parses.
+		if code, out, _ := runCLI(t, flag); code != 0 || out != "1.1.0\n" {
+			t.Errorf("%s on a go-install build: want %q, got exit %d, %q", flag, "1.1.0\n", code, out)
 		}
 	}
 }
