@@ -211,7 +211,7 @@ func TestMathNonFiniteResultIsAnErrorInEveryFormat(t *testing.T) {
 		expr, value, reason string
 	}{
 		{"1/0", "+Inf", "division by zero"},
-		{"-1/0", "-Inf", "division by zero"},
+		{"(-1)/0", "-Inf", "division by zero"},
 		{"0/0", "NaN", "not a number"},
 		{"sqrt(-1)", "NaN", "not a number"},
 	} {

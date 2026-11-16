@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -112,14 +114,13 @@ func runGitContext(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid path: %w", err)
 	}
 
-	// Check if git is available
-	if _, err := exec.LookPath("git"); err != nil {
-		return fmt.Errorf("git command not found")
-	}
-
-	// Check if path is a git repository
-	if err := runGit(absPath, "rev-parse", "--git-dir"); err != nil {
-		return fmt.Errorf("not a git repository: %s", absPath)
+	// Check if path is a git repository. Only git's own answer says it is
+	// not; any other failure, git missing or broken, keeps its own reason.
+	if _, err := runGitCtx(context.Background(), absPath, "rev-parse", "--git-dir"); err != nil {
+		if errors.Is(err, errNotARepository) {
+			return fmt.Errorf("not a git repository: %s", absPath)
+		}
+		return fmt.Errorf("git-context: %w", err)
 	}
 
 	// Validate since date if provided
@@ -383,14 +384,6 @@ func printGitContext(out io.Writer, ctx GitContext, minimal bool) {
 		fmt.Fprintln(out, "DIFF:")
 		fmt.Fprintln(out, ctx.Diff)
 	}
-}
-
-func runGit(path string, args ...string) error {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = path
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	return cmd.Run()
 }
 
 func runGitOutput(path string, args ...string) (string, error) {
