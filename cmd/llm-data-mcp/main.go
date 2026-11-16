@@ -5,15 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/samestrin/llm-data-axi/internal/data/commands"
 	"github.com/samestrin/llm-data-axi/internal/data/mcpserver"
 )
 
 // serverVersion is stamped at build time with -X main.serverVersion. It must
 // stay a var: -X cannot set a const, and silently leaves it at its default.
-var serverVersion = "1.0.0"
+// The default is "dev", never a release number: `go install` runs no ldflags,
+// and commands.ResolveVersion falls back to the module version Go recorded.
+var serverVersion = "dev"
 
 const (
 	serverName         = "llm-data-mcp"
@@ -35,8 +37,8 @@ func main() {
 	}
 
 	// release.yml stamps the tag, "v1.1.0"; report the bare version, as
-	// `llm-data --version` does.
-	version := strings.TrimPrefix(serverVersion, "v")
+	// `llm-data --version` does, with the same go-install fallback.
+	version := commands.ResolveVersion(serverVersion)
 
 	// Create MCP server using official SDK
 	server := mcp.NewServer(&mcp.Implementation{
