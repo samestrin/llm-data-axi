@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -15,14 +16,47 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// Version is set at build time via ldflags
-var Version = "1.0.0"
+// defaultVersion is what Version holds when no ldflags stamped it. It must
+// never be a release number: a `go install` build runs no ldflags, and a
+// hardcoded "1.0.0" made every such build claim a release it is not.
+const defaultVersion = "dev"
 
-// bareVersion is Version without a leading "v". release.yml stamps the tag
-// name, so a release build carries "v1.1.0" and the version flags print
-// "1.1.0".
-func bareVersion() string {
-	return strings.TrimPrefix(Version, "v")
+// Version is set at build time via ldflags
+var Version = defaultVersion
+
+// readBuildInfo is indirected so tests can stand in for the module version Go
+// records in the binary.
+var readBuildInfo = debug.ReadBuildInfo
+
+// DisplayVersion is the bare version --version prints. A release build's
+// ldflags stamp wins. Without one — `go install ...@v1.1.0` runs no ldflags —
+// it falls back to the module version Go recorded, so the binary does not
+// claim a release it is not. "(devel)" is not a version and leaves the "dev"
+// default in place. The leading "v" comes off because release.yml stamps the
+// tag name ("v1.1.0") and the version flags print "1.1.0".
+func DisplayVersion() string {
+	return ResolveVersion(Version)
+}
+
+// ResolveVersion applies DisplayVersion's rules to a stamp that is not
+// commands.Version: the MCP server has its own ldflags symbol
+// (main.serverVersion) and shares this fallback so both binaries report one
+// version.
+func ResolveVersion(stamped string) string {
+	info, ok := readBuildInfo()
+	return resolveVersion(stamped, info, ok)
+}
+
+// resolveVersion is the pure core: the stamp wins unless it is the "dev"
+// default and Go recorded a real module version.
+func resolveVersion(stamped string, info *debug.BuildInfo, ok bool) string {
+	v := stamped
+	if v == defaultVersion && ok && info != nil {
+		if mv := info.Main.Version; mv != "" && mv != "(devel)" {
+			v = mv
+		}
+	}
+	return strings.TrimPrefix(v, "v")
 }
 
 // Global output flags accessible to all commands
@@ -58,7 +92,7 @@ workflows.
 
 Designed for fast startup, single binary distribution, and AXI (TOON)
 output that costs fewer tokens than JSON.`,
-		Version: bareVersion(),
+		Version: DisplayVersion(),
 		// No Args validator on purpose: with Args nil, cobra's legacyArgs rejects a
 		// stray word as "unknown command" before it looks at --help. cobra.NoArgs
 		// would let `llm-data typo --help` print help and exit 0.
