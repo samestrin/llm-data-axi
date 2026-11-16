@@ -168,9 +168,9 @@ func TestMissingFlagValueKeepsCobraMessage(t *testing.T) {
 	}
 }
 
-// Defends the hidden-flag skip in flagError: the root's -V is bound through a
-// hidden "version-upper" flag, an implementation detail that must not be
-// offered to a caller as a flag to type.
+// Defends the root's flag list: -V used to be bound through a hidden
+// "version-upper" flag, which must never be offered to a caller as a flag to
+// type. TestUnknownFlagOmitsHiddenFlags covers the hidden-flag skip itself.
 func TestUnknownFlagListOmitsHiddenFlags(t *testing.T) {
 	code, stdout, _ := runCLI(t, "--nope", "--axi")
 	if code != 2 || !strings.Contains(stdout, "-v/--version") {

@@ -217,8 +217,9 @@ func TestRootVersionSpellingsPrintBareVersion(t *testing.T) {
 	for _, stamped := range []string{"v1.1.0", "1.1.0"} {
 		stampVersion(t, stamped)
 		for _, flag := range []string{"-v", "-V", "--version"} {
-			if out := runRootBoth(t, flag); out != "1.1.0\n" {
-				t.Errorf("Version=%q %s: want %q, got %q", stamped, flag, "1.1.0\n", out)
+			// Through run: -V is rewritten there, before cobra parses.
+			if code, out, _ := runCLI(t, flag); code != 0 || out != "1.1.0\n" {
+				t.Errorf("Version=%q %s: want %q, got exit %d, %q", stamped, flag, "1.1.0\n", code, out)
 			}
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -174,6 +175,53 @@ func TestPrintErrorInJSONModeIsParseable(t *testing.T) {
 		if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
 			t.Errorf("minimal=%v: error output is not JSON: %v\n%s", minimal, err, buf.String())
 		}
+	}
+}
+
+// fieldsErr is an error that carries data, as an unknown-flag error carries
+// its valid flags. It also tries to overwrite "message", which must not win.
+type fieldsErr struct{}
+
+func (fieldsErr) Error() string { return "unknown flag: --nope" }
+func (fieldsErr) ErrorFields() map[string]any {
+	return map[string]any{"valid_flags": []string{"--a", "--b"}, "message": "spoofed"}
+}
+
+// Defends an error's data reaching the caller as data: valid_flags sits next
+// to the message in TOON and JSON, wrapped or not, and the message, the error
+// flag and the exit code are the formatter's, whatever the fields say.
+func TestPrintErrorAddsErrorFields(t *testing.T) {
+	err := fmt.Errorf("wrapped: %w", fieldsErr{})
+	for _, minimal := range []bool{false, true} {
+		buf := new(bytes.Buffer)
+		if code := New(true, minimal, buf).PrintError(err); code != 2 {
+			t.Errorf("minimal=%v: exit %d, want 2", minimal, code)
+		}
+		var got map[string]any
+		if e := json.Unmarshal(buf.Bytes(), &got); e != nil {
+			t.Fatalf("minimal=%v: not JSON: %v", minimal, e)
+		}
+		if flags, _ := got["valid_flags"].([]any); len(flags) != 2 || flags[0] != "--a" {
+			t.Errorf("minimal=%v: valid_flags = %v", minimal, got["valid_flags"])
+		}
+		if strings.Contains(buf.String(), "spoofed") {
+			t.Errorf("minimal=%v: a field overwrote the message: %s", minimal, buf.String())
+		}
+	}
+
+	buf := new(bytes.Buffer)
+	f := New(false, false, buf)
+	f.AXI = true
+	f.PrintError(err)
+	want := "error: true\nmessage: \"wrapped: unknown flag: --nope\"\nvalid_flags[2]: \"--a\",\"--b\"\n"
+	if buf.String() != want {
+		t.Errorf("TOON: got %q, want %q", buf.String(), want)
+	}
+
+	buf.Reset()
+	New(false, false, buf).PrintError(err)
+	if buf.String() != "Error: wrapped: unknown flag: --nope\n" {
+		t.Errorf("text mode prints the message only, got %q", buf.String())
 	}
 }
 
