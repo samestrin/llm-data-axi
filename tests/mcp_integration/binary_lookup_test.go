@@ -153,3 +153,49 @@ func TestStartupErrorNamesTheTriedPathAndTheOverride(t *testing.T) {
 		}
 	}
 }
+
+// Defends TD 5678fa997aa13d9d: startup rejected only a path that did not
+// exist, so LLM_DATA_BINARY pointing at a directory or at a file without the
+// exec bit started the server and every tool call then failed. Both now stop
+// startup with exit 1 and a message naming the path and what is wrong.
+func TestStartupRejectsADirectoryOrANonExecutableBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no exec bit")
+	}
+	_, mcp := builtBinaries(t)
+	dir := resolvedTempDir(t)
+	copyBinary(t, mcp, filepath.Join(dir, "llm-data-mcp"))
+
+	notExec := filepath.Join(dir, "llm-data-noexec")
+	if err := os.WriteFile(notExec, []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	asDir := filepath.Join(dir, "llm-data-dir")
+	if err := os.Mkdir(asDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct{ path, why string }{
+		{asDir, "is a directory"},
+		{notExec, "is not executable"},
+	} {
+		env := envWithout(os.Environ(), "LLM_DATA_BINARY", "PATH", "LLM_DATA_MCP_AXI")
+		env = append(env, "PATH=", "LLM_DATA_BINARY="+tc.path, "LLM_DATA_MCP_AXI=")
+		cmd := exec.Command(filepath.Join(dir, "llm-data-mcp"))
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+			t.Errorf("%s: want exit 1, got err=%v output=%q", tc.why, err, out)
+		}
+		for _, want := range []string{tc.path, tc.why, "LLM_DATA_BINARY"} {
+			if !strings.Contains(string(out), want) {
+				t.Errorf("%s: the startup error does not name %q; got:\n%s", tc.why, want, out)
+			}
+		}
+		if strings.Contains(string(out), "started with") {
+			t.Errorf("%s: the server started:\n%s", tc.why, out)
+		}
+	}
+}
