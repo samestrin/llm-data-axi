@@ -223,16 +223,14 @@ func runGrepCLI(t *testing.T, args ...string) (string, string, int) {
 func TestGrepMissingPathFailsInEveryMode(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 
-	// Plain mode writes the error to stderr; the structured modes keep it on
-	// stdout so a consumer reads one stream.
+	// Every mode writes the error to stdout, so a consumer reads one stream.
 	modes := []struct {
-		name     string
-		flag     []string
-		onStderr bool
+		name string
+		flag []string
 	}{
-		{"plain", []string{"--plain"}, true},
-		{"json", []string{"--json"}, false},
-		{"axi", []string{"--axi"}, false},
+		{"plain", []string{"--plain"}},
+		{"json", []string{"--json"}},
+		{"axi", []string{"--axi"}},
 	}
 	for _, m := range modes {
 		t.Run(m.name, func(t *testing.T) {
@@ -241,11 +239,7 @@ func TestGrepMissingPathFailsInEveryMode(t *testing.T) {
 			if code == 0 {
 				t.Errorf("exit 0 for a missing path; stdout:\n%s", stdout)
 			}
-			msg := stdout
-			if m.onStderr {
-				msg = stderr
-			}
-			if !strings.Contains(msg, "path not found") || !strings.Contains(msg, missing) {
+			if !strings.Contains(stdout, "path not found") || !strings.Contains(stdout, missing) {
 				t.Errorf("error does not name the missing path:\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 			}
 			if strings.Contains(stdout, "pattern: foo") || strings.Contains(stdout, `"pattern": "foo"`) {
