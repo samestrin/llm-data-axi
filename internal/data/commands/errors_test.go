@@ -5,18 +5,13 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-
-	"github.com/samestrin/llm-data-axi/pkg/output"
 )
 
 // runCLI drives run exactly as main does, with both streams captured apart so
 // a test can say which one an error landed on.
 func runCLI(t *testing.T, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
-	t.Cleanup(func() {
-		GlobalAXIOutput, GlobalJSONOutput, GlobalMinOutput = false, false, false
-		output.SetDefaultAXI(false)
-	})
+	restoreOutputMode(t)
 	var out, errOut bytes.Buffer
 	code = run(args, &out, &errOut)
 	return code, out.String(), errOut.String()
@@ -91,10 +86,11 @@ func TestUnknownFlagUnderJSONIsJSONOnStdout(t *testing.T) {
 	}
 }
 
-// Pins plain mode: with no structured flag a usage error stays on stderr,
-// stdout stays empty, and the exit code is still 2.
+// Pins plain mode: under --plain a usage error stays on stderr, stdout stays
+// empty, and the exit code is still 2. (With no format flag the mode is TOON,
+// which TestUnknownFlagWithNoFormatFlagIsTOON covers.)
 func TestUnknownFlagPlainStaysOnStderr(t *testing.T) {
-	code, stdout, stderr := runCLI(t, "grep", "--nope")
+	code, stdout, stderr := runCLI(t, "grep", "--nope", "--plain")
 	if code != 2 {
 		t.Errorf("exit %d, want 2", code)
 	}
@@ -145,10 +141,11 @@ func TestRuntimeErrorUnderAXIExitsOne(t *testing.T) {
 	}
 }
 
-// Defends against reading a flag VALUE as a mode flag: here "--axi" is the
-// pattern after the terminator, not a request for TOON.
+// Defends against reading a flag VALUE as a mode flag: here "--json" is the
+// pattern after the terminator, not a request for JSON. Read as one, it would
+// also have made the run a --plain/--json conflict.
 func TestModeFlagAfterTerminatorIsNotAMode(t *testing.T) {
-	code, stdout, stderr := runCLI(t, "grep", "--nope", "--", "--axi")
+	code, stdout, stderr := runCLI(t, "grep", "--nope", "--plain", "--", "--json")
 	if code != 2 || stdout != "" {
 		t.Errorf("exit %d stdout %q, want 2 and empty", code, stdout)
 	}
@@ -180,5 +177,20 @@ func TestUnknownFlagListOmitsHiddenFlags(t *testing.T) {
 	}
 	if strings.Contains(stdout, "version-upper") {
 		t.Errorf("hidden flag listed: %q", stdout)
+	}
+}
+
+// Defends the error path reading the new default: with no format flag a usage
+// error is reported in TOON on stdout, the format a successful run prints.
+func TestUnknownFlagWithNoFormatFlagIsTOON(t *testing.T) {
+	code, stdout, stderr := runCLI(t, "grep", "--nope")
+	if code != 2 {
+		t.Errorf("exit %d, want 2", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty, got %q", stderr)
+	}
+	if !strings.HasPrefix(stdout, "error: true\n") || !strings.Contains(stdout, "unknown flag: --nope") {
+		t.Errorf("want a TOON error naming --nope on stdout, got %q", stdout)
 	}
 }

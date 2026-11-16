@@ -1,6 +1,7 @@
 package output
 
 import (
+	"errors"
 	"strings"
 
 	goaxi "github.com/samestrin/go-axi"
@@ -42,6 +43,13 @@ var usageMarkers = [][]string{
 	{`required flag(s) "`, " not set"},
 }
 
+// UsageError is an invocation the CLI rejected itself, after cobra accepted
+// it: two flags that each parse but cannot be honoured together. It is typed
+// so ExitCodeFor classifies it without matching its wording.
+type UsageError struct{ Msg string }
+
+func (e *UsageError) Error() string { return e.Msg }
+
 // ExitCodeFor classifies err into the process status the AXI contract expects.
 //
 // The split matters to a caller that cannot see the message. Exit 1 says the
@@ -52,6 +60,10 @@ var usageMarkers = [][]string{
 func ExitCodeFor(err error) int {
 	if err == nil {
 		return int(goaxi.ExitOK)
+	}
+	var usage *UsageError
+	if errors.As(err, &usage) {
+		return int(goaxi.ExitUsage)
 	}
 	msg := err.Error()
 	for _, fragments := range usageMarkers {

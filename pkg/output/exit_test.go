@@ -85,3 +85,15 @@ func TestPrintErrorReturnsTheClassifiedCode(t *testing.T) {
 type discard struct{}
 
 func (discard) Write(p []byte) (int, error) { return len(p), nil }
+
+// Defends the flag-conflict usage error (epic 11 T1): it is classified by its
+// type, so its exit 2 does not depend on wording, and survives wrapping.
+func TestExitCodeForUsageErrorType(t *testing.T) {
+	err := &UsageError{Msg: "conflicting output flags"}
+	if got := ExitCodeFor(err); got != int(goaxi.ExitUsage) {
+		t.Errorf("ExitCodeFor(UsageError) = %d, want %d", got, int(goaxi.ExitUsage))
+	}
+	if got := ExitCodeFor(fmt.Errorf("wrapped: %w", err)); got != int(goaxi.ExitUsage) {
+		t.Errorf("ExitCodeFor(wrapped UsageError) = %d, want %d", got, int(goaxi.ExitUsage))
+	}
+}

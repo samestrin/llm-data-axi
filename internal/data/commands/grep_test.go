@@ -230,7 +230,7 @@ func TestGrepMissingPathFailsInEveryMode(t *testing.T) {
 		flag     []string
 		onStderr bool
 	}{
-		{"plain", nil, true},
+		{"plain", []string{"--plain"}, true},
 		{"json", []string{"--json"}, false},
 		{"axi", []string{"--axi"}, false},
 	}
@@ -329,7 +329,7 @@ func TestGrepTruncatesLongLinesWithHint(t *testing.T) {
 	}
 
 	t.Run("plain", func(t *testing.T) {
-		stdout, _, code := runGrepCLI(t, "grep", "needle", file)
+		stdout, _, code := runGrepCLI(t, "grep", "needle", file, "--plain")
 		if code != 0 {
 			t.Fatalf("exit %d", code)
 		}
@@ -389,7 +389,7 @@ func TestGrepExplicitZeroTotal(t *testing.T) {
 		t.Errorf("--axi dropped the zero total:\n%s", stdout)
 	}
 
-	stdout, _, code = runGrepCLI(t, "grep", "zzq", file)
+	stdout, _, code = runGrepCLI(t, "grep", "zzq", file, "--plain")
 	if code != 0 {
 		t.Fatalf("exit %d", code)
 	}
@@ -543,7 +543,7 @@ func TestGrepPlainModePrintsFullHint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, _, code := runGrepCLI(t, "grep", "needle", long)
+	stdout, _, code := runGrepCLI(t, "grep", "needle", long, "--plain")
 	if code != 0 {
 		t.Fatalf("exit %d", code)
 	}
@@ -551,7 +551,7 @@ func TestGrepPlainModePrintsFullHint(t *testing.T) {
 		t.Errorf("a cut plain line gave no --full hint:\n%s", truncForMsg(stdout))
 	}
 
-	stdout, _, code = runGrepCLI(t, "grep", "needle", short)
+	stdout, _, code = runGrepCLI(t, "grep", "needle", short, "--plain")
 	if code != 0 {
 		t.Fatalf("exit %d", code)
 	}
@@ -597,7 +597,7 @@ func TestGrepFindsMatchesOnLinesOver64KiB(t *testing.T) {
 		t.Errorf("line after the long one = %q, want %q", res.Matches[1].Text, "needle after")
 	}
 
-	stdout, _, code = runGrepCLI(t, "grep", "needle", file)
+	stdout, _, code = runGrepCLI(t, "grep", "needle", file, "--plain")
 	if code != 0 || !strings.Contains(stdout, "total: 2") {
 		t.Errorf("plain mode: exit %d, want total: 2:\n%s", code, truncForMsg(stdout))
 	}
@@ -657,7 +657,7 @@ func TestGrepSkipsDirectorySymlinksInTree(t *testing.T) {
 		t.Skipf("cannot create a symlink here: %v", err)
 	}
 
-	for _, mode := range [][]string{{"--json"}, nil} {
+	for _, mode := range [][]string{{"--json"}, {"--plain"}} {
 		stdout, stderr, code := runGrepCLI(t, append([]string{"grep", "needle", dir}, mode...)...)
 		if code != 0 {
 			t.Fatalf("%v: exit %d; stdout:\n%s\nstderr:\n%s", mode, code, stdout, stderr)
@@ -833,7 +833,7 @@ func TestGrepSkipsBinaryFilesAndSaysSo(t *testing.T) {
 		t.Errorf("binary_skipped = %q, want [b.bin]", res.BinarySkipped)
 	}
 
-	stdout, _, code = runGrepCLI(t, "grep", "needle", filepath.Join(dir, "b.bin"))
+	stdout, _, code = runGrepCLI(t, "grep", "needle", filepath.Join(dir, "b.bin"), "--plain")
 	if code != 0 {
 		t.Fatalf("plain mode: exit %d", code)
 	}
@@ -854,7 +854,7 @@ func TestGrepPlainModeCapsBinarySkippedLines(t *testing.T) {
 		}
 	}
 
-	stdout, _, code := runGrepCLI(t, "grep", "needle", dir)
+	stdout, _, code := runGrepCLI(t, "grep", "needle", dir, "--plain")
 	if code != 0 {
 		t.Fatalf("exit %d", code)
 	}

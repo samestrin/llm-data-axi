@@ -69,7 +69,14 @@ var (
 	// builds its own formatter with output.New(json, min, w), so a package
 	// default is the one place that covers all of them without editing every
 	// command file and inventing one chance per file to miss it.
+	//
+	// It is bound to --axi, and PersistentPreRun then sets it whenever neither
+	// --json nor --plain was given: TOON is the default, and --axi an alias.
 	GlobalAXIOutput bool
+
+	// GlobalPlainOutput selects the plain text that was the default before
+	// TOON was.
+	GlobalPlainOutput bool
 )
 
 // NewRootCmd builds a fresh command tree. Execute builds one per invocation.
@@ -91,7 +98,12 @@ reshaping code, configuration files and documentation in LLM-assisted
 workflows.
 
 Designed for fast startup, single binary distribution, and AXI (TOON)
-output that costs fewer tokens than JSON.`,
+output that costs fewer tokens than JSON.
+
+Output is TOON by default. --json prints JSON and --plain prints plain
+text; --axi is accepted and prints the same TOON as no flag. --plain cannot
+be combined with --json or --axi. --min shortens --json and --plain output
+and has no effect on TOON, which is already token-dense.`,
 		Version: DisplayVersion(),
 		// No Args validator on purpose: with Args nil, cobra's legacyArgs rejects a
 		// stray word as "unknown command" before it looks at --help. cobra.NoArgs
@@ -99,7 +111,7 @@ output that costs fewer tokens than JSON.`,
 		RunE:          runHome,
 		SilenceErrors: true,
 		SilenceUsage:  true,
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Sync local command flags to global vars for error handling
 			if f := cmd.Flag("json"); f != nil && f.Changed {
 				GlobalJSONOutput = true
@@ -107,9 +119,25 @@ output that costs fewer tokens than JSON.`,
 			if f := cmd.Flag("min"); f != nil && f.Changed {
 				GlobalMinOutput = true
 			}
+			jsonOn := flagOn(cmd, "json")
+			if err := formatConflict(GlobalPlainOutput, jsonOn, GlobalAXIOutput); err != nil {
+				return err
+			}
+			GlobalAXIOutput = GlobalAXIOutput || (!jsonOn && !GlobalPlainOutput)
+			if GlobalAXIOutput {
+				// --min is a documented no-op under TOON. Several commands read
+				// their own min flag before the formatter and abbreviated TOON's
+				// keys, which publishes a second column contract no consumer could
+				// predict, so the flag is cleared here once for all of them.
+				GlobalMinOutput = false
+				if f := cmd.Flags().Lookup("min"); f != nil {
+					_ = f.Value.Set("false")
+				}
+			}
 			// Published unconditionally, including when the flag is false, so the
 			// package default always matches this invocation.
 			output.SetDefaultAXI(GlobalAXIOutput)
+			return nil
 		},
 	}
 
@@ -127,9 +155,10 @@ output that costs fewer tokens than JSON.`,
 
 	// Global persistent flags (available to all subcommands)
 	root.PersistentFlags().Bool("no-gitignore", false, "Disable .gitignore filtering")
-	root.PersistentFlags().BoolVar(&GlobalJSONOutput, "json", false, "Output as JSON")
-	root.PersistentFlags().BoolVar(&GlobalMinOutput, "min", false, "Minimal/token-optimized output")
-	root.PersistentFlags().BoolVar(&GlobalAXIOutput, "axi", false, "Output as TOON (AXI token-dense format)")
+	root.PersistentFlags().BoolVar(&GlobalJSONOutput, "json", false, "Output as JSON instead of TOON")
+	root.PersistentFlags().BoolVar(&GlobalPlainOutput, "plain", false, "Output as plain text instead of TOON")
+	root.PersistentFlags().BoolVar(&GlobalMinOutput, "min", false, "Minimal --json or --plain output (no effect on TOON)")
+	root.PersistentFlags().BoolVar(&GlobalAXIOutput, "axi", false, "Output as TOON, the default (accepted alias)")
 
 	root.AddCommand(
 		newCatfilesCmd(),
@@ -169,8 +198,8 @@ var executablePath = os.Executable
 // what a session-start hook calls, so a hung git must not hang it.
 var homeGitTimeout = 2 * time.Second
 
-// homeHelp is the next step a bare run offers in --json and --axi. The plain
-// view stays two lines; help there is what --help is for.
+// homeHelp is the next step a bare run offers in TOON and --json. The --plain
+// view leaves it out; help there is what --help is for.
 var homeHelp = []string{
 	"Run `llm-data --help` to list every command",
 	"Run `llm-data <command> --help` for one command's flags",
@@ -295,7 +324,37 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return output.New(jsonOut, minOut, w).PrintError(err)
 }
 
-// outputMode reads --axi, --json and --min from args for the error report.
+// flagOn reports whether cmd's flag name was given and is true. A flag the
+// caller did not pass is not a format they asked for, whatever its default.
+func flagOn(cmd *cobra.Command, name string) bool {
+	f := cmd.Flag(name)
+	return f != nil && f.Changed && f.Value.String() == "true"
+}
+
+// formatConflict rejects --plain with --json or --axi. Each asks for an
+// encoding the other rules out, and printing either would hand one request
+// output it did not ask for, with exit 0.
+func formatConflict(plain, jsonOn, axi bool) error {
+	if !plain {
+		return nil
+	}
+	var others []string
+	if jsonOn {
+		others = append(others, "--json")
+	}
+	if axi {
+		others = append(others, "--axi")
+	}
+	if len(others) == 0 {
+		return nil
+	}
+	return &output.UsageError{Msg: fmt.Sprintf(
+		"conflicting output flags: --plain cannot be combined with %s; pass one of --plain, --json or --axi (TOON is the default)",
+		strings.Join(others, " or "))}
+}
+
+// outputMode reads --axi, --json, --plain and --min from args for the error
+// report. With none of the format flags the mode is TOON, the default.
 //
 // The globals alone are not enough: a usage error stops flag parsing before
 // PersistentPreRun publishes the mode, and at the first bad flag, so in
@@ -313,8 +372,10 @@ func outputMode(cmd *cobra.Command, args []string) (axi, jsonOut, minOut bool) {
 		f := fs.Lookup(name)
 		return f != nil && f.Value.String() == "true"
 	}
-	return GlobalAXIOutput || isSet("axi"),
-		GlobalJSONOutput || isSet("json"),
+	jsonOut = GlobalJSONOutput || isSet("json")
+	plain := GlobalPlainOutput || isSet("plain")
+	return GlobalAXIOutput || isSet("axi") || (!jsonOut && !plain),
+		jsonOut,
 		GlobalMinOutput || isSet("min")
 }
 

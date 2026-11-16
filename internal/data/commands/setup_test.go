@@ -533,6 +533,7 @@ func TestSkillNamesOnlyRealCommands(t *testing.T) {
 // subcommand list that leaves a registered subcommand out.
 func TestSkillCommandProblemsRejectsStaleReferences(t *testing.T) {
 	root := NewRootCmd()
+	restoreOutputMode(t)
 	for _, text := range []string{
 		"Use `llm-data yaml get|set|multiget|multiset|list` here.",
 		"Use `llm-data yaml list <file>` here.",

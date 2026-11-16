@@ -83,7 +83,7 @@ func TestHomeViewCarriesHelp(t *testing.T) {
 // text form.
 func TestHomeViewPlainTextHasNoHelp(t *testing.T) {
 	fakeExecutable(t)
-	if out := runRootBoth(t); strings.Contains(out, "help") {
+	if out := runRootBoth(t, "--plain"); strings.Contains(out, "help") {
 		t.Errorf("plain home view printed help:\n%s", out)
 	}
 }

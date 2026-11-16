@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -250,5 +251,45 @@ func TestFormatConflictIsAUsageError(t *testing.T) {
 		if err := formatConflict(ok[0], ok[1], ok[2]); err != nil {
 			t.Errorf("formatConflict%v = %v, want nil", ok, err)
 		}
+	}
+}
+
+// Defends a stable multigrep document: files_matched came from ranging over a
+// map, so the same search listed its files in a different order on each run
+// and two identical TOON calls were not byte-identical.
+func TestMultigrepFilesMatchedIsSorted(t *testing.T) {
+	dir := outsideAnyRepo(t)
+	names := []string{"e.go", "a.go", "d.go", "b.go", "c.go", "f.go", "h.go", "g.go"}
+	for _, n := range names {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("needle\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	js := mustRun(t, "multigrep", "--path", ".", "--keywords", "needle", "--json")
+	var got struct {
+		Results map[string]struct {
+			FilesMatched []string `json:"files_matched"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(js), &got); err != nil {
+		t.Fatalf("--json: %v\n%s", err, js)
+	}
+	files := got.Results["needle"].FilesMatched
+	if len(files) != len(names) || !sort.StringsAreSorted(files) {
+		t.Errorf("files_matched = %v, want all %d files in sorted order", files, len(names))
+	}
+}
+
+// Defends template under TOON: its stdout branch printed the raw rendering
+// unless --json or --min was given, so --axi was accepted and ignored, and a
+// TOON default would have been prose with exit 0.
+func TestTemplateDefaultIsTOON(t *testing.T) {
+	chdirTo(t, modeFixture(t))
+	got := mustRun(t, "template", "greet.tmpl", "--var", "who=sam", "--syntax", "brackets")
+	if !strings.Contains(got, "status: success") || !strings.Contains(got, `content: "hello sam\n"`) {
+		t.Errorf("template default is not TOON:\n%s", got)
+	}
+	if plain := mustRun(t, "template", "greet.tmpl", "--var", "who=sam", "--syntax", "brackets", "--plain"); plain != "hello sam\n" {
+		t.Errorf("template --plain = %q, want the raw rendering", plain)
 	}
 }
