@@ -14,6 +14,7 @@ func TestExtractCommandsAreNotRegistered(t *testing.T) {
 	for _, name := range []string{"extract-links", "extract-relevant"} {
 		t.Run(name, func(t *testing.T) {
 			root := NewRootCmd()
+			restoreOutputMode(t)
 			for _, c := range root.Commands() {
 				if c.Name() == name {
 					t.Fatalf("%s is still registered on the root command", name)
@@ -35,6 +36,7 @@ func TestExtractCommandsAreNotRegistered(t *testing.T) {
 			}
 
 			root = NewRootCmd()
+			restoreOutputMode(t)
 			root.SetOut(new(bytes.Buffer))
 			root.SetErr(new(bytes.Buffer))
 			root.SetArgs([]string{name})

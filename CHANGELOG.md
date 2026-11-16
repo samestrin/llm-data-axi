@@ -6,7 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **`llm-data setup --target` names the agents to register with.** It takes a comma-separated or repeated list; the default is `claude`, so a bare `llm-data setup` writes what it did before. An unknown target is a usage error (exit 2) and nothing is written.
+
+### Changed
+
+- **The skill `setup` writes says TOON is the default output.** It told agents to add `--axi` for TOON; it now says output is TOON by default and `--plain` gives text. The committed `skills/llm-data/SKILL.md` matches.
+
 ### Fixed
+
+- **`setup` no longer registers a hook the session cannot run.** The Claude Code SessionStart hook was always the bare `llm-data`, which fails when the binary is not on `PATH`. It is now the bare command only when `PATH` finds it, and otherwise the absolute path of the binary that ran `setup`. A hook `setup` wrote earlier that no longer matches (the old path after the binary moved, or a bare command once `llm-data` leaves `PATH`) is rewritten in place, and a second llm-data hook is removed. With neither, `setup` fails and writes nothing.
 
 - **`go install` builds report the installed version, not a stale `1.0.0`.** `llm-data` and `llm-data-mcp` defaulted their version to the literal `1.0.0`, which only a build-time stamp replaced, so `go install github.com/samestrin/llm-data-axi/cmd/llm-data@v1.1.0` (which runs no stamp) claimed release `1.0.0`. The default is now `dev`, and when no stamp is present both binaries read the module version Go recorded in the binary, so a `go install` of `v1.1.0` reports `1.1.0`. A release build's stamp still wins, and a build with no recorded module version reports `dev`.
 

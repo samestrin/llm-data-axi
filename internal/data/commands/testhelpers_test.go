@@ -4,7 +4,21 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+
+	"github.com/samestrin/llm-data-axi/pkg/output"
 )
+
+// restoreOutputMode resets the output-mode globals when a test that drives the
+// root ends. The root publishes TOON for any run without --json or --plain,
+// and a package default left set leaks into the next test that builds a
+// command directly, which then prints TOON where it expected text.
+func restoreOutputMode(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		GlobalAXIOutput, GlobalJSONOutput, GlobalMinOutput, GlobalPlainOutput = false, false, false, false
+		output.SetDefaultAXI(false)
+	})
+}
 
 // gitAt runs a git command in dir with a fixed author/committer date.
 //

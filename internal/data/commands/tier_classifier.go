@@ -36,7 +36,7 @@ Output is JSON: {assigned:{pkg:{tier,pass}}, unassigned:[...], counts:{...}}.`,
 	}
 	cmd.Flags().StringVar(&tcPackages, "packages", "", "Comma-separated package names (required)")
 	cmd.Flags().StringVar(&tcConfig, "config", "", "Path to package-tiers.yaml (packages/patterns/categories)")
-	cmd.Flags().BoolVar(&tcJSON, "json", true, "Output as JSON (default true)")
+	cmd.Flags().BoolVar(&tcJSON, "json", false, "Output as JSON")
 	cmd.Flags().BoolVar(&tcMin, "min", false, "Minimal output format")
 	cmd.MarkFlagRequired("packages")
 	return cmd

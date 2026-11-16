@@ -7,16 +7,117 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/samestrin/llm-data-axi/pkg/output"
 	"github.com/spf13/cobra"
 )
 
-// setupHookCommand is what Claude Code runs at session start. Its stdout is
-// added to the session's context, so it is the bare run: the home view.
+// setupHookCommand is the bare command a SessionStart hook runs when llm-data
+// is on PATH. The hook's stdout is added to the session's context, so it is
+// the bare run: the home view.
 const setupHookCommand = "llm-data"
+
+// setupLookPath and setupExecutable are how setup sees the running binary;
+// tests replace them so the hook command does not depend on the test machine.
+var (
+	setupLookPath   = exec.LookPath
+	setupExecutable = os.Executable
+)
+
+// resolveHookCommand is the command every target's hook runs: the bare
+// `llm-data` when PATH finds it, otherwise this binary's absolute path,
+// shell-quoted when it needs to be. A hook nobody can run is an error, not a
+// success.
+func resolveHookCommand() (string, error) {
+	if _, err := setupLookPath(setupHookCommand); err == nil {
+		return setupHookCommand, nil
+	}
+	exe, err := setupExecutable()
+	if err != nil || exe == "" || !filepath.IsAbs(exe) {
+		return "", fmt.Errorf("llm-data is not on PATH and the path of this binary is unknown; add llm-data to PATH and run setup again")
+	}
+	return shellQuote(exe), nil
+}
+
+// shellQuote single-quotes s when a shell would otherwise split or expand it.
+func shellQuote(s string) string {
+	if strings.IndexFunc(s, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("/._-+", r))
+	}) < 0 {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// isSetupHookCommand reports whether cmd is a hook command setup writes: the
+// bare `llm-data`, or an absolute path (quoted or not) to a binary named
+// llm-data. Anything else, such as llm-data with arguments, belongs to the
+// user. Every target uses it to find a stale command to repair.
+func isSetupHookCommand(cmd string) bool {
+	if cmd == setupHookCommand {
+		return true
+	}
+	if len(cmd) >= 2 && cmd[0] == '\'' && cmd[len(cmd)-1] == '\'' {
+		cmd = strings.ReplaceAll(cmd[1:len(cmd)-1], `'\''`, "'")
+	}
+	base := filepath.Base(cmd)
+	return filepath.IsAbs(cmd) && (base == "llm-data" || base == "llm-data.exe")
+}
+
+// setupTarget is one agent setup can register llm-data with. plan computes
+// the target's files without writing any.
+type setupTarget struct {
+	name string
+	plan func(dir, hook string) ([]setupPlan, error)
+}
+
+// setupTargets lists every target in the order setup plans them.
+var setupTargets = []setupTarget{
+	{name: "claude", plan: planClaude},
+}
+
+func setupTargetNames() []string {
+	names := make([]string, len(setupTargets))
+	for i, t := range setupTargets {
+		names[i] = t.name
+	}
+	return names
+}
+
+// targetFlag is --target: a comma-separated or repeated list of targets. The
+// default is claude alone; naming targets replaces it. An unknown name fails
+// in Set, so cobra reports it as a usage error before anything runs.
+type targetFlag struct {
+	names    []string
+	explicit bool
+}
+
+func (f *targetFlag) String() string { return strings.Join(f.names, ",") }
+func (f *targetFlag) Type() string   { return "targets" }
+
+func (f *targetFlag) Set(v string) error {
+	if !f.explicit {
+		f.names, f.explicit = nil, true
+	}
+	for _, name := range strings.Split(v, ",") {
+		name = strings.TrimSpace(name)
+		known := false
+		for _, t := range setupTargetNames() {
+			known = known || t == name
+		}
+		if !known {
+			return fmt.Errorf("unknown target %q (known: %s)", name, strings.Join(setupTargetNames(), ", "))
+		}
+		if !slices.Contains(f.names, name) {
+			f.names = append(f.names, name)
+		}
+	}
+	return nil
+}
 
 // setupSkillContent is the Agent Skill setup writes. It has a committed twin
 // at skills/llm-data/SKILL.md, installable with
@@ -30,7 +131,7 @@ description: Deterministic file, search and project-analysis commands. Use to se
 
 # llm-data
 
-Run ` + "`llm-data --help`" + ` for the full command list. Add ` + "`--axi`" + ` for token-dense TOON output, or ` + "`--json`" + ` for JSON.
+Run ` + "`llm-data --help`" + ` for the full command list. Output is token-dense TOON by default; add ` + "`--plain`" + ` for text or ` + "`--json`" + ` for JSON.
 
 - ` + "`llm-data grep <pattern> <path>...`" + ` and ` + "`llm-data multigrep`" + ` search files; a missing path is an error, not "no matches".
 - ` + "`llm-data tree`" + `, ` + "`llm-data count`" + ` and ` + "`llm-data catfiles`" + ` list, count and read files.
@@ -48,6 +149,8 @@ type SetupFile struct {
 // SetupResult is setup's output.
 type SetupResult struct {
 	Dir     string      `json:"dir"`
+	Targets []string    `json:"targets"`
+	Hook    string      `json:"hook"`
 	DryRun  bool        `json:"dry_run,omitempty"`
 	Changed bool        `json:"changed"`
 	Files   []SetupFile `json:"files"`
@@ -59,12 +162,19 @@ func newSetupCmd() *cobra.Command {
 		dryRun  bool
 		jsonOut bool
 		minOut  bool
+		targets = targetFlag{names: []string{"claude"}}
 	)
 	cmd := &cobra.Command{
 		Use:   "setup",
 		Short: "Register llm-data with Claude Code in this project",
-		Long: `Write a SessionStart hook into .claude/settings.json (merged: every other
-key and hook is kept) and an Agent Skill at .claude/skills/llm-data/SKILL.md.
+		Long: `Register llm-data with each --target agent in this project. claude (the
+default) writes a SessionStart hook into .claude/settings.json (merged: every
+other key and hook is kept) and an Agent Skill at
+.claude/skills/llm-data/SKILL.md.
+
+The hook runs the bare llm-data when PATH finds it, otherwise this binary's
+absolute path. A hook setup wrote earlier that no longer matches, such as the
+old path after the binary moved, is repaired in place.
 
 Only files inside the project directory are written; the user-wide ~/.claude
 is never touched, and running setup in the home directory itself is refused.
@@ -73,10 +183,11 @@ Safe to run again: a second run changes no bytes and says so. Never prompts.
 Examples:
   llm-data setup
   llm-data setup --dry-run
+  llm-data setup --target claude
   llm-data setup --path /path/to/project`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			res, err := runSetup(path, dryRun)
+			res, err := runSetup(path, targets.names, dryRun)
 			if err != nil {
 				return err
 			}
@@ -84,6 +195,7 @@ Examples:
 		},
 	}
 	cmd.Flags().StringVar(&path, "path", ".", "Project directory")
+	cmd.Flags().Var(&targets, "target", "Agents to register with, comma-separated or repeated ("+strings.Join(setupTargetNames(), ", ")+")")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be written without writing")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
 	cmd.Flags().BoolVar(&minOut, "min", false, "Output in minimal/token-optimized format")
@@ -97,37 +209,34 @@ type setupPlan struct {
 	changed bool
 }
 
-// runSetup plans both files before writing either, so a settings file that
-// cannot be merged fails the command without leaving a half-finished setup.
-func runSetup(path string, dryRun bool) (SetupResult, error) {
+// runSetup plans every target's files before writing any, so a settings file
+// that cannot be merged fails the command without leaving a half-finished
+// setup.
+func runSetup(path string, targets []string, dryRun bool) (SetupResult, error) {
 	dir, err := setupProjectDir(path)
 	if err != nil {
 		return SetupResult{}, err
 	}
-
-	settingsRel := filepath.Join(".claude", "settings.json")
-	skillRel := filepath.Join(".claude", "skills", "llm-data", "SKILL.md")
-	for _, rel := range []string{settingsRel, skillRel} {
-		if err := checkInsideProject(dir, filepath.Join(dir, rel)); err != nil {
-			return SetupResult{}, err
-		}
-	}
-
-	settings, err := planSettings(filepath.Join(dir, settingsRel))
+	hook, err := resolveHookCommand()
 	if err != nil {
 		return SetupResult{}, err
 	}
-	settings.rel = settingsRel
 
-	existing, err := os.ReadFile(filepath.Join(dir, skillRel))
-	if err != nil && !os.IsNotExist(err) {
-		return SetupResult{}, fmt.Errorf("read %s: %w", skillRel, err)
+	res := SetupResult{Dir: dir, Hook: hook, DryRun: dryRun}
+	var plans []setupPlan
+	for _, t := range setupTargets {
+		if !slices.Contains(targets, t.name) {
+			continue
+		}
+		p, err := t.plan(dir, hook)
+		if err != nil {
+			return SetupResult{}, err
+		}
+		plans = append(plans, p...)
+		res.Targets = append(res.Targets, t.name)
 	}
-	skill := setupPlan{rel: skillRel, content: []byte(setupSkillContent)}
-	skill.changed = !bytes.Equal(existing, skill.content)
 
-	res := SetupResult{Dir: dir, DryRun: dryRun}
-	for _, p := range []setupPlan{settings, skill} {
+	for _, p := range plans {
 		status := "unchanged"
 		switch {
 		case !p.changed:
@@ -147,6 +256,43 @@ func runSetup(path string, dryRun bool) (SetupResult, error) {
 		res.Files = append(res.Files, SetupFile{Path: p.rel, Status: status})
 	}
 	return res, nil
+}
+
+// readProjectFile reads rel under dir after refusing a path a symlink would
+// send outside it. A missing file reads as nil.
+func readProjectFile(dir, rel string) ([]byte, error) {
+	if err := checkInsideProject(dir, filepath.Join(dir, rel)); err != nil {
+		return nil, err
+	}
+	b, err := os.ReadFile(filepath.Join(dir, rel))
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read %s: %w", rel, err)
+	}
+	return b, nil
+}
+
+// planClaude plans Claude Code's two files: the SessionStart hook in
+// .claude/settings.json and the Agent Skill.
+func planClaude(dir, hook string) ([]setupPlan, error) {
+	settingsRel := filepath.Join(".claude", "settings.json")
+	skillRel := filepath.Join(".claude", "skills", "llm-data", "SKILL.md")
+
+	raw, err := readProjectFile(dir, settingsRel)
+	if err != nil {
+		return nil, err
+	}
+	existingSkill, err := readProjectFile(dir, skillRel)
+	if err != nil {
+		return nil, err
+	}
+	settings, err := planSettings(filepath.Join(dir, settingsRel), raw, hook)
+	if err != nil {
+		return nil, err
+	}
+	settings.rel = settingsRel
+	skill := setupPlan{rel: skillRel, content: []byte(setupSkillContent)}
+	skill.changed = !bytes.Equal(existingSkill, skill.content)
+	return []setupPlan{settings, skill}, nil
 }
 
 // setupProjectDir resolves path to an existing directory that is not the home
@@ -203,15 +349,13 @@ func checkInsideProject(dir, target string) error {
 // planSettings computes the merged settings without writing. Values are kept
 // as the raw JSON they were read as, so key order, number literals and string
 // escapes survive; only whitespace is normalised, and only when the file has
-// to change at all. When the hook is already registered, changed is false and
-// the file is left byte-for-byte alone.
-func planSettings(path string) (setupPlan, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return setupPlan{}, fmt.Errorf("read %s: %w", path, err)
-	}
+// to change at all. When exactly one hook already runs hook, changed is false
+// and the file is left byte-for-byte alone. raw is nil when the file does not
+// exist.
+func planSettings(path string, raw []byte, hook string) (setupPlan, error) {
 	var root jsonObject
-	if err == nil {
+	var err error
+	if raw != nil {
 		if root, err = parseJSONObject(raw); err != nil {
 			return setupPlan{}, fmt.Errorf("%s: %w; refusing to overwrite", path, err)
 		}
@@ -229,19 +373,22 @@ func planSettings(path string) (setupPlan, error) {
 			return setupPlan{}, fmt.Errorf(`%s: "hooks.SessionStart" is not a list; refusing to overwrite`, path)
 		}
 	}
-	if hasSessionStartCommand(groups, setupHookCommand) {
+
+	groups, found, changed := repairSessionStart(groups, hook)
+	if found && !changed {
 		return setupPlan{content: raw}, nil
 	}
-
-	type hook struct {
-		Type    string `json:"type"`
-		Command string `json:"command"`
+	if !found {
+		type entry struct {
+			Type    string `json:"type"`
+			Command string `json:"command"`
+		}
+		group, err := json.Marshal(map[string][]entry{"hooks": {{Type: "command", Command: hook}}})
+		if err != nil {
+			return setupPlan{}, err
+		}
+		groups = append(groups, group)
 	}
-	group, err := json.Marshal(map[string][]hook{"hooks": {{Type: "command", Command: setupHookCommand}}})
-	if err != nil {
-		return setupPlan{}, err
-	}
-	groups = append(groups, group)
 	list, err := json.Marshal(groups)
 	if err != nil {
 		return setupPlan{}, err
@@ -257,23 +404,63 @@ func planSettings(path string) (setupPlan, error) {
 	return setupPlan{content: out.Bytes(), changed: true}, nil
 }
 
-func hasSessionStartCommand(groups []json.RawMessage, command string) bool {
+// repairSessionStart leaves exactly one setup hook in groups, running hook:
+// the first setup hook (see isSetupHookCommand) is rewritten to hook if it
+// differs, any later one is removed, and a group that removal empties is
+// dropped. found reports whether a setup hook was there at all; every other
+// hook and group is kept as it was read.
+func repairSessionStart(groups []json.RawMessage, hook string) (out []json.RawMessage, found, changed bool) {
 	for _, g := range groups {
-		var group struct {
-			Hooks []struct {
-				Command string `json:"command"`
-			} `json:"hooks"`
-		}
-		if json.Unmarshal(g, &group) != nil {
+		group, err := parseJSONObject(g)
+		if err != nil {
+			out = append(out, g)
 			continue
 		}
-		for _, h := range group.Hooks {
-			if h.Command == command {
-				return true
+		v, _ := group.get("hooks")
+		var entries []json.RawMessage
+		if json.Unmarshal(v, &entries) != nil {
+			out = append(out, g)
+			continue
+		}
+		var kept []json.RawMessage
+		groupChanged := false
+		for _, e := range entries {
+			entry, err := parseJSONObject(e)
+			var cmd string
+			if err == nil {
+				c, _ := entry.get("command")
+				err = json.Unmarshal(c, &cmd)
+			}
+			if err != nil || !isSetupHookCommand(cmd) {
+				kept = append(kept, e)
+				continue
+			}
+			switch {
+			case found:
+				groupChanged = true
+			case cmd != hook:
+				c, _ := json.Marshal(hook)
+				entry.set("command", c)
+				kept = append(kept, entry.encode())
+				groupChanged, found = true, true
+			default:
+				kept = append(kept, e)
+				found = true
 			}
 		}
+		if !groupChanged {
+			out = append(out, g)
+			continue
+		}
+		changed = true
+		if len(kept) == 0 {
+			continue
+		}
+		list, _ := json.Marshal(kept)
+		group.set("hooks", list)
+		out = append(out, group.encode())
 	}
-	return false
+	return out, found, changed
 }
 
 // jsonObject is a JSON object that remembers its key order. encoding/json
@@ -354,6 +541,7 @@ func printSetupText(w io.Writer, data interface{}) {
 	for _, f := range r.Files {
 		fmt.Fprintf(w, "%s %s\n", strings.ReplaceAll(f.Status, "_", " "), f.Path)
 	}
+	fmt.Fprintf(w, "hook: %s\n", r.Hook)
 	switch {
 	case !r.Changed:
 		fmt.Fprintf(w, "nothing to do: llm-data is already set up in %s\n", r.Dir)

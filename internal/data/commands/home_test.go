@@ -74,7 +74,7 @@ func TestHomeViewInsideRepo(t *testing.T) {
 	home := fakeExecutable(t)
 	homeRepo(t, home)
 
-	out := runRootBoth(t)
+	out := runRootBoth(t, "--plain")
 
 	for _, want := range []string{
 		"bin: ~/go/bin/llm-data\n",
@@ -128,7 +128,7 @@ func TestHomeViewCleanRepoReportsZero(t *testing.T) {
 	gitAt(t, repo, "2026-01-01T00:00:00Z", "add", ".")
 	gitAt(t, repo, "2026-01-01T00:00:00Z", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base")
 
-	if out := runRootBoth(t); !strings.Contains(out, "git_changes: 0\n") {
+	if out := runRootBoth(t, "--plain"); !strings.Contains(out, "git_changes: 0\n") {
 		t.Errorf("clean tree did not report git_changes: 0:\n%s", out)
 	}
 	var got map[string]any
@@ -146,7 +146,7 @@ func TestHomeViewNoRepository(t *testing.T) {
 	fakeExecutable(t)
 	outsideAnyRepo(t)
 
-	out := runRootBoth(t)
+	out := runRootBoth(t, "--plain")
 
 	if !strings.Contains(out, "repo: no repository\n") {
 		t.Errorf("outside a repository the view did not say so:\n%s", out)
@@ -174,7 +174,7 @@ func TestHomeViewNoRepository(t *testing.T) {
 // repository", and the run still succeeds.
 func assertGitUnavailable(t *testing.T, reason string) {
 	t.Helper()
-	out := runRootBoth(t)
+	out := runRootBoth(t, "--plain")
 	if want := "repo: git unavailable: " + reason; !strings.Contains(out, want) {
 		t.Errorf("want %q in:\n%s", want, out)
 	}
@@ -254,7 +254,7 @@ rev-parse) pwd ;;
 *) echo "fatal: index file corrupt" >&2; exit 128 ;;
 esac`)
 
-	out := runRootBoth(t)
+	out := runRootBoth(t, "--plain")
 
 	for _, want := range []string{"repo_root: " + dir + "\n", "project_type: go\n", "repo: git unavailable: fatal: index file corrupt\n"} {
 		if !strings.Contains(out, want) {
