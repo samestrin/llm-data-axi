@@ -98,9 +98,7 @@ func runPlanType(cmd *cobra.Command, args []string) error {
 	}
 
 	// Output based on flags
-	outputPlanType(cmd, info)
-
-	return nil
+	return outputPlanType(cmd, info)
 }
 
 // resolvePlanPath resolves and validates the plan directory path
@@ -242,28 +240,24 @@ func getValidPlanTypes() []string {
 }
 
 // outputPlanType outputs the plan type in the requested format
-func outputPlanType(cmd *cobra.Command, info PlanTypeResult) {
+func outputPlanType(cmd *cobra.Command, info PlanTypeResult) error {
 	out := cmd.OutOrStdout()
 
 	// AXI first: this helper prints JSON by hand, so it would otherwise accept
-	// --axi and silently emit JSON. The error is discarded exactly as the
-	// json.MarshalIndent below discards its own — this function returns
-	// nothing, and inventing an error path for one branch would be a wider
-	// change than the flag warrants.
+	// --axi and silently emit JSON. Encode failures are returned, never
+	// dropped: a dropped one printed nothing and exited 0.
 	if GlobalAXIOutput {
-		// See git_changes.go: an encode failure must not print nothing and exit
-		// 0. stderr is the only channel a void helper has.
-		if err := output.EncodeAXI(out, info); err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "Error: %v\n", err)
-		}
-		return
+		return output.EncodeAXI(out, info)
 	}
 	if planTypeJSON && planTypeMin {
 		// Compact JSON with only type
 		fmt.Fprintf(out, "{\"type\":%q}\n", info.Type)
 	} else if planTypeJSON {
 		// Pretty-printed JSON with all fields
-		output, _ := json.MarshalIndent(info, "", "  ")
+		output, err := json.MarshalIndent(info, "", "  ")
+		if err != nil {
+			return fmt.Errorf("plan-type: %w", err)
+		}
 		fmt.Fprintln(out, string(output))
 	} else if planTypeMin {
 		// Just the type string
@@ -276,4 +270,5 @@ func outputPlanType(cmd *cobra.Command, info PlanTypeResult) {
 		fmt.Fprintf(out, "Requires User Stories: %v\n", info.RequiresUserStories)
 		fmt.Fprintf(out, "Work Source: %s\n", info.WorkSource)
 	}
+	return nil
 }

@@ -2422,3 +2422,53 @@ func TestYamlMissingFileErrors_DoNotNameDeletedInit(t *testing.T) {
 		})
 	}
 }
+
+// TestYamlNonFiniteValueUnderJSONIsAnError defends against the dropped
+// json.Marshal error in yaml: a YAML `.inf` or `.nan` value cannot be encoded
+// as JSON, and `yaml get --json` and `yaml set --dry-run --json --min`
+// printed an empty line and exited 0. Every JSON path now exits 1 with a
+// structured error naming the key and the value; never an empty stdout.
+func TestYamlNonFiniteValueUnderJSONIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "c.yaml")
+	if err := os.WriteFile(file, []byte("a: .inf\nb: .nan\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"yaml", "get", "--file", file, "a", "--json"}, []string{"a", "+Inf"}},
+		{[]string{"yaml", "get", "--file", file, "b", "--json", "--min"}, []string{"b", "NaN"}},
+		{[]string{"yaml", "set", "--file", file, "a", "2", "--dry-run", "--json", "--min"}, []string{"+Inf"}},
+		{[]string{"yaml", "set", "--file", file, "a", "2", "--dry-run", "--json"}, []string{"+Inf"}},
+	} {
+		code, stdout, stderr := runCLI(t, tc.args...)
+		if code != 1 {
+			t.Errorf("%v: exit %d, want 1\nstdout=%q stderr=%q", tc.args, code, stdout, stderr)
+		}
+		var got struct {
+			Error   bool   `json:"error"`
+			Message string `json:"message"`
+			Err     bool   `json:"err"`
+			Msg     string `json:"msg"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+			t.Errorf("%v: stdout is not a JSON error: %v\n%q", tc.args, err, stdout)
+			continue
+		}
+		msg := got.Message + got.Msg
+		if !(got.Error || got.Err) {
+			t.Errorf("%v: not an error: %q", tc.args, stdout)
+		}
+		for _, w := range tc.want {
+			if !strings.Contains(msg, w) {
+				t.Errorf("%v: message %q does not name %q", tc.args, msg, w)
+			}
+		}
+	}
+	// The dry runs must not have written the file.
+	if b, _ := os.ReadFile(file); string(b) != "a: .inf\nb: .nan\n" {
+		t.Errorf("dry run wrote the file: %q", b)
+	}
+}

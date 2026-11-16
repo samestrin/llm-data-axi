@@ -23,11 +23,13 @@ const (
 )
 
 func main() {
-	// Verify the llm-data binary exists. The error names the path tried, the
-	// lookup order and the LLM_DATA_BINARY override, so a broken install is
-	// fixable from the error alone (epic 09 T4).
-	if _, err := os.Stat(mcpserver.BinaryPath); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "ERROR: llm-data binary not found at %s\n", mcpserver.BinaryPath)
+	// Verify the llm-data binary exists and could be executed: a directory or
+	// a file without the exec bit would start the server and fail every tool
+	// call. The error names the path tried, the lookup order and the
+	// LLM_DATA_BINARY override, so a broken install is fixable from the error
+	// alone (epic 09 T4).
+	if err := mcpserver.CheckBinary(mcpserver.BinaryPath); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 		fmt.Fprintf(os.Stderr, "The server looks for llm-data in LLM_DATA_BINARY, on PATH, beside the llm-data-mcp executable, and at %s.\n", mcpserver.FallbackBinaryPath)
 		if sibling := mcpserver.SiblingBinaryPath(); sibling != "" {
 			fmt.Fprintf(os.Stderr, "Beside this executable is %s.\n", sibling)

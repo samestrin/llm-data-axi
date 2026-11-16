@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -107,6 +106,15 @@ func runMath(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("evaluation error: %v", err)
 	}
 
+	// A non-finite result is not an answer. Every format reports it as the
+	// same error, before any of them runs: JSON cannot encode it, so --json
+	// printed an empty line and exited 0, and plain printed `RESULT: +Inf`.
+	if f, ok := result.(float64); ok {
+		if err := nonFiniteResult(expression, f); err != nil {
+			return err
+		}
+	}
+
 	// Format result value
 	var resultStr string
 	switch v := result.(type) {
@@ -140,13 +148,24 @@ func runMath(cmd *cobra.Command, args []string) error {
 			"expression": expression,
 			"result":     result,
 		}
-		jsonBytes, _ := json.Marshal(output)
-		fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+		return printJSONLine(cmd.OutOrStdout(), "math: "+expression, output)
 	} else if mathMin {
 		fmt.Fprintln(cmd.OutOrStdout(), resultStr)
 	} else {
 		fmt.Fprintf(cmd.OutOrStdout(), "RESULT: %s\n", resultStr)
 	}
 
+	return nil
+}
+
+// nonFiniteResult names why v is not a finite number, or returns nil. An
+// infinity comes from a division by zero or from overflowing a float64.
+func nonFiniteResult(expression string, v float64) error {
+	switch {
+	case math.IsNaN(v):
+		return fmt.Errorf("math: %s: result is NaN: not a number", expression)
+	case math.IsInf(v, 0):
+		return fmt.Errorf("math: %s: result is %v: division by zero or overflow", expression, v)
+	}
 	return nil
 }
