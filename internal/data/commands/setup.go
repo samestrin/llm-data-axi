@@ -24,6 +24,71 @@ import (
 // the bare run: the home view.
 const setupHookCommand = "llm-data"
 
+// openCodePluginMarker opens every plugin file setup writes. A file at the
+// plugin's path without it is the user's own, and is never overwritten.
+const openCodePluginMarker = "// Managed by `llm-data setup`"
+
+// openCodePluginTemplate is the OpenCode plugin, with %s standing for the
+// command as a JSON string literal. Its shape follows the reference plugin in
+// kunchenguid/axi packages/axi-sdk-js/src/hooks.ts: one default export that
+// OpenCode 2 loads through id and setup(ctx), adding to the session's
+// "context" hook, and OpenCode 1 (checked on 1.19.5) through server(input),
+// adding to experimental.chat.system.transform. Either way the home view goes
+// into the system context once per session, and no tool is added. It runs the
+// command without a shell, so the command is unquoted. A failed run adds an
+// error line naming the failure, not nothing: an empty context would read as
+// a home view with nothing in it.
+const openCodePluginTemplate = openCodePluginMarker + `; a later run rewrites this file.
+// Adds the llm-data home view to OpenCode's system context. No tool.
+import { execFile } from "node:child_process";
+
+const command = %s;
+
+function homeView(directory) {
+  return new Promise((resolve) => {
+    execFile(command, [], { cwd: directory || process.cwd(), timeout: 10000 }, (err, stdout, stderr) => {
+      if (err) {
+        const reason = String(stderr || stdout || err.message).trim() || err.message;
+        resolve("error: llm-data home view failed: " + reason);
+        return;
+      }
+      resolve(String(stdout).trim());
+    });
+  });
+}
+
+function contextFor(directory) {
+  const sessions = new Map();
+  return async (sessionID) => {
+    const key = sessionID ?? "";
+    if (!sessions.has(key)) sessions.set(key, homeView(directory));
+    return sessions.get(key);
+  };
+}
+
+export default {
+  id: "llm-data",
+  // OpenCode 2.
+  async setup(ctx) {
+    const context = contextFor(ctx.location.directory);
+    await ctx.session.hook("context", async (event) => {
+      const text = await context(event.sessionID);
+      if (text) event.system.push({ type: "text", text });
+    });
+  },
+  // OpenCode 1.
+  async server({ directory }) {
+    const context = contextFor(directory);
+    return {
+      "experimental.chat.system.transform": async (input, output) => {
+        const text = await context(input.sessionID);
+        if (text) output.system.push(text);
+      },
+    };
+  },
+};
+`
+
 // setupLookPath and setupExecutable are how setup sees the running binary;
 // tests replace them so the hook command does not depend on the test machine.
 var (
@@ -56,6 +121,14 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+// shellUnquote reverses shellQuote, for a hook run without a shell.
+func shellUnquote(s string) string {
+	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
+		return strings.ReplaceAll(s[1:len(s)-1], `'\''`, "'")
+	}
+	return s
+}
+
 // isSetupHookCommand reports whether cmd is a hook command setup writes: the
 // bare `llm-data`, or an absolute path (quoted or not) to a binary named
 // llm-data. Anything else, such as llm-data with arguments, belongs to the
@@ -64,9 +137,7 @@ func isSetupHookCommand(cmd string) bool {
 	if cmd == setupHookCommand {
 		return true
 	}
-	if len(cmd) >= 2 && cmd[0] == '\'' && cmd[len(cmd)-1] == '\'' {
-		cmd = strings.ReplaceAll(cmd[1:len(cmd)-1], `'\''`, "'")
-	}
+	cmd = shellUnquote(cmd)
 	base := filepath.Base(cmd)
 	return filepath.IsAbs(cmd) && (base == "llm-data" || base == "llm-data.exe")
 }
@@ -82,6 +153,7 @@ type setupTarget struct {
 var setupTargets = []setupTarget{
 	{name: "claude", plan: planClaude},
 	{name: "codex", plan: planCodex},
+	{name: "opencode", plan: planOpenCode},
 }
 
 func setupTargetNames() []string {
@@ -170,23 +242,27 @@ func newSetupCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Register llm-data with Claude Code or Codex in this project",
+		Short: "Register llm-data with Claude Code, Codex or OpenCode in this project",
 		Long: `Register llm-data with each --target agent in this project.
 
   claude  (the default) a SessionStart hook in .claude/settings.json and an
           Agent Skill at .claude/skills/llm-data/SKILL.md
   codex   a SessionStart hook in .codex/hooks.json and [features] hooks = true
           in .codex/config.toml, without which Codex ignores hooks.json
+  opencode  a plugin at .opencode/plugins/llm-data.js that adds the home view
+          to OpenCode's system context (it adds no tool)
 
-Every file is merged: other keys, hooks, comments and tables are kept.
+The settings files are merged: other keys, hooks, comments and tables are
+kept. The OpenCode plugin is setup's own file and is rewritten whole; a file at its path
+that setup did not write is refused.
 
-The hook runs the bare llm-data when PATH finds it, otherwise this binary's
+The hook (and the plugin) runs the bare llm-data when PATH finds it, otherwise this binary's
 absolute path. A hook setup wrote earlier that no longer matches, such as the
 old path after the binary moved, is repaired in place.
 
-Only files inside the project directory are written; the user-wide ~/.claude
-and ~/.codex are never touched, and running setup in the home directory itself
-is refused.
+Only files inside the project directory are written; the user-wide ~/.claude,
+~/.codex and ~/.config/opencode are never touched, and running setup in the
+home directory itself is refused.
 Safe to run again: a second run changes no bytes and says so. Never prompts.
 
 Examples:
@@ -194,6 +270,7 @@ Examples:
   llm-data setup --dry-run
   llm-data setup --target claude
   llm-data setup --target claude,codex
+  llm-data setup --target claude,codex,opencode
   llm-data setup --path /path/to/project`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -332,6 +409,27 @@ func planCodex(dir, hook string) ([]setupPlan, error) {
 	}
 	config.rel = configRel
 	return []setupPlan{hooks, config}, nil
+}
+
+// planOpenCode plans OpenCode's one file, the plugin in .opencode/plugins/.
+// setup owns the whole file, so path repair is a rewrite: a plugin carrying
+// the marker whose bytes differ, such as one naming a binary that has since
+// moved, is replaced. A file without the marker is refused and left as it is.
+func planOpenCode(dir, hook string) ([]setupPlan, error) {
+	rel := filepath.Join(".opencode", "plugins", "llm-data.js")
+	existing, err := readProjectFile(dir, rel)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil && !bytes.HasPrefix(existing, []byte(openCodePluginMarker)) {
+		return nil, fmt.Errorf("%s was not written by setup; refusing to overwrite it; move it aside and run setup again", filepath.Join(dir, rel))
+	}
+	command, err := json.Marshal(shellUnquote(hook))
+	if err != nil {
+		return nil, err
+	}
+	want := []byte(fmt.Sprintf(openCodePluginTemplate, command))
+	return []setupPlan{{rel: rel, content: want, changed: !bytes.Equal(existing, want)}}, nil
 }
 
 var (
