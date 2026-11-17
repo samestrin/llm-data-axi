@@ -48,17 +48,19 @@ The command looks for "Plan Type:" in metadata.md first, then falls back to
 plan.md. If neither file contains a plan type, it defaults to "feature".
 
 Output modes:
-  Default:    Human-readable text with all metadata
-  --json:     JSON object with all fields
-  --min:      Just the type string (e.g., "feature")
-  --json --min: Minimal JSON (e.g., {"type":"feature"})
+  Default:      TOON with all metadata
+  --plain:      Human-readable text with all metadata
+  --json:       JSON object with all fields
+  --min:        Shortens --plain and --json output: with --plain, just the
+                type string (e.g., "feature"); with --json, minimal JSON
+                (e.g., {"type":"feature"}). No effect on TOON.
 
 Valid plan types: feature, bugfix, test-remediation, tech-debt, infrastructure
 
 Examples:
   llm-data plan-type --path .planning/plans/my-plan/
   llm-data plan-type --json
-  llm-data plan-type --min
+  llm-data plan-type --plain --min
   llm-data plan-type --json --min`,
 		Args: cobra.NoArgs,
 		RunE: runPlanType,
@@ -66,7 +68,7 @@ Examples:
 
 	cmd.Flags().StringVar(&planTypePath, "path", ".", "Plan directory path")
 	cmd.Flags().BoolVar(&planTypeJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&planTypeMin, "min", false, "Minimal output (type only)")
+	cmd.Flags().BoolVar(&planTypeMin, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 
 	return cmd
 }
