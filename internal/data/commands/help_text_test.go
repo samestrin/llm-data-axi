@@ -103,3 +103,42 @@ func TestNoSubcommandMinUsageDescribesTOON(t *testing.T) {
 		t.Fatalf("checked only %d local --min flags; the walk is not reaching the subcommands", checked)
 	}
 }
+
+// TestLongHelpMinExamplesNameAFormat defends the second half of the same
+// finding: yaml get and yaml multiget documented "--min: value (just the
+// value)" and gave `yaml get --file config.yaml helper.llm --min` as an
+// example, but that run prints TOON key and value, because --min is cleared
+// under the TOON default. An example that uses --min must also pass --plain or
+// --json, and a "--min:" entry in an output-modes list must say what it does
+// to TOON (nothing).
+func TestLongHelpMinExamplesNameAFormat(t *testing.T) {
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		lines := strings.Split(c.Long, "\n")
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			switch {
+			case strings.HasPrefix(trimmed, "--min:"):
+				entry := trimmed
+				for j := i + 1; j < len(lines); j++ {
+					next := strings.TrimSpace(lines[j])
+					if next == "" || strings.HasPrefix(next, "--") || strings.HasSuffix(next, ":") {
+						break
+					}
+					entry += " " + next
+				}
+				if !strings.Contains(entry, "TOON") {
+					t.Errorf("%s help entry %q does not say --min has no effect on TOON", c.CommandPath(), entry)
+				}
+			case strings.Contains(" "+trimmed+" ", " --min ") && !strings.HasPrefix(trimmed, "--"):
+				if !strings.Contains(trimmed, "--plain") && !strings.Contains(trimmed, "--json") {
+					t.Errorf("%s help example %q uses --min without --plain or --json; under the TOON default it changes nothing", c.CommandPath(), trimmed)
+				}
+			}
+		}
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+	}
+	walk(NewRootCmd())
+}

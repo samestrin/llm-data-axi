@@ -63,13 +63,14 @@ Key Format:
   deeply.nested.value - deep nesting
 
 Output Formats:
-  default: key: value
+  default: TOON with key and value
+  --plain: key: value
   --json:  {"key": "...", "value": "..."}
-  --min:   value (just the value)
+  --min:   just the value, with --plain or --json. No effect on TOON.
 
 Examples:
   yaml get --file config.yaml helper.llm
-  yaml get --file config.yaml helper.llm --min
+  yaml get --file config.yaml helper.llm --plain --min
   yaml get --file config.yaml missing.key --default "fallback"`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -294,14 +295,15 @@ Keys can be specified via:
   - --required-file (one key per line, # comments supported)
 
 Output Formats:
-  default: key=value (one per line)
+  default: TOON with each key and value
+  --plain: key=value (one per line)
   --json:  {"key1": "value1", "key2": "value2"}
-  --min:   value1\nvalue2 (values only)
+  --min:   values only, with --plain or --json. No effect on TOON.
 
 Examples:
   yaml multiget --file config.yaml helper.llm project.type
   yaml multiget --file config.yaml helper.llm missing.key --defaults '{"missing.key": "default"}'
-  yaml multiget --file config.yaml helper.llm project.type --min
+  yaml multiget --file config.yaml helper.llm project.type --plain --min
   yaml multiget --file config.yaml --required-file keys.txt`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
