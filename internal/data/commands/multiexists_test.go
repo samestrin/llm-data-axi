@@ -40,16 +40,18 @@ func TestMultiexistsCommand(t *testing.T) {
 			expected: []string{"file", "directory"},
 		},
 		{
-			name:     "missing file fails without no-fail",
-			args:     []string{missingFile},
-			expected: []string{"✗", "MISSING"},
-			wantErr:  true,
+			// The failure is the whole report: the error names the missing
+			// path and no success listing precedes it (EST-6876 finding 1).
+			name:    "missing file fails without no-fail",
+			args:    []string{missingFile},
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := newMultiexistsCmd()
+			cmd.SilenceUsage = true // as under the root
 			buf := new(bytes.Buffer)
 			errBuf := new(bytes.Buffer)
 			cmd.SetOut(buf)
@@ -59,8 +61,11 @@ func TestMultiexistsCommand(t *testing.T) {
 			err := cmd.Execute()
 
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("expected error, got nil")
+				if err == nil || !strings.Contains(err.Error(), missingFile) {
+					t.Errorf("want an error naming %s, got %v", missingFile, err)
+				}
+				if buf.Len() != 0 {
+					t.Errorf("a failed run printed a result before its error: %q", buf.String())
 				}
 			}
 

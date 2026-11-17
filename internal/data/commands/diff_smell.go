@@ -7,11 +7,13 @@ import (
 
 // Smell is one over-simplification fingerprint found in a diff.
 type Smell struct {
-	Type     string `json:"type"`     // test_only, weakened_assertion, suppression, empty_catch, stub_body
+	Type     string `json:"type"` // test_only, weakened_assertion, suppression, empty_catch, stub_body
+	File     string `json:"file"`
+	Line     int    `json:"line"`     // new-file line number for added-line smells; 0 for a whole-file smell
 	Severity string `json:"severity"` // hard | soft
-	File     string `json:"file,omitempty"`
-	Line     int    `json:"line,omitempty"` // new-file line number for added-line smells
-	Evidence string `json:"evidence"`
+	// Evidence is emitted only under --full: it is the whole added line, and
+	// unbounded.
+	Evidence string `json:"evidence,omitempty"`
 }
 
 // SmellFiles lists the changed files split by role.
@@ -35,6 +37,7 @@ type SmellResult struct {
 	Files   SmellFiles   `json:"files"`
 	Smells  []Smell      `json:"smells"`
 	Summary SmellSummary `json:"summary"`
+	Help    []string     `json:"help,omitempty"`
 }
 
 // --- detectors ---

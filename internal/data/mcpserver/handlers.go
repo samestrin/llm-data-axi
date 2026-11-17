@@ -967,6 +967,9 @@ func buildDiffSmellArgs(args map[string]interface{}) []string {
 	if v, ok := args["rev"].(string); ok && v != "" {
 		cmdArgs = append(cmdArgs, "--rev", v)
 	}
+	if getBool(args, "full") {
+		cmdArgs = append(cmdArgs, "--full")
+	}
 	if getBoolDefault(args, "json", true) {
 		cmdArgs = append(cmdArgs, "--json")
 	}

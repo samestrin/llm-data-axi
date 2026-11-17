@@ -10,11 +10,12 @@ import (
 
 func runDiffSmellCmd(t *testing.T, args ...string) (*SmellResult, error) {
 	t.Helper()
-	cmd := newDiffSmellCmd()
+	// Through the root: --json is the root's flag, not diff-smell's own.
+	cmd := rootCmdForTest(t)
 	var out, errb bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errb)
-	cmd.SetArgs(args)
+	cmd.SetArgs(append([]string{"diff-smell"}, args...))
 	if err := cmd.Execute(); err != nil {
 		return nil, err
 	}
@@ -88,11 +89,11 @@ func TestDiffSmellCmd_RootCommit(t *testing.T) {
 }
 
 func TestDiffSmellCmd_UnreadableDiff(t *testing.T) {
-	cmd := newDiffSmellCmd()
+	cmd := rootCmdForTest(t)
 	var out, errb bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errb)
-	cmd.SetArgs([]string{"--diff", "/no/such/file.diff", "--json"})
+	cmd.SetArgs([]string{"diff-smell", "--diff", "/no/such/file.diff", "--json"})
 	if err := cmd.Execute(); err == nil {
 		t.Error("expected error for unreadable --diff path")
 	}

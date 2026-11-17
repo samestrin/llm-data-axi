@@ -32,13 +32,15 @@ type CatFileEntry struct {
 	C       string `json:"c,omitempty"`
 }
 
-// CatfilesResult represents the catfiles result
+// CatfilesResult represents the catfiles result. Outside --min the counts are
+// always stated: a directory with no files is file_count 0, not an error and
+// not a missing field.
 type CatfilesResult struct {
-	Files     []CatFileEntry `json:"files,omitempty"`
+	Files     []CatFileEntry `json:"files"`
 	F         []CatFileEntry `json:"f,omitempty"`
-	FileCount int            `json:"file_count,omitempty"`
+	FileCount int            `json:"file_count"`
 	FC        *int           `json:"fc,omitempty"`
-	TotalSize int64          `json:"total_size,omitempty"`
+	TotalSize int64          `json:"total_size"`
 	TS        *int64         `json:"ts,omitempty"`
 }
 
@@ -116,10 +118,6 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if len(files) == 0 && len(unreadable) == 0 {
-		return fmt.Errorf("no files found")
-	}
-
 	// Deduplicate and sort
 	seen := make(map[string]bool)
 	uniqueFiles := []string{}
@@ -132,7 +130,7 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 	sort.Strings(uniqueFiles)
 
 	// Process files and collect entries
-	var entries []CatFileEntry
+	entries := []CatFileEntry{}
 	for _, filePath := range uniqueFiles {
 		info, err := os.Stat(filePath)
 		if err != nil {
@@ -206,6 +204,10 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 
 	formatter := output.New(catfilesJSON, catfilesMinimal, cmd.OutOrStdout())
 	return formatter.Print(result, func(w io.Writer, data interface{}) {
+		if len(entries) == 0 {
+			fmt.Fprintln(w, "FILES: 0")
+			return
+		}
 		for _, e := range entries {
 			fmt.Fprintln(w, strings.Repeat("=", 60))
 			fmt.Fprintf(w, "FILE: %s\n", e.Path)

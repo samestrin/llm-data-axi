@@ -14,8 +14,6 @@ import (
 var (
 	tcPackages string
 	tcConfig   string
-	tcJSON     bool
-	tcMin      bool
 )
 
 func newTierClassifierCmd() *cobra.Command {
@@ -31,13 +29,11 @@ First match wins within a pass; earlier passes take precedence. Unmatched
 packages are returned in "unassigned" for the model's Pass 4 (ecosystem
 convention) and Pass 5 (default to utility).
 
-Output is JSON: {assigned:{pkg:{tier,pass}}, unassigned:[...], counts:{...}}.`,
+Output: assigned (each package's tier and pass), unassigned and counts.`,
 		RunE: runTierClassifier,
 	}
 	cmd.Flags().StringVar(&tcPackages, "packages", "", "Comma-separated package names (required)")
 	cmd.Flags().StringVar(&tcConfig, "config", "", "Path to package-tiers.yaml (packages/patterns/categories)")
-	cmd.Flags().BoolVar(&tcJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&tcMin, "min", false, "Minimal output format")
 	cmd.MarkFlagRequired("packages")
 	return cmd
 }
@@ -45,7 +41,7 @@ Output is JSON: {assigned:{pkg:{tier,pass}}, unassigned:[...], counts:{...}}.`,
 func runTierClassifier(cmd *cobra.Command, _ []string) error {
 	pkgs := splitCSV(tcPackages)
 	if len(pkgs) == 0 {
-		return fmt.Errorf("--packages required (comma-separated names)")
+		return &output.UsageError{Msg: "--packages needs at least one package name (comma-separated)"}
 	}
 	cfg := TierConfig{Explicit: map[string]string{}}
 	if tcConfig != "" {
@@ -56,7 +52,7 @@ func runTierClassifier(cmd *cobra.Command, _ []string) error {
 		cfg = loaded
 	}
 	result := classifyTiers(pkgs, cfg)
-	formatter := output.New(tcJSON, tcMin, cmd.OutOrStdout())
+	formatter := output.New(GlobalJSONOutput, GlobalMinOutput, cmd.OutOrStdout())
 	return formatter.Print(result, func(w io.Writer, data interface{}) {
 		r := data.(*TierResult)
 		fmt.Fprintf(w, "%d assigned, %d unassigned\n", len(r.Assigned), len(r.Unassigned))

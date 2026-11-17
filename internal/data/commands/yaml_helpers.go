@@ -632,22 +632,32 @@ func resolveNegativeIndices(data map[string]interface{}, dotPath string) (string
 // This prevents memory exhaustion from malicious or accidental large inputs
 const maxStdinSize = 10 * 1024 * 1024
 
+// refuseTerminalStdin fails when stdin is a terminal rather than a pipe or a
+// file. Reading a terminal waits for the user to type, and a command that
+// does that is a prompt in all but name. A reader that is not an *os.File (a
+// test buffer) is never a terminal.
+func refuseTerminalStdin(reader io.Reader) error {
+	f, ok := reader.(*os.File)
+	if !ok {
+		return nil
+	}
+	stat, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to stat stdin: %w", err)
+	}
+	if (stat.Mode() & os.ModeCharDevice) != 0 {
+		return fmt.Errorf("no data piped to stdin (use 'echo value | command' or 'command < file')")
+	}
+	return nil
+}
+
 // readFromStdin reads all content from stdin, trimming trailing newline
 // Uses cmd.InOrStdin() for testability - tests can use cmd.SetIn()
 // Enforces a maximum size limit to prevent memory exhaustion
 func readFromStdin(cmd *cobra.Command) (string, error) {
 	reader := cmd.InOrStdin()
-
-	// Check if stdin has data (not a terminal)
-	// Only check if it's actually os.Stdin (not a test buffer)
-	if f, ok := reader.(*os.File); ok && f == os.Stdin {
-		stat, err := f.Stat()
-		if err != nil {
-			return "", fmt.Errorf("failed to stat stdin: %w", err)
-		}
-		if (stat.Mode() & os.ModeCharDevice) != 0 {
-			return "", fmt.Errorf("no data piped to stdin (use 'echo value | command' or 'command < file')")
-		}
+	if err := refuseTerminalStdin(reader); err != nil {
+		return "", err
 	}
 
 	// Read with size limit to prevent memory exhaustion
