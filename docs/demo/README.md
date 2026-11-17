@@ -12,7 +12,9 @@ The session shows three commands against the binary `make build` produces, run i
 
 ## The example project
 
-`docs/demo/example/` is a small Python project — `requirements.txt`, `app.py` and `config.yaml` — that exists only for this recording. It is committed, so the session runs against the same files on every machine, and the tape enters it before the first command, so the paths the output prints stay on one line.
+`docs/demo/example/` is a small Python project — `requirements.txt`, `app.py` and `config.yaml` — that exists only for this recording. It is committed, so every render runs against the same files, and the tape enters it before the first command.
+
+The files are the same everywhere, but the `grep` row is not: `llm-data grep` prints the absolute path of each match, so that row carries the full path of the checkout the tape is rendered from (`/home/you/src/llm-data-axi/docs/demo/example/app.py,8,...`). The recording therefore depends on where it is rendered. At `Set Width 1000` a short checkout path keeps the row on one line; a long one (such as `/Users/<name>/Documents/GitHub/llm-data-axi`) wraps it and puts the recorder's directory names in the GIF. Render from a short checkout path when that row must stay on one line.
 
 ## What the session runs
 

@@ -250,9 +250,6 @@ func TestDemoTapeReplays(t *testing.T) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "bash", "-c", script)
 	cmd.Dir = root
-	// The demo's own commands must not be steered by the caller's home view or
-	// binary choice; PATH arrives already pointing at ./build from the tape.
-	cmd.Env = append(os.Environ(), "LLM_DATA_BINARY=")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out

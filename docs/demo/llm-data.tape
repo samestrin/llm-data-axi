@@ -11,7 +11,9 @@
 # recording is the binary `make build` just wrote and no installed copy is used.
 # Build it from the release tag to record the released behaviour. The setup then
 # enters docs/demo/example, the committed project the session runs against, so
-# the recording is the same on every machine.
+# every render shows the same files. The grep row still prints the absolute path
+# of the checkout it is rendered from, so the recording depends on where it is
+# rendered; see docs/demo/README.md before rendering from a long path.
 #
 # tests/demo/demo_test.go replays every Type line below without vhs, so
 # `go test ./tests/demo` fails when a command here stops working. That is also
