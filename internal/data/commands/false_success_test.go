@@ -188,3 +188,31 @@ func TestMultigrepOutputDirWriteFailureIsAnError(t *testing.T) {
 		t.Errorf("a failed run must not report matches as a result: %s", stdout)
 	}
 }
+
+// Defends the gitignore filter against the unreadable-entry check: a
+// directory .gitignore excludes was never part of the output, so failing the
+// run because it cannot be read would turn a correct result into an error.
+func TestCatfilesIgnoredUnreadableSubdirIsNotAnError(t *testing.T) {
+	for _, pattern := range []string{"locked/", "locked"} {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(pattern+"\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("alpha\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		locked := filepath.Join(dir, "locked")
+		if err := os.Mkdir(locked, 0000); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Chmod(locked, 0755) })
+		if _, err := os.ReadDir(locked); err == nil {
+			t.Skip("running as a user that reads mode-000 directories")
+		}
+
+		code, stdout, _ := runCLI(t, "catfiles", dir, "--plain")
+		if code != 0 || !strings.Contains(stdout, "alpha") {
+			t.Errorf("pattern %q: want exit 0 with a.txt, got exit %d, %q", pattern, code, stdout)
+		}
+	}
+}

@@ -89,6 +89,13 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 
 			filepath.Walk(absPath, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
+					// An ignored entry was never part of the output, so it
+					// cannot fail the run. A directory is probed through a
+					// child path, because a "dir/" pattern matches only what
+					// sits under it.
+					if ignorer != nil && (ignorer.IsIgnored(path) || ignorer.IsIgnored(filepath.Join(path, "_"))) {
+						return nil
+					}
 					unreadable = append(unreadable, pathFailure{Path: path, Reason: failureReason(err)})
 					return nil
 				}
