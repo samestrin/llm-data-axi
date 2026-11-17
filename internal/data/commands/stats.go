@@ -34,7 +34,7 @@ total size, and breakdown by file extension.`,
 	cmd.Flags().StringVar(&statsPath, "path", ".", "Directory path to analyze")
 	cmd.Flags().BoolVar(&statsNoGitignore, "no-gitignore", false, "Disable .gitignore filtering")
 	cmd.Flags().BoolVar(&statsJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&statsMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&statsMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	return cmd
 }
 

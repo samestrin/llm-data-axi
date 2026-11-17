@@ -36,7 +36,7 @@ Note: For expressions starting with -, use quotes or = prefix:
 	}
 
 	cmd.Flags().BoolVar(&mathJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&mathMin, "min", false, "Minimal output - just the value")
+	cmd.Flags().BoolVar(&mathMin, "min", false, "Print just the value under --plain (no effect on TOON or --json)")
 
 	return cmd
 }

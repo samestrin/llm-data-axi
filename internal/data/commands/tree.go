@@ -91,7 +91,7 @@ Examples:
 	cmd.Flags().BoolVar(&treeNoDefaultExcludes, "no-default-excludes", false, "Disable default directory excludes")
 	cmd.Flags().StringArrayVar(&treeExcludePatterns, "exclude", nil, "Regex patterns to exclude (can be repeated)")
 	cmd.Flags().BoolVar(&treeJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&treeMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&treeMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	return cmd
 }
 

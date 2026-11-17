@@ -76,7 +76,7 @@ Examples:
 	cmd.Flags().BoolVar(&runtimeLabel, "label", false, "Include 'Runtime: ' prefix")
 	cmd.Flags().BoolVar(&runtimeRaw, "raw", false, "Output raw number without unit suffix")
 	cmd.Flags().BoolVar(&runtimeJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&runtimeMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&runtimeMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	cmd.MarkFlagRequired("start")
 
 	return cmd

@@ -55,7 +55,7 @@ Example: {{name|Guest}} uses "Guest" if name is not defined.`,
 	cmd.Flags().StringVarP(&templateOutput, "output", "o", "", "Output file (default: stdout)")
 	cmd.Flags().BoolVar(&templateStrip, "strip", false, "Strip whitespace from file values")
 	cmd.Flags().BoolVar(&templateJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&templateMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&templateMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 
 	return cmd
 }

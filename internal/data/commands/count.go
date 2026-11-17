@@ -76,7 +76,7 @@ Output format:
 	cmd.Flags().BoolVar(&countFiles, "files", false, "Count files (legacy, use --mode files)")
 	// Output format flags
 	cmd.Flags().BoolVar(&countJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&countMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&countMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	cmd.MarkFlagRequired("path")
 	return cmd
 }

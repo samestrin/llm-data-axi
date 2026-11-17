@@ -142,7 +142,7 @@ Set `LLM_DATA_MCP_DEBUG=true` to log each command line and timeout to stderr.
 The audit in [`docs/axi-audit.md`](docs/axi-audit.md) scores the CLI against the ten AXI principles. Every principle is met except two stated, justified remainders:
 
 - **No session-end lifecycle-capture hook.** `llm-data` keeps no session state — no transcript, no record of files touched — so there is nothing for a session-end hook to capture. The session-start integration (the home view as context) ships for Claude Code, Codex and OpenCode through `setup`.
-- **`help[]` next steps are scoped, not universal.** They sit where a result leaves an agent without a next step: the home view, empty search results and truncated search lines. Widening them to every command is deliberately left as future work.
+- **`help[]` next steps are scoped, not universal.** They sit where a result leaves an agent without a next step: the home view, empty search results, truncated search lines and `diff-smell` output whose evidence was left out. Widening them to every command is deliberately left as future work.
 
 If a new gap appears, state it here and carry a row for it in the technical-debt record rather than letting a caller learn it the hard way.
 

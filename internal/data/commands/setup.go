@@ -285,7 +285,7 @@ Examples:
 	cmd.Flags().Var(&targets, "target", "Agents to register with, comma-separated or repeated ("+strings.Join(setupTargetNames(), ", ")+")")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be written without writing")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&minOut, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&minOut, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	return cmd
 }
 

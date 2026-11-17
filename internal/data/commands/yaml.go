@@ -63,13 +63,14 @@ Key Format:
   deeply.nested.value - deep nesting
 
 Output Formats:
-  default: key: value
+  default: TOON with key and value
+  --plain: key: value
   --json:  {"key": "...", "value": "..."}
-  --min:   value (just the value)
+  --min:   just the value, with --plain or --json. No effect on TOON.
 
 Examples:
   yaml get --file config.yaml helper.llm
-  yaml get --file config.yaml helper.llm --min
+  yaml get --file config.yaml helper.llm --plain --min
   yaml get --file config.yaml missing.key --default "fallback"`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -131,7 +132,7 @@ Examples:
 	cmd.Flags().StringVar(&file, "file", "", "Path to YAML config file (required)")
 	cmd.Flags().StringVar(&defaultValue, "default", "", "Default value if key not found")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&minOutput, "min", false, "Minimal output (just value)")
+	cmd.Flags().BoolVar(&minOutput, "min", false, "Just the value under --json or --plain (no effect on TOON)")
 	cmd.MarkFlagRequired("file")
 
 	return cmd
@@ -265,7 +266,7 @@ Examples:
 	cmd.Flags().StringVar(&file, "file", "", "Path to YAML config file (required)")
 	cmd.Flags().BoolVar(&create, "create", false, "Create file if it doesn't exist")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&minOutput, "min", false, "Minimal output")
+	cmd.Flags().BoolVar(&minOutput, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview changes without writing to file")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress success messages (errors still output)")
 	cmd.MarkFlagRequired("file")
@@ -294,14 +295,15 @@ Keys can be specified via:
   - --required-file (one key per line, # comments supported)
 
 Output Formats:
-  default: key=value (one per line)
+  default: TOON with each key and value
+  --plain: key=value (one per line)
   --json:  {"key1": "value1", "key2": "value2"}
-  --min:   value1\nvalue2 (values only)
+  --min:   values only, with --plain or --json. No effect on TOON.
 
 Examples:
   yaml multiget --file config.yaml helper.llm project.type
   yaml multiget --file config.yaml helper.llm missing.key --defaults '{"missing.key": "default"}'
-  yaml multiget --file config.yaml helper.llm project.type --min
+  yaml multiget --file config.yaml helper.llm project.type --plain --min
   yaml multiget --file config.yaml --required-file keys.txt`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -408,7 +410,7 @@ Examples:
 	cmd.Flags().StringVar(&defaults, "defaults", "", "JSON object of default values")
 	cmd.Flags().StringVar(&separator, "separator", "\n", "Value separator for --min output")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&minOutput, "min", false, "Minimal output (values only)")
+	cmd.Flags().BoolVar(&minOutput, "min", false, "Values only under --json or --plain (no effect on TOON)")
 	cmd.Flags().StringVar(&requiredFile, "required-file", "", "File containing required keys (one per line, # comments supported)")
 	cmd.MarkFlagRequired("file")
 
@@ -595,7 +597,7 @@ Examples:
 	cmd.Flags().StringVar(&file, "file", "", "Path to YAML config file (required)")
 	cmd.Flags().BoolVar(&create, "create", false, "Create file if it doesn't exist")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&minOutput, "min", false, "Minimal output")
+	cmd.Flags().BoolVar(&minOutput, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview changes without writing to file")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress success messages (errors still output)")
 	cmd.MarkFlagRequired("file")
