@@ -14,7 +14,7 @@ import (
 	"github.com/goccy/go-yaml/ast"
 	"github.com/goccy/go-yaml/parser"
 	"github.com/gofrs/flock"
-	"github.com/samestrin/llm-data-axi/pkg/output"
+	"github.com/samestrin/llm-data-axi/v2/pkg/output"
 	"github.com/spf13/cobra"
 )
 

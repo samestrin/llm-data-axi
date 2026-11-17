@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/samestrin/llm-data-axi/pkg/output"
+	"github.com/samestrin/llm-data-axi/v2/pkg/output"
 )
 
 // Findings from the atcr reviewer panel on the --axi change

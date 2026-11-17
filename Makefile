@@ -11,7 +11,7 @@ COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
 # The CLI version lives on commands.Version, not on main: every command in the
 # tree reads it through the cobra root, so stamping main would leave
 # `llm-data --version` reporting the hardcoded default.
-CLI_LDFLAGS := -ldflags "-s -w -X github.com/samestrin/llm-data-axi/internal/data/commands.Version=$(VERSION)"
+CLI_LDFLAGS := -ldflags "-s -w -X github.com/samestrin/llm-data-axi/v2/internal/data/commands.Version=$(VERSION)"
 MCP_LDFLAGS := -ldflags "-s -w -X main.serverVersion=$(VERSION)"
 
 PLATFORMS := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64

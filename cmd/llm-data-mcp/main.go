@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/samestrin/llm-data-axi/internal/data/commands"
-	"github.com/samestrin/llm-data-axi/internal/data/mcpserver"
+	"github.com/samestrin/llm-data-axi/v2/internal/data/commands"
+	"github.com/samestrin/llm-data-axi/v2/internal/data/mcpserver"
 )
 
 // serverVersion is stamped at build time with -X main.serverVersion. It must

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/samestrin/llm-data-axi/pkg/output"
+	"github.com/samestrin/llm-data-axi/v2/pkg/output"
 )
 
 // --axi is a PERSISTENT flag on the root, so every command accepts it. Six

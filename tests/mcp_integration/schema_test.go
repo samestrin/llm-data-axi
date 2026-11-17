@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	mcpserver "github.com/samestrin/llm-data-axi/internal/data/mcpserver"
+	mcpserver "github.com/samestrin/llm-data-axi/v2/internal/data/mcpserver"
 )
 
 // portedToolCount is the size of the set carried over from llm-support by the

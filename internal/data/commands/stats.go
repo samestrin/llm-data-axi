@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/samestrin/llm-data-axi/internal/data/gitignore"
-	"github.com/samestrin/llm-data-axi/internal/data/utils"
-	"github.com/samestrin/llm-data-axi/pkg/output"
+	"github.com/samestrin/llm-data-axi/v2/internal/data/gitignore"
+	"github.com/samestrin/llm-data-axi/v2/internal/data/utils"
+	"github.com/samestrin/llm-data-axi/v2/pkg/output"
 	"github.com/spf13/cobra"
 )
 

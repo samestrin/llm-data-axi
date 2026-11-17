@@ -1,4 +1,4 @@
-module github.com/samestrin/llm-data-axi
+module github.com/samestrin/llm-data-axi/v2
 
 go 1.24.0
 
