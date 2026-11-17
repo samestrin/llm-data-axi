@@ -37,7 +37,7 @@ make build     # binaries land in ./build/
 make install   # build, then install to /usr/local/bin (may need sudo)
 ```
 
-**Support is best effort.** Releases ship binaries for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64 and windows/amd64 (the matrix in [`release.yml`](.github/workflows/release.yml)), but there is no support guarantee: a platform that misbehaves may simply stop being built, and anything outside that matrix — another OS, another architecture — means building from source yourself.
+**Support is best effort.** Releases ship binaries for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64 and windows/amd64 (the `PLATFORMS` list in the [`Makefile`](Makefile), which [`release.yml`](.github/workflows/release.yml) builds with `make dist`), but there is no support guarantee: a platform that misbehaves may simply stop being built, and anything outside that list — another OS, another architecture — means building from source yourself.
 
 ## Usage
 
