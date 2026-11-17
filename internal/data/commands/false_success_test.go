@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -214,5 +215,53 @@ func TestCatfilesIgnoredUnreadableSubdirIsNotAnError(t *testing.T) {
 		if code != 0 || !strings.Contains(stdout, "alpha") {
 			t.Errorf("pattern %q: want exit 0 with a.txt, got exit %d, %q", pattern, code, stdout)
 		}
+	}
+}
+
+// Defends the "no files found" guard against hiding an unreadable entry: when
+// everything requested is unreadable there are no files, and without the
+// guard's unreadable check the run reported `no files found`, which tells the
+// caller the directory is empty when it is the read that failed.
+func TestCatfilesOnlyUnreadableIsNotNoFilesFound(t *testing.T) {
+	dir := t.TempDir()
+	locked := filepath.Join(dir, "locked")
+	if err := os.Mkdir(locked, 0000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(locked, 0755) })
+	if _, err := os.ReadDir(locked); err == nil {
+		t.Skip("running as a user that reads mode-000 directories")
+	}
+
+	code, stdout, _ := runCLI(t, "catfiles", dir, "--json")
+	if code != 1 {
+		t.Errorf("exit %d, want 1", code)
+	}
+	if strings.Contains(stdout, "no files found") {
+		t.Errorf("an unreadable directory was reported as empty: %s", stdout)
+	}
+	var got struct {
+		Unreadable []struct {
+			Path string `json:"path"`
+		} `json:"unreadable"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
+	}
+	if len(got.Unreadable) != 1 || filepath.Base(got.Unreadable[0].Path) != "locked" {
+		t.Errorf("want an unreadable list naming locked, got %+v", got)
+	}
+}
+
+// Defends failureReason's fallback: an error that is not an *os.PathError
+// must keep its own text, or the unreadable and failed_writes lists carry an
+// empty reason.
+func TestFailureReasonKeepsPlainErrorText(t *testing.T) {
+	if got := failureReason(errors.New("boom")); got != "boom" {
+		t.Errorf("failureReason(boom) = %q, want boom", got)
+	}
+	pathErr := &os.PathError{Op: "open", Path: "/x", Err: errors.New("permission denied")}
+	if got := failureReason(pathErr); got != "permission denied" {
+		t.Errorf("failureReason(PathError) = %q, want the cause without the path", got)
 	}
 }

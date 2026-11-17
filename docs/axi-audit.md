@@ -1,6 +1,6 @@
 # AXI audit: llm-data against the ten principles
 
-A hand audit of `llm-data` at `a9619fa` (epic 11 T1-T5 plus the flag-error and home-git-budget work of #52 merged) against the ten principles on https://axi.md and the integration rules in `kunchenguid/axi` `.agents/skills/axi/SKILL.md`. `axi-axi` is not installed on the build host. Every probe ran against `./build/llm-data` from `make build`.
+A hand audit of `llm-data` at `a9619fa` (epic 11 T1-T5 plus the flag-error and home-git-budget work of #52 merged), with the principle 6 rows for `template --strict`, `catfiles` and `multigrep --output-dir` re-probed at `1619cab` (EST-6827), against the ten principles on https://axi.md and the integration rules in `kunchenguid/axi` `.agents/skills/axi/SKILL.md`. `axi-axi` is not installed on the build host. Every probe ran against `./build/llm-data` from `make build`.
 
 The first audit (epic 03 T1, at `e32edfe`) found principles 3, 4, 5, 7, 8 and 9 unmet and 6 partly met. Those gaps were closed by epic 03 (missing-path error, home view, `help[]`, `setup`, MCP TOON default), epic 09 (usage errors structured on stdout, live home view, committed skill) and the truncation/totals work recorded as EST-5260. Epic 11 closed the last three shared gaps: TOON is the default output (T1), errors go to stdout in every format including `--plain` (T2), and `setup` registers Claude Code, Codex and OpenCode through one shared path helper (T3-T5).
 
