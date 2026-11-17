@@ -20,8 +20,8 @@ categories:
     tier: pattern
 `), 0o644)
 
-	cmd := newTierClassifierCmd()
-	cmd.SetArgs([]string{"--packages", "react,eslint-plugin-x,supertest,unknownpkg", "--config", cfg, "--json"})
+	cmd := rootCmdForTest(t)
+	cmd.SetArgs([]string{"tier-classifier", "--packages", "react,eslint-plugin-x,supertest,unknownpkg", "--config", cfg, "--json"})
 	var out, errb bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errb)
@@ -57,8 +57,8 @@ patterns:
 categories:
   http: important
 `), 0o644)
-	cmd := newTierClassifierCmd()
-	cmd.SetArgs([]string{"--packages", "react,eslint-plugin-x,fast-http,zzz", "--config", cfg, "--json"})
+	cmd := rootCmdForTest(t)
+	cmd.SetArgs([]string{"tier-classifier", "--packages", "react,eslint-plugin-x,fast-http,zzz", "--config", cfg, "--json"})
 	var out, errb bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errb)
@@ -95,8 +95,8 @@ framework_overrides:
   nextjs:
     promote_context: [react]
 `), 0o644)
-	cmd := newTierClassifierCmd()
-	cmd.SetArgs([]string{"--packages", "react,zod,radix-ui,unknownpkg", "--config", cfg, "--json"})
+	cmd := rootCmdForTest(t)
+	cmd.SetArgs([]string{"tier-classifier", "--packages", "react,zod,radix-ui,unknownpkg", "--config", cfg, "--json"})
 	var out, errb bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errb)
@@ -120,8 +120,8 @@ framework_overrides:
 }
 
 func TestTierClassifierCmd_MissingPackages(t *testing.T) {
-	cmd := newTierClassifierCmd()
-	cmd.SetArgs([]string{"--json"})
+	cmd := rootCmdForTest(t)
+	cmd.SetArgs([]string{"tier-classifier", "--json"})
 	var out, errb bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errb)
@@ -133,8 +133,8 @@ func TestTierClassifierCmd_MissingPackages(t *testing.T) {
 // No --config → all packages unassigned (no error; deterministic passes simply
 // match nothing).
 func TestTierClassifierCmd_NoConfig(t *testing.T) {
-	cmd := newTierClassifierCmd()
-	cmd.SetArgs([]string{"--packages", "a,b", "--json"})
+	cmd := rootCmdForTest(t)
+	cmd.SetArgs([]string{"tier-classifier", "--packages", "a,b", "--json"})
 	var out, errb bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errb)

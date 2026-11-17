@@ -55,7 +55,7 @@ type TreeResult struct {
 	Root      string       `json:"root,omitempty"`
 	Depth     int          `json:"depth,omitempty"`
 	Entries   []*TreeEntry `json:"entries,omitempty"`
-	Total     int          `json:"total,omitempty"`
+	Total     int          `json:"total"`
 	Truncated bool         `json:"truncated,omitempty"`
 	Message   string       `json:"message,omitempty"`
 }

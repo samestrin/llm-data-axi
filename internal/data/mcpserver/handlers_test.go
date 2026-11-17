@@ -27,6 +27,13 @@ func TestBuildDiffSmellArgs(t *testing.T) {
 			args: map[string]interface{}{"repo": "/r"},
 			want: []string{"diff-smell", "--repo", "/r", "--json"},
 		},
+		{
+			// Evidence is behind --full since EST-6876; without this input an
+			// MCP client could not reach it.
+			name: "full",
+			args: map[string]interface{}{"diff": "/tmp/fix.diff", "full": true},
+			want: []string{"diff-smell", "--diff", "/tmp/fix.diff", "--full", "--json"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

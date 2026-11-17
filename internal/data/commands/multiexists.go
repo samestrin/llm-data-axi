@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/samestrin/llm-data-axi/pkg/output"
 	"github.com/spf13/cobra"
@@ -45,12 +46,16 @@ Output format:
 Summary:
   ALL_EXIST: TRUE/FALSE
   MISSING_COUNT: N
-  EXIST_COUNT: N`,
+  EXIST_COUNT: N
+
+A missing path is an error (exit 1) that lists the missing paths as
+"missing", with exist_count and missing_count. With --no-fail it is a result
+instead: the full listing with all_exist false, exit 0.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: runMultiexists,
 	}
 	cmd.Flags().BoolVar(&multiexistsVerbose, "verbose", false, "Show file types")
-	cmd.Flags().BoolVar(&multiexistsNoFail, "no-fail", false, "Don't exit with error if files are missing")
+	cmd.Flags().BoolVar(&multiexistsNoFail, "no-fail", false, "Report missing paths as a result with exit 0, instead of an error with exit 1")
 	cmd.Flags().BoolVar(&multiexistsJSON, "json", false, "Output as JSON")
 	cmd.Flags().BoolVar(&multiexistsMinimal, "min", false, "Output in minimal/token-optimized format")
 	return cmd
@@ -93,17 +98,29 @@ func runMultiexists(cmd *cobra.Command, args []string) error {
 		MissingCount: missingCount,
 	}
 
-	formatter := output.New(multiexistsJSON, multiexistsMinimal, cmd.OutOrStdout())
-	if err := formatter.Print(result, printMultiexistsText); err != nil {
-		return err
-	}
-
-	// Exit with error if files are missing (unless --no-fail)
+	// A missing path fails the run (unless --no-fail) with one error document
+	// that lists what is missing. It used to print the full result and then
+	// return an error, which put two documents on stdout and broke any parser
+	// reading it.
 	if !allExist && !multiexistsNoFail {
-		return fmt.Errorf("some files are missing")
+		missing := make([]string, 0, missingCount)
+		for _, e := range entries {
+			if !e.Exists {
+				missing = append(missing, e.Path)
+			}
+		}
+		return &dataError{
+			msg: fmt.Sprintf("%d of %d paths missing: %s", missingCount, len(entries), strings.Join(missing, ", ")),
+			fields: map[string]any{
+				"missing":       missing,
+				"exist_count":   existCount,
+				"missing_count": missingCount,
+			},
+		}
 	}
 
-	return nil
+	formatter := output.New(multiexistsJSON, multiexistsMinimal, cmd.OutOrStdout())
+	return formatter.Print(result, printMultiexistsText)
 }
 
 func printMultiexistsText(w io.Writer, data interface{}) {

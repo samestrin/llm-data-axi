@@ -186,7 +186,27 @@ and has no effect on TOON, which is already token-dense.`,
 		newTreeCmd(),
 		newYamlCmd(),
 	)
+	argErrorsAreUsage(root)
 	return root
+}
+
+// argErrorsAreUsage makes a wrong argument count a usage error (exit 2) for
+// every command under c. cobra's validators ("accepts 2 arg(s), received 1")
+// return untyped errors, which exited 1 as if the command had run and failed,
+// while a missing required flag exited 2. Wrapping the validator types them
+// all at once, instead of matching each wording in ExitCodeFor.
+func argErrorsAreUsage(c *cobra.Command) {
+	if validate := c.Args; validate != nil {
+		c.Args = func(cmd *cobra.Command, args []string) error {
+			if err := validate(cmd, args); err != nil {
+				return &output.UsageError{Msg: err.Error()}
+			}
+			return nil
+		}
+	}
+	for _, sub := range c.Commands() {
+		argErrorsAreUsage(sub)
+	}
 }
 
 // homeDescription is the one sentence the home view prints.

@@ -1,4 +1,4 @@
-# llm-data
+# llm-data-axi
 
 > Deterministic file, project and config tooling for agents. One token-dense output format.
 
@@ -64,7 +64,7 @@ llm-data yaml multiset --file config.yaml server.port 8080 server.host localhost
 
 ### Commands
 
-`catfiles` · `count` · `detect` · `diff-smell` · `discover-tests` · `git-changes` · `git-context` · `grep` · `highest` · `math` · `multiexists` · `multigrep` · `plan-type` · `project-components` · `repo-root` · `runtime` · `stats` · `template` · `tier-classifier` · `tree` · `yaml`
+`catfiles` · `count` · `detect` · `diff-smell` · `discover-tests` · `git-changes` · `git-context` · `grep` · `highest` · `math` · `multiexists` · `multigrep` · `plan-type` · `project-components` · `repo-root` · `runtime` · `setup` · `stats` · `template` · `tier-classifier` · `tree` · `yaml`
 
 `yaml` carries its own subcommands: `get`, `set`, `multiget` and `multiset`.
 
@@ -86,7 +86,7 @@ The format flags are persistent on the root, so every command accepts them.
 
 ### Exit codes
 
-A command that ran reports 0; a command that failed reports 1 with a structured error (`error: true` plus `message:`) on stdout — in TOON by default, JSON under `--json`, and text (`Error: ...`) under `--plain`. stderr carries diagnostics only. A partial result is a failure too: `template --strict` with an undefined variable, `catfiles` with a path it cannot read, and `multigrep --output-dir` with a keyword file it cannot write each exit 1, and the error lists the undefined names, the unreadable paths or the failed writes (`undefined`, `unreadable`, `failed_writes` in TOON and `--json`). A malformed invocation — an unknown flag or command, a value a flag cannot take, or conflicting format flags — exits **2**, the usage-error code the AXI spec itself asks for ("unknown flags must fail loud (exit 2)"). It is reported the same way as any other error, on stdout in the active format. An unknown flag's error also lists the flags that command accepts, in the message and as a `valid_flags` list in TOON and `--json`:
+A command that ran reports 0; a command that failed reports 1 with a structured error (`error: true` plus `message:`) on stdout — in TOON by default, JSON under `--json`, and text (`Error: ...`) under `--plain`. stderr carries diagnostics only. A partial result is a failure too: `template --strict` with an undefined variable, `catfiles` with a path it cannot read, and `multigrep --output-dir` with a keyword file it cannot write each exit 1, and the error lists the undefined names, the unreadable paths or the failed writes (`undefined`, `unreadable`, `failed_writes` in TOON and `--json`). `multiexists` with a missing path exits 1 with one error document listing `missing`, `exist_count` and `missing_count`; with `--no-fail` a missing path is a result instead (`all_exist: false`, exit 0). An empty result is not a failure: `catfiles`, `stats` and `tree` on an empty directory exit 0 and state the zero (`file_count: 0`, `files: 0`, `total: 0`). A malformed invocation — an unknown flag or command, a value a flag cannot take, a missing required flag, the wrong number of arguments (`yaml set --file c.yaml a`, a bare `math`), or conflicting format flags — exits **2**, the usage-error code the AXI spec itself asks for ("unknown flags must fail loud (exit 2)"). It is reported the same way as any other error, on stdout in the active format. An unknown flag's error also lists the flags that command accepts, in the message and as a `valid_flags` list in TOON and `--json`:
 
 ```
 $ llm-data grep --nope

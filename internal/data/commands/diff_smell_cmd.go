@@ -13,8 +13,7 @@ var (
 	dsDiffPath string
 	dsRepo     string
 	dsRev      string
-	dsJSON     bool
-	dsMin      bool
+	dsFull     bool
 )
 
 func newDiffSmellCmd() *cobra.Command {
@@ -32,7 +31,10 @@ Source is either a unified diff (--diff <path>, or '-' for stdin) or a commit
 model-independent — designed as the over-simplification gate for /resolve-td,
 the inverse of its existing too-complex SAFE_SCOPE gate.
 
-Output JSON: {files, smells:[{type,severity,file,line,evidence}], summary{...}}.
+Output: files, smells and summary. Each smell row is type, file, line and
+severity; line is 0 for a smell about the whole file (test_only,
+weakened_assertion). --full adds evidence to each row: the added line that
+matched, or the reason for a whole-file smell.
 summary.verdict is "hard" (any test_only/weakened_assertion → force review),
 "soft_only" (only suppression/empty_catch/stub_body → adjudicate), or "clean".`,
 		RunE: runDiffSmell,
@@ -40,8 +42,7 @@ summary.verdict is "hard" (any test_only/weakened_assertion → force review),
 	cmd.Flags().StringVar(&dsDiffPath, "diff", "", "Path to a unified diff file ('-' for stdin); takes precedence over --repo/--rev")
 	cmd.Flags().StringVar(&dsRepo, "repo", ".", "Repository to read the commit diff from when --diff is not given")
 	cmd.Flags().StringVar(&dsRev, "rev", "HEAD", "Commit to scan via 'git show <rev>' when --diff is not given")
-	cmd.Flags().BoolVar(&dsJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&dsMin, "min", false, "Minimal output format")
+	cmd.Flags().BoolVar(&dsFull, "full", false, "Add each smell's evidence to its row")
 	return cmd
 }
 
@@ -49,6 +50,9 @@ func runDiffSmell(cmd *cobra.Command, _ []string) error {
 	var diffText string
 	if dsDiffPath != "" {
 		if dsDiffPath == "-" {
+			if err := refuseTerminalStdin(cmd.InOrStdin()); err != nil {
+				return err
+			}
 			b, err := io.ReadAll(cmd.InOrStdin())
 			if err != nil {
 				return fmt.Errorf("read stdin: %w", err)
@@ -71,7 +75,13 @@ func runDiffSmell(cmd *cobra.Command, _ []string) error {
 	}
 
 	result := analyzeDiff(diffText)
-	formatter := output.New(dsJSON, dsMin, cmd.OutOrStdout())
+	if !dsFull && len(result.Smells) > 0 {
+		for i := range result.Smells {
+			result.Smells[i].Evidence = ""
+		}
+		result.Help = []string{"Evidence for each smell: rerun with --full"}
+	}
+	formatter := output.New(GlobalJSONOutput, GlobalMinOutput, cmd.OutOrStdout())
 	return formatter.Print(result, func(w io.Writer, data interface{}) {
 		r := data.(*SmellResult)
 		fmt.Fprintf(w, "verdict: %s (%d hard, %d soft) across %d impl / %d test file(s)\n",
