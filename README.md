@@ -188,7 +188,7 @@ A bare `llm-data` prints the executable path, a description and the current repo
 | 1 | The command failed; the error identifies the failure |
 | 2 | Usage error, such as an unknown flag, invalid value or missing required argument |
 
-Errors are written to stdout in the selected output format; stderr is reserved for diagnostics.
+With `--json` or `--axi`, errors are written to stdout in the selected output format. Without an output flag, errors are written to stderr as `Error: ...`; stderr otherwise carries diagnostics only.
 
 `llm-data-mcp` exposes the same commands over MCP stdio. Start it with `llm-data-mcp`; it invokes the CLI rather than reimplementing command behavior. A tool call can request `"format": "axi"` or `"format": "json"` to override the server default for that call, except on `runtime`, where `format` selects the elapsed-time format.
 
