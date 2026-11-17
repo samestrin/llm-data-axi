@@ -94,7 +94,7 @@ Respects .gitignore patterns by default.`,
 	cmd.Flags().BoolVarP(&grepFilesOnly, "files-with-matches", "l", false, "Only show file names")
 	cmd.Flags().BoolVar(&grepNoGitignore, "no-gitignore", false, "Disable .gitignore filtering")
 	cmd.Flags().BoolVar(&grepJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&grepMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&grepMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	cmd.Flags().BoolVar(&grepFull, "full", false, "Emit whole matching lines instead of truncating them at 200 bytes")
 	return cmd
 }

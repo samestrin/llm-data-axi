@@ -55,7 +55,7 @@ Output fields:
 	cmd.Flags().StringVar(&detectPath, "path", ".", "Project path to analyze")
 	cmd.Flags().StringVar(&detectDirs, "dirs", "", "Comma-separated subdirectories to detect per-component (e.g., backend,frontend)")
 	cmd.Flags().BoolVar(&detectJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&detectMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&detectMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 
 	return cmd
 }

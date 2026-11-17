@@ -3,6 +3,8 @@ package commands
 import (
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 // TestCommandHelpStatesTheTOONDefault defends epic 11 T6: when TOON became
@@ -68,5 +70,36 @@ func TestMinFlagUsageMatchesTheRootPromise(t *testing.T) {
 				t.Errorf("%s --min usage %q differs from the root flag's %q; under the TOON default --min is a no-op and the flag line must not promise more", name, f.Usage, rootMin.Usage)
 			}
 		})
+	}
+}
+
+// TestNoSubcommandMinUsageDescribesTOON defends the EST-6854 AC5 rerun-2
+// finding: after git-changes, plan-type and git-context were fixed, stats,
+// grep, catfiles, tree, template, multiexists, math and the yaml
+// subcommands still described their local --min as "Output in
+// minimal/token-optimized format", "Minimal output - just the value" or
+// "Minimal output (just value)", while the root PersistentPreRunE clears
+// --min under TOON (root.go:130-139) and `math 1+1 --min` prints the same
+// as `math 1+1`. Every --min line in every subcommand's help must say it has
+// no effect on TOON, so no help line promises a change the default output
+// never makes.
+func TestNoSubcommandMinUsageDescribesTOON(t *testing.T) {
+	root := NewRootCmd()
+	checked := 0
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		if f := c.LocalNonPersistentFlags().Lookup("min"); f != nil {
+			checked++
+			if !strings.Contains(f.Usage, "no effect on TOON") {
+				t.Errorf("%s --min usage %q does not say it has no effect on TOON; under the TOON default --min is cleared", c.CommandPath(), f.Usage)
+			}
+		}
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+	}
+	walk(root)
+	if checked < 10 {
+		t.Fatalf("checked only %d local --min flags; the walk is not reaching the subcommands", checked)
 	}
 }

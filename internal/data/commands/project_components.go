@@ -74,7 +74,7 @@ Testing/commands resolution per component:
 
 	cmd.Flags().StringVar(&pcFile, "file", ".planning/.config/config.yaml", "Path to config.yaml")
 	cmd.Flags().BoolVar(&pcJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&pcMinimal, "min", false, "Minimal output")
+	cmd.Flags().BoolVar(&pcMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 
 	return cmd
 }

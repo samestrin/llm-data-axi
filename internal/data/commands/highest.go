@@ -84,7 +84,7 @@ Examples:
 	cmd.Flags().StringVar(&highestType, "type", "both", "Type to search: dir, file, both")
 	cmd.Flags().StringVar(&highestPrefix, "prefix", "", "Filter to items starting with this prefix")
 	cmd.Flags().BoolVar(&highestJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&highestMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&highestMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	return cmd
 }
 

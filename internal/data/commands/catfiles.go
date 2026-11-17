@@ -63,7 +63,7 @@ Respects .gitignore patterns by default.`,
 	cmd.Flags().IntVar(&catfilesMaxSize, "max-size", 10, "Maximum total size in MB")
 	cmd.Flags().BoolVar(&catfilesNoGitignore, "no-gitignore", false, "Disable .gitignore filtering")
 	cmd.Flags().BoolVar(&catfilesJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&catfilesMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&catfilesMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	return cmd
 }
 

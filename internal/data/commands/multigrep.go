@@ -102,7 +102,7 @@ Example:
 	cmd.Flags().IntVar(&multigrepMaxPerKw, "max-per-keyword", 10, "Max matches per keyword")
 	cmd.Flags().BoolVar(&multigrepNoExclude, "no-exclude", false, "Don't exclude common directories")
 	cmd.Flags().BoolVar(&multigrepJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&multigrepMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&multigrepMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	cmd.Flags().BoolVarP(&multigrepDefinitions, "definitions", "d", false, "Show only definition matches")
 	cmd.Flags().StringVarP(&multigrepOutputDir, "output-dir", "o", "", "Write results to directory (one file per keyword)")
 	cmd.Flags().BoolVar(&multigrepFull, "full", false, "Emit whole matching lines instead of truncating them at 80 bytes")

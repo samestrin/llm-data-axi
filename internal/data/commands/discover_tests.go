@@ -54,7 +54,7 @@ Output fields:
 
 	cmd.Flags().StringVar(&discoverTestsPath, "path", ".", "Project path to analyze")
 	cmd.Flags().BoolVar(&discoverTestsJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&discoverTestsMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&discoverTestsMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 
 	return cmd
 }

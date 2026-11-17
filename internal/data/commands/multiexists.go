@@ -57,7 +57,7 @@ instead: the full listing with all_exist false, exit 0.`,
 	cmd.Flags().BoolVar(&multiexistsVerbose, "verbose", false, "Show file types")
 	cmd.Flags().BoolVar(&multiexistsNoFail, "no-fail", false, "Report missing paths as a result with exit 0, instead of an error with exit 1")
 	cmd.Flags().BoolVar(&multiexistsJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&multiexistsMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&multiexistsMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	return cmd
 }
 

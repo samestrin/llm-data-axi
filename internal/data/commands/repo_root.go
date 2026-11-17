@@ -64,7 +64,7 @@ Examples:
 	cmd.Flags().StringVar(&repoRootPath, "path", ".", "Starting path to search from")
 	cmd.Flags().BoolVar(&repoRootValidate, "validate", false, "Also verify .git directory exists")
 	cmd.Flags().BoolVar(&repoRootJSON, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&repoRootMinimal, "min", false, "Output in minimal/token-optimized format")
+	cmd.Flags().BoolVar(&repoRootMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 
 	return cmd
 }

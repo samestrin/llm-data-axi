@@ -131,7 +131,7 @@ Examples:
 	cmd.Flags().StringVar(&file, "file", "", "Path to YAML config file (required)")
 	cmd.Flags().StringVar(&defaultValue, "default", "", "Default value if key not found")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&minOutput, "min", false, "Minimal output (just value)")
+	cmd.Flags().BoolVar(&minOutput, "min", false, "Just the value under --json or --plain (no effect on TOON)")
 	cmd.MarkFlagRequired("file")
 
 	return cmd
@@ -265,7 +265,7 @@ Examples:
 	cmd.Flags().StringVar(&file, "file", "", "Path to YAML config file (required)")
 	cmd.Flags().BoolVar(&create, "create", false, "Create file if it doesn't exist")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&minOutput, "min", false, "Minimal output")
+	cmd.Flags().BoolVar(&minOutput, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview changes without writing to file")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress success messages (errors still output)")
 	cmd.MarkFlagRequired("file")
@@ -408,7 +408,7 @@ Examples:
 	cmd.Flags().StringVar(&defaults, "defaults", "", "JSON object of default values")
 	cmd.Flags().StringVar(&separator, "separator", "\n", "Value separator for --min output")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&minOutput, "min", false, "Minimal output (values only)")
+	cmd.Flags().BoolVar(&minOutput, "min", false, "Values only under --json or --plain (no effect on TOON)")
 	cmd.Flags().StringVar(&requiredFile, "required-file", "", "File containing required keys (one per line, # comments supported)")
 	cmd.MarkFlagRequired("file")
 
@@ -595,7 +595,7 @@ Examples:
 	cmd.Flags().StringVar(&file, "file", "", "Path to YAML config file (required)")
 	cmd.Flags().BoolVar(&create, "create", false, "Create file if it doesn't exist")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
-	cmd.Flags().BoolVar(&minOutput, "min", false, "Minimal output")
+	cmd.Flags().BoolVar(&minOutput, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview changes without writing to file")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress success messages (errors still output)")
 	cmd.MarkFlagRequired("file")
