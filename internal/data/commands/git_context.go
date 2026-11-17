@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/samestrin/llm-data-axi/pkg/output"
+	"github.com/samestrin/llm-data-axi/v2/pkg/output"
 	"github.com/spf13/cobra"
 )
 

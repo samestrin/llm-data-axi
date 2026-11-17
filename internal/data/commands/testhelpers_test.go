@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/samestrin/llm-data-axi/pkg/output"
+	"github.com/samestrin/llm-data-axi/v2/pkg/output"
 )
 
 // restoreOutputMode resets the output-mode globals when a test that drives the

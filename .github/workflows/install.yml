@@ -33,6 +33,23 @@ jobs:
       - name: build the release directory
         run: make dist
 
+      # A wrong -X ldflags path builds clean and the binary reports "dev"
+      # (Makefile CLI_LDFLAGS, epic 11.1): nothing else in CI proves the stamp
+      # reached the binary. Assert it equals git describe with one leading
+      # "v" removed, and never "dev". fetch-depth: 0 above makes the describe
+      # output match the one the Makefile stamped.
+      - name: version stamp reaches the binary
+        run: |
+          expected=$(git describe --tags --always --dirty)
+          expected=${expected#v}
+          actual=$(./dist/llm-data-linux-amd64 --version)
+          echo "expected: $expected"
+          echo "actual:   $actual"
+          if [ "$actual" = "dev" ] || [ "$actual" != "$expected" ]; then
+            echo "::error::version stamp lost: got '$actual', want '$expected'"
+            exit 1
+          fi
+
       # A clean container with no Go and no clone on PATH: only curl, as root,
       # then everything else as an unprivileged user with no sudo. The checkout
       # is mounted read-only; the installer reaches the release through a
