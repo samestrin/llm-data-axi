@@ -59,13 +59,14 @@ type StatsResult struct {
 	Extensions  []ExtensionInfo `json:"by_extension"`
 }
 
-// statsMinResult is StatsResult under --min, with abbreviated keys.
+// statsMinResult is StatsResult under --min, with abbreviated keys. It states
+// its zeros too.
 type statsMinResult struct {
-	P   string          `json:"p,omitempty"`
-	F   int             `json:"f,omitempty"`
-	D   int             `json:"d,omitempty"`
-	S   string          `json:"s,omitempty"`
-	Ext []ExtensionInfo `json:"ext,omitempty"`
+	P   string          `json:"p"`
+	F   int             `json:"f"`
+	D   int             `json:"d"`
+	S   string          `json:"s"`
+	Ext []ExtensionInfo `json:"ext"`
 }
 
 func runStats(cmd *cobra.Command, args []string) error {

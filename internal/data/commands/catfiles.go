@@ -32,16 +32,20 @@ type CatFileEntry struct {
 	C       string `json:"c,omitempty"`
 }
 
-// CatfilesResult represents the catfiles result. Outside --min the counts are
-// always stated: a directory with no files is file_count 0, not an error and
-// not a missing field.
+// CatfilesResult represents the catfiles result. The counts are always
+// stated: a directory with no files is file_count 0, not an error and not a
+// missing field.
 type CatfilesResult struct {
 	Files     []CatFileEntry `json:"files"`
-	F         []CatFileEntry `json:"f,omitempty"`
 	FileCount int            `json:"file_count"`
-	FC        *int           `json:"fc,omitempty"`
 	TotalSize int64          `json:"total_size"`
-	TS        *int64         `json:"ts,omitempty"`
+}
+
+// catfilesMinResult is CatfilesResult under --min, with only the short keys.
+type catfilesMinResult struct {
+	F  []CatFileEntry `json:"f,omitempty"`
+	FC int            `json:"fc"`
+	TS int64          `json:"ts"`
 }
 
 // newCatfilesCmd creates the catfiles command
@@ -178,7 +182,7 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 
 	// Build result
 	fileCount := len(entries)
-	var result CatfilesResult
+	var result interface{}
 	if catfilesMinimal {
 		minEntries := make([]CatFileEntry, len(entries))
 		for i, e := range entries {
@@ -189,10 +193,10 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 				C: e.Content,
 			}
 		}
-		result = CatfilesResult{
+		result = catfilesMinResult{
 			F:  minEntries,
-			FC: &fileCount,
-			TS: &totalSize,
+			FC: fileCount,
+			TS: totalSize,
 		}
 	} else {
 		result = CatfilesResult{
