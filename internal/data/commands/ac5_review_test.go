@@ -346,3 +346,39 @@ func TestArgumentCountErrorsExitTwo(t *testing.T) {
 		}
 	}
 }
+
+// Findings 2 and 4 under --json --min: dropping omitempty from the shared
+// dual-key structs put the long keys (file_count, total_size, files) next to
+// the short ones in minimal output, the leak 1.1.0 fixed for multigrep. The
+// minimal shape carries only the short keys, and still states its zeros.
+func TestMinimalJSONEmptyDirShortKeysOnly(t *testing.T) {
+	empty := t.TempDir()
+	full := t.TempDir()
+	if err := os.WriteFile(filepath.Join(full, "a.go"), []byte("package a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		args       []string
+		want, deny []string
+	}{
+		{[]string{"catfiles", empty}, []string{"fc", "ts"}, []string{"file_count", "total_size", "files", "fs"}},
+		{[]string{"catfiles", full}, []string{"f", "fc", "ts"}, []string{"file_count", "total_size", "files", "fs"}},
+		{[]string{"stats", "--path", empty}, []string{"f", "d", "ext"}, []string{"files", "directories", "by_extension", "fs", "dirs"}},
+	} {
+		code, stdout, _ := runCLI(t, append(c.args, "--json", "--min")...)
+		if code != 0 {
+			t.Fatalf("%v: exit %d\n%s", c.args, code, stdout)
+		}
+		doc := decodeOne(t, stdout)
+		for _, k := range c.want {
+			if _, ok := doc[k]; !ok {
+				t.Errorf("%v --min: missing %q in %s", c.args, k, stdout)
+			}
+		}
+		for _, k := range c.deny {
+			if _, ok := doc[k]; ok {
+				t.Errorf("%v --min: long key %q leaked: %s", c.args, k, stdout)
+			}
+		}
+	}
+}
