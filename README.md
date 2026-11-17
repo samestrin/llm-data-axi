@@ -1,167 +1,258 @@
 # llm-data-axi
 
-> Deterministic file, project and config tooling for agents. One token-dense output format.
+llm-data is a single Go binary that gives an AI agent, or you, commands to inspect and transform files, projects and configuration, with [AXI](https://axi.md)-compliant output built for agents to parse.
 
-![Go](https://img.shields.io/github/go-mod/go-version/samestrin/llm-data-axi)
-![License](https://img.shields.io/github/license/samestrin/llm-data-axi)
+<a href="https://github.com/samestrin/llm-data-axi/actions/workflows/test.yml"><img src="https://github.com/samestrin/llm-data-axi/actions/workflows/test.yml/badge.svg" alt="CI"></a> <a href="https://github.com/samestrin/llm-data-axi/releases/latest"><img src="https://img.shields.io/github/v/release/samestrin/llm-data-axi" alt="Latest release"></a> <a href="LICENSE"><img src="https://img.shields.io/github/license/samestrin/llm-data-axi" alt="License"></a>
 
-A general-purpose data CLI built to the [AXI](https://axi.md) principles, so its output is cheap for a model to read and hard for a model to misread. It answers the questions an agent asks constantly and should never guess at: does this path exist, what is in this directory, what type of project is this, what changed in git, what does this YAML key say.
+## Demo
 
-Every command is deterministic. None of them calls a model or opens a network connection.
+<img src="docs/demo/llm-data.gif" alt="A terminal session running detect, grep and yaml get">
 
-Two binaries:
+The under-30-second session runs against the release binary. The [VHS source and render instructions](docs/demo/README.md) are committed with the example project.
 
-- `llm-data` — the CLI. This is the product.
-- `llm-data-mcp` — an MCP server that shells out to the CLI. A fallback for environments that cannot run a CLI, not the primary surface.
+## Why
 
-Extracted from [samestrin/llm-tools](https://github.com/samestrin/llm-tools), which carried three unrelated tools in one Go module. Installing the file helper used to drag in sqlite, qdrant and tree-sitter. That is why it now lives here.
+- **Inspect a project before acting.** Detect its stack, tests, components and Git state with deterministic commands.
+- **Search without assembling shell pipelines.** Find one pattern or many keywords, read files and summarize directory contents through one interface.
+- **Read and change structured data safely.** Address nested YAML keys, preview writes and substitute template variables without a model call.
+- **Give an agent output it can parse.** Choose human-readable text, JSON or token-dense TOON, with consistent exit codes and no network calls.
 
 ## Install
+
+### Release binaries
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | sh
 ```
 
-This downloads the release binaries for your OS and architecture into `~/.local/bin`, checks them against the release's `SHA256SUMS.txt`, and needs no sudo. To pin a release, put the variable after the pipe so it reaches `sh`, not `curl`:
+The installer places `llm-data` and `llm-data-mcp` in `~/.local/bin` without sudo. Add that directory to `PATH` if the installer reports that it is missing.
+
+The release asset names are `llm-data-<os>-<arch>` and `llm-data-mcp-<os>-<arch>`, with `.exe` appended on Windows. Releases cover `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64` and `windows/amd64` on a best-effort basis.
+
+For each selected platform, the installer downloads `SHA256SUMS.txt`, downloads both matching assets and verifies each SHA-256 checksum before installing either binary. A missing entry or mismatched checksum stops the installation.
+
+Pin the latest release, `v1.1.0`, or choose another installed location:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v1.0.0 sh
+curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v1.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_INSTALL_DIR="$HOME/bin" sh
 ```
 
-Set `LLM_DATA_INSTALL_DIR` to install elsewhere. The script itself covers Linux and macOS on amd64 and arm64; on Windows it tells you to grab the `.exe` from the release page.
+### Go install
 
-Or build from source:
+Go 1.24.0 or newer is required. These commands install into `GOBIN`, or into `GOPATH/bin` when `GOBIN` is unset:
 
 ```bash
-make build     # binaries land in ./build/
-make install   # build, then install to /usr/local/bin (may need sudo)
+go install github.com/samestrin/llm-data-axi/cmd/llm-data@v1.1.0
+go install github.com/samestrin/llm-data-axi/cmd/llm-data-mcp@v1.1.0
 ```
 
-**Support is best effort.** Releases ship binaries for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64 and windows/amd64 (the `PLATFORMS` list in the [`Makefile`](Makefile), which [`release.yml`](.github/workflows/release.yml) builds with `make dist`), but there is no support guarantee: a platform that misbehaves may simply stop being built, and anything outside that list — another OS, another architecture — means building from source yourself.
+### From source
+
+```bash
+git clone https://github.com/samestrin/llm-data-axi.git
+cd llm-data-axi
+git checkout v1.1.0
+make build
+make install
+```
+
+`make build` writes both binaries to `./build/`. `make install` copies them to `/usr/local/bin` and may require sudo.
+
+### Agent integration
+
+Run `setup` in a project to merge a Claude Code SessionStart hook into `.claude/settings.json` and write `.claude/skills/llm-data/SKILL.md`. It preserves existing settings, writes only inside the project and leaves bytes unchanged on a second run. The project path defaults to `.`:
+
+```bash
+llm-data setup
+llm-data setup --dry-run
+```
+
+Install the same Agent Skill without the hook:
+
+```bash
+npx skills add samestrin/llm-data-axi --skill llm-data
+```
+
+## Quick start
+
+Run these commands in a Git project directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v1.1.0 sh
+export PATH="$HOME/.local/bin:$PATH"
+llm-data detect --path . --axi
+llm-data git-changes --axi
+```
+
+In this repository, the `detect` command prints:
+
+```text
+framework: ""
+has_tests: true
+language: go
+package_manager: go
+pytest_available: false
+stack: go
+```
 
 ## Usage
 
+| Command | What it does |
+|---|---|
+| `catfiles` | Concatenate multiple files with headers |
+| `count` | Count checkboxes, lines, or files |
+| `detect` | Detect project type and technology stack |
+| `diff-smell` | Scan a diff for over-simplification / reward-hack fingerprints |
+| `discover-tests` | Discover test patterns and infrastructure |
+| `git-changes` | Count and list git working tree changes |
+| `git-context` | Gather git repository context information |
+| `grep` | Search for pattern in files |
+| `highest` | Find highest numbered directory or file |
+| `math` | Evaluate mathematical expressions safely |
+| `multiexists` | Check if multiple files/directories exist |
+| `multigrep` | Search for multiple keywords in parallel |
+| `plan-type` | Extract plan type from planning metadata |
+| `project-components` | Read project config and return normalized component list |
+| `repo-root` | Find and output git repository root |
+| `runtime` | Calculate and format elapsed time from epoch timestamps |
+| `setup` | Register llm-data with Claude Code in this project |
+| `stats` | Display directory statistics |
+| `template` | Variable substitution in templates |
+| `tier-classifier` | Classify packages into documentation tiers (deterministic passes 1-3) |
+| `tree` | Display directory tree structure |
+| `yaml` | Manage YAML configuration files |
+
+Run `llm-data <command> --help` for every flag and default. These examples show the command shapes:
+
 ```bash
-# does any of this exist
-llm-data multiexists src/main.go docs/README.md
-
-# what kind of project is this
-llm-data detect --path .
-
-# search
-llm-data grep "func New" internal/ -n
-llm-data multigrep --keywords "retry,backoff,timeout" --path .
-
-# git
-llm-data git-changes
-llm-data git-context --max-commits 5
-llm-data repo-root
-
-# config
-llm-data yaml get --file config.yaml server.port
-llm-data yaml multiset --file config.yaml server.port 8080 server.host localhost
+llm-data catfiles README.md docs/axi-audit.md --max-size 10 --axi
+llm-data count --path . --mode files --recursive --axi
+llm-data detect --path . --axi
+llm-data diff-smell --diff changes.diff --axi
+llm-data discover-tests --path . --axi
+llm-data git-changes --include-untracked --axi
+llm-data git-context --max-commits 5 --include-diff --axi
+llm-data grep "func New" internal/ -n --axi
+llm-data highest --path .planning/plans/active --type dir --axi
+llm-data math "sqrt(16) + 2" --axi
+llm-data multiexists README.md docs --verbose --no-fail --axi
+llm-data multigrep --keywords "retry,backoff,timeout" --path . --axi
+llm-data plan-type --path .planning/plans/example --axi
+llm-data project-components --file .planning/.config/config.yaml --axi
+llm-data repo-root --path . --validate --axi
+llm-data runtime --start 1760000000 --end 1760000065 --format human --axi
+llm-data setup --path . --dry-run --axi
+llm-data stats --path . --axi
+llm-data template template.txt --var name=Ada --strict --axi
+llm-data tier-classifier --packages internal/data/commands --axi
+llm-data tree --path . --depth 3 --sizes --axi
 ```
 
-### Commands
+`yaml` has four subcommands:
 
-`catfiles` · `count` · `detect` · `diff-smell` · `discover-tests` · `git-changes` · `git-context` · `grep` · `highest` · `math` · `multiexists` · `multigrep` · `plan-type` · `project-components` · `repo-root` · `runtime` · `setup` · `stats` · `template` · `tier-classifier` · `tree` · `yaml`
+```bash
+llm-data yaml get --file config.yaml server.port --axi
+llm-data yaml set --file config.yaml server.port 8080 --dry-run --axi
+llm-data yaml multiget --file config.yaml server.host server.port --axi
+llm-data yaml multiset --file config.yaml server.port 8080 server.host localhost --dry-run --axi
+```
 
-`yaml` carries its own subcommands: `get`, `set`, `multiget` and `multiset`.
+## Configuration
 
-Run `llm-data <command> --help` for the flags.
+| Name | Default | Meaning |
+|---|---|---|
+| `LLM_DATA_VERSION` | latest release | Release tag fetched by `install.sh`, such as `v1.1.0` |
+| `LLM_DATA_INSTALL_DIR` | `$HOME/.local/bin` | Directory where `install.sh` places both binaries |
+| `LLM_DATA_BASE_URL` | release selected by `LLM_DATA_VERSION` | Alternative release-asset base URL; takes precedence over `LLM_DATA_VERSION` |
+| `LLM_DATA_BINARY` | automatic lookup | Explicit `llm-data` path for `llm-data-mcp`; otherwise lookup tries `PATH`, the server binary's directory and `/usr/local/bin/llm-data` |
+| `LLM_DATA_MCP_AXI` | `true` | Requests TOON from the CLI; `false` selects `--json --min` |
+| `LLM_DATA_MCP_DEBUG` | disabled | Set to `true` to log each MCP command line and timeout to stderr |
 
-## Output modes (AXI)
+No API key or other secret is used.
+
+## Output and exit codes
 
 | Flag | Output |
 |---|---|
-| *(none)* | TOON — token-dense, the default |
-| `--axi` | TOON (accepted alias; the same output as no flag) |
+| none | Human-readable text |
+| `--axi` | Token-dense TOON |
 | `--json` | JSON |
-| `--plain` | plain text (the default before TOON was) |
-| `--min` | shorter `--json` or `--plain` output; no effect on TOON |
+| `--min` | Shorter human-readable or JSON output; no effect on TOON |
 
-`--plain` cannot be combined with `--json` or `--axi`: the combination is a usage error (exit 2) whose message names both flags. `--axi` wins when combined with `--json`. TOON encoding goes through [go-axi](https://github.com/samestrin/go-axi), which guards against the failure mode the raw codec has: a type it cannot encode does not error, it emits **empty output**, and a command then silently prints nothing.
+A bare `llm-data` prints the executable path, a description and the current repository context instead of a help page. Use `llm-data --help` for command help.
 
-The format flags are persistent on the root, so every command accepts them.
+| Exit code | Meaning |
+|---:|---|
+| 0 | The command completed, including a valid empty result |
+| 1 | The command failed; the error identifies the failure |
+| 2 | Usage error, such as an unknown flag, invalid value or missing required argument |
 
-### Exit codes
+With `--json` or `--axi`, errors are written to stdout in the selected output format. Without an output flag, errors are written to stderr as `Error: ...`; stderr otherwise carries diagnostics only.
 
-A command that ran reports 0; a command that failed reports 1 with a structured error (`error: true` plus `message:`) on stdout — in TOON by default, JSON under `--json`, and text (`Error: ...`) under `--plain`. stderr carries diagnostics only. A partial result is a failure too: `template --strict` with an undefined variable, `catfiles` with a path it cannot read, and `multigrep --output-dir` with a keyword file it cannot write each exit 1, and the error lists the undefined names, the unreadable paths or the failed writes (`undefined`, `unreadable`, `failed_writes` in TOON and `--json`). `multiexists` with a missing path exits 1 with one error document listing `missing`, `exist_count` and `missing_count`; with `--no-fail` a missing path is a result instead (`all_exist: false`, exit 0). An empty result is not a failure: `catfiles`, `stats` and `tree` on an empty directory exit 0 and state the zero (`file_count: 0`, `files: 0`, `total: 0`). A malformed invocation — an unknown flag or command, a value a flag cannot take, a missing required flag, the wrong number of arguments (`yaml set --file c.yaml a`, a bare `math`), or conflicting format flags — exits **2**, the usage-error code the AXI spec itself asks for ("unknown flags must fail loud (exit 2)"). It is reported the same way as any other error, on stdout in the active format. An unknown flag's error also lists the flags that command accepts, in the message and as a `valid_flags` list in TOON and `--json`:
+`llm-data-mcp` exposes the same commands over MCP stdio. Start it with `llm-data-mcp`; it invokes the CLI rather than reimplementing command behavior. A tool call can request `"format": "axi"` or `"format": "json"` to override the server default for that call, except on `runtime`, where `format` selects the elapsed-time format.
 
-```
-$ llm-data grep --nope
-error: true
-message: "unknown flag: --nope; valid flags for llm-data grep: --axi, -l/--files-with-matches, ..."
-valid_flags[10]: "--axi","-l/--files-with-matches",...
-```
+## Performance
 
-A bad value names the flag, the value and what the flag takes:
+These are the committed measurements for `llm-data 1.1.0`, copied from the [generated performance table](benchmarks/results-performance.md). The raw timings are in [results-performance.json](benchmarks/results-performance.json), and [benchmarks/main.go](benchmarks/main.go) contains the measurement and report generator.
 
-```
-$ llm-data runtime --start abc
-error: true
-message: "invalid value \"abc\" for --start: want an integer"
-```
+- **Date:** 2026-11-17
+- **Machine:** Intel(R) Xeon(R) W-2295 CPU @ 3.00GHz, 36 threads, 141.2 GiB RAM, Debian GNU/Linux 13 (trixie), kernel 7.0.0-38-generic
+- **Method:** 3 warmup runs, then 20 timed runs per case. Each timing is the wall-clock time of one `llm-data` process, from start to exit; runs are sequential.
 
-## A bare run: the home view
+| Case | Command | Input | Runs | Min (ms) | Median (ms) | Mean (ms) | Max (ms) |
+|---|---|---|---:|---:|---:|---:|---:|
+| cold start | `llm-data --version` | none | 20 | 1.77 | 1.83 | 1.85 | 2.13 |
+| typical command | `llm-data detect --path .` | this repository | 20 | 1.84 | 1.94 | 1.95 | 2.19 |
+| large input | `llm-data stats --path .` | 3,000 generated files | 20 | 15.46 | 15.83 | 15.97 | 19.45 |
 
-`llm-data` with no arguments prints `bin:` (the executable path, home directory written as `~`) and `description:` (one sentence) instead of a help page, followed by the repository it was run in:
+Regenerate both result files with `go run ./benchmarks -perf`, or regenerate only the table from the committed raw timings with `go run ./benchmarks -perf -from-json`. These measurements do not compare another tool. The separate [token benchmark](benchmarks/RESULTS.md) compares TOON and JSON output sizes.
 
-- inside a git repository: `repo_root:` (home written as `~`), `project_type:` (the `detect` stack) and `git_changes:` (the `git-changes` count, `0` for a clean tree);
-- outside one: `repo: no repository`, printed only when git itself says so;
-- when git is missing, fails or does not answer: `repo: git unavailable: <reason>`, never "no repository". Each of the two git calls has 2 seconds, and a timeout names the call, as in `git status gave no answer within 2s`.
+## How it works
 
-Every case exits 0. TOON (the default) and `--json` carry the same fields plus a `help` list of next steps; `--plain` leaves the list out. `--help` still prints the full help, and an unknown subcommand still fails with exit 2.
+The release contains two binaries. `llm-data` runs deterministic file, project, data and Git operations without calling a model or opening a network connection. `llm-data-mcp` is a stdio adapter that locates and invokes that CLI for environments that need MCP.
 
-## Setup
+Most commands are read-only. The writers are `yaml set` and `yaml multiset` for the target YAML file, `setup` for project-local agent files, `template --output` for a rendered file and `multigrep --output-dir` for keyword result files.
 
-```bash
-llm-data setup            # in the project directory
-llm-data setup --dry-run  # show what would be written
-llm-data setup --target claude  # name the agents to register with; claude is the default
-llm-data setup --target claude,codex  # register with Claude Code and Codex
-llm-data setup --target opencode  # register with OpenCode
-```
+The repository was extracted from [llm-tools](https://github.com/samestrin/llm-tools) so installing these data commands does not pull in unrelated storage and parsing dependencies.
 
-`setup` registers llm-data with Claude Code in the current project: it merges a SessionStart hook (which runs `llm-data`, so the home view lands in the session context) into `.claude/settings.json` — every other key and hook is kept — and writes an Agent Skill at `.claude/skills/llm-data/SKILL.md`. `--target codex` registers it with Codex instead, or as well: the same SessionStart hook merged into `.codex/hooks.json`, and `[features] hooks = true` merged into `.codex/config.toml`, without which Codex does not run that hook. The TOML is edited line by line, so comments and other keys are kept; a config `setup` cannot change that way (invalid TOML, or `features` set as a dotted key or inline table) is refused and nothing is written. `--target opencode` writes a plugin at `.opencode/plugins/llm-data.js` that runs `llm-data` once per session and adds the home view to OpenCode's system context; it adds no tool, and if the home view fails it adds an error line saying so. The plugin is `setup`'s own file and is rewritten whole when it differs; a file at that path that `setup` did not write is refused and nothing is written. The hook (and the plugin) runs the bare `llm-data` when `PATH` finds it, otherwise the absolute path of the binary that ran `setup`; a hook `setup` wrote earlier that no longer matches, such as the old path after the binary moved, is rewritten in place rather than added again. An unknown `--target` is a usage error (exit 2) and writes nothing. Only files inside the project directory are written; `~/.claude`, `~/.codex` and `~/.config/opencode` are never touched, and running it in the home directory itself is refused. It is safe to run again: a second run changes no bytes and says so. It never prompts.
+## Limits
 
-## The MCP server
+- There is no session-end lifecycle-capture hook. `llm-data` keeps no transcript, session state or record of files touched, so it has no session history to capture.
+- `help[]` next steps are scoped rather than universal. They appear in the home view and selected search results; other successful results do not carry them.
+- The release platform matrix is best effort. Another OS or architecture requires a source build.
+- Search and directory commands respect `.gitignore` and apply their documented size, entry or line limits unless a flag changes that behavior. Large generated or binary trees may need narrower paths or explicit filter flags.
+- `setup` does not remove agent configuration during uninstall. Remove its project-local hook and skill separately when they are no longer wanted.
+- `extract-relevant` and `extract-links` live in [llm-extract-axi](https://github.com/samestrin/llm-extract-axi), not in this binary. The commands here remain deterministic and do not call an LLM.
 
-```bash
-llm-data-mcp        # speaks MCP over stdio
-```
+The [AXI audit](docs/axi-audit.md) records the conformance evidence and remaining gaps.
 
-It looks for `llm-data` in `LLM_DATA_BINARY` (if set), on `PATH`, beside the `llm-data-mcp` executable, and finally at `/usr/local/bin/llm-data`. The sibling step means an install into `~/.local/bin` (the installer's default) works even when that directory is not on `PATH`. If the binary is nowhere, the startup error names the path tried, the lookup order and `LLM_DATA_BINARY`.
+## Documentation
 
-By default it asks the CLI for TOON (`--axi`). To get `--json --min` instead, either set `LLM_DATA_MCP_AXI=false` for the whole server, or pass `"format": "json"` on a single tool call; `"format": "axi"` asks for TOON on one call when the server is set to JSON. Any other `format` value is an error, except on `runtime`, whose `format` is its time format. A `LLM_DATA_MCP_AXI` value that is not a boolean keeps TOON and logs a warning to stderr. The `llm-tools` server appended `--json --min` unconditionally, which made `--axi` unreachable through MCP no matter what the CLI supported.
-
-Set `LLM_DATA_MCP_DEBUG=true` to log each command line and timeout to stderr.
-
-## Known AXI gaps
-
-The audit in [`docs/axi-audit.md`](docs/axi-audit.md) scores the CLI against the ten AXI principles. Every principle is met except two stated, justified remainders:
-
-- **No session-end lifecycle-capture hook.** `llm-data` keeps no session state — no transcript, no record of files touched — so there is nothing for a session-end hook to capture. The session-start integration (the home view as context) ships for Claude Code, Codex and OpenCode through `setup`.
-- **`help[]` next steps are scoped, not universal.** They sit where a result leaves an agent without a next step: the home view, empty search results, truncated search lines and `diff-smell` output whose evidence was left out. Widening them to every command is deliberately left as future work.
-
-If a new gap appears, state it here and carry a row for it in the technical-debt record rather than letting a caller learn it the hard way.
-
-## Where did `extract-relevant` and `extract-links` go?
-
-They moved to [llm-extract-axi](https://github.com/samestrin/llm-extract-axi), which ships them as `llm-extract extract-relevant` and `llm-extract extract-links` (MCP: `extract_relevant` and `extract_links` on `llm-extract-mcp`). The copies here, and the `llm_data_extract_*` MCP tools, are removed. Everything that remains in this repository is deterministic and never touches the network.
+- [AXI audit](docs/axi-audit.md)
+- [AXI catalog entry](docs/axi-catalog-entry.md)
+- [Demo source and rendering](docs/demo/README.md)
+- [Release checklist](docs/release-checklist.md)
+- [Agent Skill](skills/llm-data/SKILL.md)
+- [Token benchmark](benchmarks/RESULTS.md)
 
 ## Development
 
 ```bash
-make test        # go test ./...
-make test-race   # race detector — CI runs this
-make lint        # go vet + gofmt check
-make test-cover  # coverage profile and total
-make hooks       # opt in to the pre-commit hook
+make build
+make test
+make test-race
+make lint
+make test-cover
+make hooks
 ```
 
-CI gates coverage at 80% and fails below it. See `AGENTS.md` for house rules.
+CI runs formatting, `go vet` and the race-enabled tests, then fails below 80% total coverage. Repository contribution rules are in [AGENTS.md](AGENTS.md).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for released and unreleased changes.
 
 ## License
 
-MIT
+MIT; see [LICENSE](LICENSE).
