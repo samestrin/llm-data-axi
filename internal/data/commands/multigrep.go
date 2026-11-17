@@ -3,9 +3,11 @@ package commands
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -186,7 +188,12 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to create output directory: %w", err)
 		}
 
-		for keyword, r := range results {
+		// A write that fails fails the run. It used to warn on stderr while
+		// stdout reported the matches and the run exited 0, so a caller went
+		// looking for files that were never written.
+		var failed []pathFailure
+		for _, keyword := range slices.Sorted(maps.Keys(results)) {
+			r := results[keyword]
 			// Safe filename - replace non-alphanumeric with underscore
 			safeKeyword := regexp.MustCompile(`[^\w\-]`).ReplaceAllString(keyword, "_")
 			keywordFile := filepath.Join(multigrepOutputDir, fmt.Sprintf("keyword_%s.txt", safeKeyword))
@@ -204,7 +211,17 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 				content += "\n"
 			}
 			if err := os.WriteFile(keywordFile, []byte(content), 0644); err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to write %s: %v\n", keywordFile, err)
+				failed = append(failed, pathFailure{File: keywordFile, Reason: failureReason(err)})
+			}
+		}
+		if len(failed) > 0 {
+			names := make([]string, len(failed))
+			for i, f := range failed {
+				names[i] = f.File + ": " + f.Reason
+			}
+			return &dataError{
+				msg:    fmt.Sprintf("failed to write %d of %d keyword files to %s: %s", len(failed), len(results), multigrepOutputDir, strings.Join(names, "; ")),
+				fields: map[string]any{"failed_writes": failed},
 			}
 		}
 	}
