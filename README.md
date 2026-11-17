@@ -43,8 +43,8 @@ curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install
 Go 1.24.0 or newer is required. These commands install into `GOBIN`, or into `GOPATH/bin` when `GOBIN` is unset:
 
 ```bash
-go install github.com/samestrin/llm-data-axi/cmd/llm-data@v1.1.0
-go install github.com/samestrin/llm-data-axi/cmd/llm-data-mcp@v1.1.0
+go install github.com/samestrin/llm-data-axi/v2/cmd/llm-data@latest
+go install github.com/samestrin/llm-data-axi/v2/cmd/llm-data-mcp@latest
 ```
 
 ### From source
