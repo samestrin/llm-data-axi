@@ -375,7 +375,7 @@ func sampleResults() PerfResults {
 		Version: "1.1.0",
 		Date:    "2026-11-17",
 		Machine: Machine{CPU: "Test CPU", Threads: 8, RAMBytes: 16 << 30, OS: "Test OS 1", Kernel: "6.1.0"},
-		Method:  Method{Warmup: 2, Runs: 4},
+		Method:  Method{Warmup: 2, Runs: 4, Timing: timingMethod},
 		Cases: []CaseResult{
 			{Name: "cold start", Command: "llm-data --version", Input: "none", TimingsNS: []int64{4e6, 1e6, 3e6, 2e6}},
 			{Name: "large input", Command: "llm-data stats --path .", Input: "3,000 files", TimingsNS: []int64{10e6, 30e6, 20e6, 40e6}},
@@ -426,6 +426,7 @@ func TestRenderPerfRejectsIncompleteResults(t *testing.T) {
 		"no kernel":      func(r *PerfResults) { r.Machine.Kernel = "" },
 		"zero runs":      func(r *PerfResults) { r.Method.Runs = 0 },
 		"negative warm":  func(r *PerfResults) { r.Method.Warmup = -1 },
+		"other method":   func(r *PerfResults) { r.Method.Timing = "user CPU" },
 		"no case input":  func(r *PerfResults) { r.Cases[0].Input = "" },
 		"no case name":   func(r *PerfResults) { r.Cases[0].Name = "" },
 		"no case comand": func(r *PerfResults) { r.Cases[0].Command = "" },
@@ -461,7 +462,7 @@ func TestRunPerfFromJSONRegeneratesTheTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errOut bytes.Buffer
-	if code := run([]string{"-perf", "-from-json", "-perf-dir", dir, "-bin", "/nonexistent"}, &out, &errOut); code != 0 {
+	if code := run([]string{"-perf", "-from-json", "-perf-dir", dir}, &out, &errOut); code != 0 {
 		t.Fatalf("run exited %d: %s", code, errOut.String())
 	}
 	got, err := os.ReadFile(filepath.Join(dir, perfMDName))
@@ -594,6 +595,9 @@ func TestRunPerfRejectsMisusedFlags(t *testing.T) {
 		{"-from-json"},
 		{"-perf", "somedir"},
 		{"-perf", "-o", "x.md"},
+		{"-perf", "-from-json", "-bin", "x"},
+		{"-perf", "-from-json", "-runs", "5"},
+		{"-perf", "-from-json", "-warmup", "1"},
 	} {
 		var out, errOut bytes.Buffer
 		if code := run(args, &out, &errOut); code != 2 {
