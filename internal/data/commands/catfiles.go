@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -64,8 +65,11 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 	maxSizeBytes := int64(catfilesMaxSize) * 1024 * 1024
 	var totalSize int64
 
-	// Collect files
+	// Collect files. Anything asked for that cannot be read is collected here
+	// and fails the run: it used to be dropped with at most a stderr warning,
+	// and an exit 0 that read as the whole input.
 	var files []string
+	var unreadable []pathFailure
 	for _, pathStr := range args {
 		absPath, err := filepath.Abs(pathStr)
 		if err != nil {
@@ -85,6 +89,14 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 
 			filepath.Walk(absPath, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
+					// An ignored entry was never part of the output, so it
+					// cannot fail the run. A directory is probed through a
+					// child path, because a "dir/" pattern matches only what
+					// sits under it.
+					if ignorer != nil && (ignorer.IsIgnored(path) || ignorer.IsIgnored(filepath.Join(path, "_"))) {
+						return nil
+					}
+					unreadable = append(unreadable, pathFailure{Path: path, Reason: failureReason(err)})
 					return nil
 				}
 				if info.IsDir() {
@@ -104,7 +116,7 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if len(files) == 0 {
+	if len(files) == 0 && len(unreadable) == 0 {
 		return fmt.Errorf("no files found")
 	}
 
@@ -124,6 +136,7 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 	for _, filePath := range uniqueFiles {
 		info, err := os.Stat(filePath)
 		if err != nil {
+			unreadable = append(unreadable, pathFailure{Path: filePath, Reason: failureReason(err)})
 			continue
 		}
 
@@ -135,7 +148,7 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 
 		content, err := os.ReadFile(filePath)
 		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: Cannot read file: %s\n", filePath)
+			unreadable = append(unreadable, pathFailure{Path: filePath, Reason: failureReason(err)})
 			continue
 		}
 
@@ -152,6 +165,17 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 		})
 
 		totalSize += size
+	}
+
+	if len(unreadable) > 0 {
+		names := make([]string, len(unreadable))
+		for i, u := range unreadable {
+			names[i] = u.Path + ": " + u.Reason
+		}
+		return &dataError{
+			msg:    fmt.Sprintf("cannot read %d of the requested paths: %s", len(unreadable), strings.Join(names, "; ")),
+			fields: map[string]any{"unreadable": unreadable},
+		}
 	}
 
 	// Build result
@@ -191,6 +215,16 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 			fmt.Fprintln(w)
 		}
 	})
+}
+
+// failureReason is err without the path an *os.PathError repeats, such as
+// "permission denied".
+func failureReason(err error) string {
+	var pe *os.PathError
+	if errors.As(err, &pe) {
+		return pe.Err.Error()
+	}
+	return err.Error()
 }
 
 func isTextFile(content []byte) bool {

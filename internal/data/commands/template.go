@@ -123,6 +123,10 @@ func runTemplate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Undefined names under --strict, once each in order of appearance.
+	var undefined []string
+	seenUndefined := make(map[string]bool)
+
 	// Replace function
 	replaceVar := func(match string, varContent string) string {
 		varName := varContent
@@ -142,9 +146,9 @@ func runTemplate(cmd *cobra.Command, args []string) error {
 			return val
 		} else if hasDefault {
 			return defaultValue
-		} else if templateStrict {
-			fmt.Fprintf(cmd.ErrOrStderr(), "ERROR: Undefined variable: %s\n", varName)
-			return match // Keep original
+		} else if templateStrict && !seenUndefined[varName] {
+			seenUndefined[varName] = true
+			undefined = append(undefined, varName)
 		}
 		return match // Keep placeholder if not found
 	}
@@ -163,6 +167,15 @@ func runTemplate(cmd *cobra.Command, args []string) error {
 			content := match[2 : len(match)-2] // Remove {{ and }}
 			return replaceVar(match, content)
 		})
+	}
+
+	// --strict fails before anything is written: it printed an ERROR line on
+	// stderr and then status: success with exit 0.
+	if len(undefined) > 0 {
+		return &dataError{
+			msg:    "undefined variables with --strict: " + strings.Join(undefined, ", "),
+			fields: map[string]any{"undefined": undefined},
+		}
 	}
 
 	// Output
