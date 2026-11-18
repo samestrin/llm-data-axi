@@ -24,7 +24,7 @@ vhs docs/demo/llm-data.tape
 - [ ] `vhs` is installed with `ttyd` and `ffmpeg` (see `docs/demo/README.md`).
 - [ ] The render finishes and the session is under 30 seconds.
 - [ ] Every command in it succeeds; no error text in the recording.
-- [ ] The `grep` row fits on one line: render from a short checkout path if it wrapped (the row prints the absolute path — see `docs/demo/README.md`).
+- [ ] The `grep` row fits on one line (it prints paths relative to the example project, so it no longer depends on the checkout path — see `docs/demo/README.md`).
 - [ ] `docs/demo/llm-data.gif` is committed with the tape change.
 - [ ] No hosted recording link (`vhs.charm.sh`) was added anywhere.
 
