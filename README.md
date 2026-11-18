@@ -12,7 +12,7 @@ The under-30-second session runs against the release binary. The [VHS source and
 
 ## Why
 
-- **Inspect a project before acting.** Detect its stack, tests, components and Git state with deterministic commands.
+- **Inspect a project before acting.** Detect its stack, tests and Git state with deterministic commands.
 - **Search without assembling shell pipelines.** Find one pattern or many keywords, read files and summarize directory contents through one interface.
 - **Read and change structured data safely.** Address nested YAML keys, preview writes and substitute template variables without a model call.
 - **Give an agent output it can parse.** Choose human-readable text, JSON or token-dense TOON, with consistent exit codes and no network calls.
@@ -103,7 +103,6 @@ stack: go
 | `catfiles` | Concatenate multiple files with headers |
 | `count` | Count checkboxes, lines, or files |
 | `detect` | Detect project type and technology stack |
-| `diff-smell` | Scan a diff for over-simplification / reward-hack fingerprints |
 | `discover-tests` | Discover test patterns and infrastructure |
 | `git-changes` | Count and list git working tree changes |
 | `git-context` | Gather git repository context information |
@@ -112,14 +111,11 @@ stack: go
 | `math` | Evaluate mathematical expressions safely |
 | `multiexists` | Check if multiple files/directories exist |
 | `multigrep` | Search for multiple keywords in parallel |
-| `plan-type` | Extract plan type from planning metadata |
-| `project-components` | Read project config and return normalized component list |
 | `repo-root` | Find and output git repository root |
 | `runtime` | Calculate and format elapsed time from epoch timestamps |
 | `setup` | Register llm-data with Claude Code in this project |
 | `stats` | Display directory statistics |
 | `template` | Variable substitution in templates |
-| `tier-classifier` | Classify packages into documentation tiers (deterministic passes 1-3) |
 | `tree` | Display directory tree structure |
 | `yaml` | Manage YAML configuration files |
 
@@ -129,7 +125,6 @@ Run `llm-data <command> --help` for every flag and default. These examples show 
 llm-data catfiles README.md docs/axi-audit.md --max-size 10 --axi
 llm-data count --path . --mode files --recursive --axi
 llm-data detect --path . --axi
-llm-data diff-smell --diff changes.diff --axi
 llm-data discover-tests --path . --axi
 llm-data git-changes --include-untracked --axi
 llm-data git-context --max-commits 5 --include-diff --axi
@@ -138,14 +133,11 @@ llm-data highest --path .planning/plans/active --type dir --axi
 llm-data math "sqrt(16) + 2" --axi
 llm-data multiexists README.md docs --verbose --no-fail --axi
 llm-data multigrep --keywords "retry,backoff,timeout" --path . --axi
-llm-data plan-type --path .planning/plans/example --axi
-llm-data project-components --file .planning/.config/config.yaml --axi
 llm-data repo-root --path . --validate --axi
 llm-data runtime --start 1760000000 --end 1760000065 --format human --axi
 llm-data setup --path . --dry-run --axi
 llm-data stats --path . --axi
 llm-data template template.txt --var name=Ada --strict --axi
-llm-data tier-classifier --packages internal/data/commands --axi
 llm-data tree --path . --depth 3 --sizes --axi
 ```
 
@@ -179,6 +171,7 @@ No API key or other secret is used.
 | `--axi` | Token-dense TOON |
 | `--json` | JSON |
 | `--min` | Shorter human-readable or JSON output; no effect on TOON |
+| `--absolute` | Absolute paths in `tree`, `stats`, `multigrep`, `grep`, `catfiles`, `highest` and `git-context`; by default they print paths relative to the working directory, and a path outside it stays absolute. Other commands reject the flag; `repo-root` always prints an absolute root |
 
 A bare `llm-data` prints the executable path, a description and the current repository context instead of a help page. Use `llm-data --help` for command help.
 
@@ -224,6 +217,7 @@ The repository was extracted from [llm-tools](https://github.com/samestrin/llm-t
 - Search and directory commands respect `.gitignore` and apply their documented size, entry or line limits unless a flag changes that behavior. Large generated or binary trees may need narrower paths or explicit filter flags.
 - `setup` does not remove agent configuration during uninstall. Remove its project-local hook and skill separately when they are no longer wanted.
 - `extract-relevant` and `extract-links` live in [llm-extract-axi](https://github.com/samestrin/llm-extract-axi), not in this binary. The commands here remain deterministic and do not call an LLM.
+- `plan-type`, `project-components`, `tier-classifier` and `diff-smell` moved to cadence in v2.0.0. Use `cadence plan type`, `cadence plan components`, `cadence tier classify` and `cadence diff smell` instead; calling the old names here fails with an error naming the replacement.
 
 The [AXI audit](docs/axi-audit.md) records the conformance evidence and remaining gaps.
 
