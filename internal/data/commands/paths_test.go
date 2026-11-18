@@ -361,3 +361,34 @@ func TestCatfilesUnreadablePathsRelative(t *testing.T) {
 		}
 	}
 }
+
+// Defends byte-identical output: stats ordered extensions by count alone, so
+// extensions with equal counts came out in map order and two runs over the
+// same tree could differ. Ties are now broken by extension.
+func TestStatsExtensionOrderStable(t *testing.T) {
+	dir := realTempDir(t)
+	for _, ext := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
+		if err := os.WriteFile(filepath.Join(dir, "f."+ext), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(dir)
+	for i := 0; i < 20; i++ {
+		var doc struct {
+			Extensions []struct {
+				Extension string `json:"extension"`
+			} `json:"extensions"`
+		}
+		_, out, _ := runCLI(t, "stats", "--path", ".", "--json")
+		if err := json.Unmarshal([]byte(out), &doc); err != nil {
+			t.Fatalf("not JSON: %v\n%s", err, out)
+		}
+		var got []string
+		for _, e := range doc.Extensions {
+			got = append(got, e.Extension)
+		}
+		if want := ".a .b .c .d .e .f .g .h"; strings.Join(got, " ") != want {
+			t.Fatalf("run %d: extensions %v, want %s", i, got, want)
+		}
+	}
+}
