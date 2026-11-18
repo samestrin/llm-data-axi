@@ -325,6 +325,37 @@ func TestAbsoluteHelpStatesScope(t *testing.T) {
 	}
 }
 
+// Defends the v2.0.0 migration note: every command whose paths became
+// relative must be named, or a user of the omitted commands misses the break.
+func TestChangelogDocumentsAllRelativePathCommands(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "CHANGELOG.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const prefix = "- **Breaking (v2.0.0): "
+	var entry string
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, prefix) {
+			entry = line
+			break
+		}
+	}
+	if entry == "" {
+		t.Fatalf("CHANGELOG.md has no line beginning %q", prefix)
+	}
+
+	for _, want := range []string{
+		"`tree`", "`stats`", "`multigrep`", "`grep`", "`catfiles`", "`highest`", "`git-context`",
+		"`repository.path`", "`repository.root`", "Pass `--absolute`",
+		"Paths outside the working directory stay absolute", "`repo-root` still prints an absolute root",
+	} {
+		if !strings.Contains(entry, want) {
+			t.Errorf("relative-path breaking-change entry must contain %q:\n%s", want, entry)
+		}
+	}
+}
+
 // Defends catfiles' unreadable paths following the same rule as its entries:
 // the error names each path a caller asked for, and an absolute one there
 // made the failure depend on where the checkout sat.
