@@ -156,7 +156,7 @@ func runStats(cmd *cobra.Command, args []string) error {
 	}
 
 	result := StatsResult{
-		Path:        path,
+		Path:        showPaths(path).shown,
 		Files:       totalFiles,
 		Directories: totalDirs,
 		TotalSize:   utils.FormatSize(totalSize),
@@ -169,7 +169,7 @@ func runStats(cmd *cobra.Command, args []string) error {
 		for i, e := range exts {
 			minExts[i] = ExtensionInfo{Ext: e.ext, C: e.count, S: utils.FormatSize(e.size)}
 		}
-		data = statsMinResult{P: path, F: totalFiles, D: totalDirs, S: result.TotalSize, Ext: minExts}
+		data = statsMinResult{P: result.Path, F: totalFiles, D: totalDirs, S: result.TotalSize, Ext: minExts}
 	}
 
 	formatter := output.New(statsJSON, statsMinimal, cmd.OutOrStdout())

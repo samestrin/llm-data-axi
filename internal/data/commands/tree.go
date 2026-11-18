@@ -99,6 +99,7 @@ Examples:
 type treeBuilder struct {
 	ignorer         *gitignore.Parser
 	excludePatterns []*regexp.Regexp
+	paths           shownPaths
 	maxEntries      int
 	entryCount      int
 	truncated       bool
@@ -122,6 +123,7 @@ func runTree(cmd *cobra.Command, args []string) error {
 	// Initialize builder
 	builder := &treeBuilder{
 		maxEntries: treeMaxEntries,
+		paths:      showPaths(path),
 	}
 
 	// Set up gitignore parser
@@ -142,7 +144,7 @@ func runTree(cmd *cobra.Command, args []string) error {
 	entries := builder.buildTreeEntries(path, 0, treeDepth)
 
 	result := TreeResult{
-		Root:      path,
+		Root:      builder.paths.shown,
 		Depth:     treeDepth,
 		Entries:   entries,
 		Total:     builder.entryCount,
@@ -232,7 +234,7 @@ func (b *treeBuilder) buildTreeEntries(currentPath string, depth, maxDepth int) 
 		fullPath := filepath.Join(currentPath, entry.Name())
 		treeEntry := &TreeEntry{
 			Name: entry.Name(),
-			Path: fullPath,
+			Path: b.paths.show(fullPath),
 		}
 		b.entryCount++
 
