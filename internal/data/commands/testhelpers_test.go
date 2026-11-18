@@ -37,15 +37,3 @@ func gitAt(t *testing.T, dir, date string, args ...string) {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
 }
-
-// contains reports whether slice holds item.
-//
-// Ported from partition_work_test.go, which does not travel to this repo.
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
-}

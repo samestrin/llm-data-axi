@@ -8,16 +8,18 @@ import (
 
 // portedTools is the exact set carried over from llm-support by the Phase 2
 // port rule: a tool travels only if one of the 46 cadence skills calls it.
+// Epic 11.2 T3 removed plan_type, project_components, tier_classifier and
+// diff_smell: they moved to cadence (see TestMovedToolsAreNotRegistered).
 //
 // The list is written out in full rather than derived from GetToolDefinitions,
 // because a test that reads its expectation from the thing under test cannot
 // catch a tool being dropped.
 var portedTools = []string{
-	"catfiles", "count", "detect", "diff_smell", "discover_tests",
+	"catfiles", "count", "detect", "discover_tests",
 	"git_changes", "git_context",
-	"grep", "highest", "math", "multiexists", "multigrep", "plan_type",
-	"project_components", "repo_root", "runtime", "stats", "template",
-	"tier_classifier", "tree", "yaml_get", "yaml_multiget", "yaml_multiset",
+	"grep", "highest", "math", "multiexists", "multigrep",
+	"repo_root", "runtime", "stats", "template",
+	"tree", "yaml_get", "yaml_multiget", "yaml_multiset",
 	"yaml_set",
 }
 
