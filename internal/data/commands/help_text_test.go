@@ -13,9 +13,10 @@ import (
 // "Default: Human-readable text ..."). Help that names the wrong default
 // makes an agent pass flags it does not need, or misread the TOON it gets.
 // Every "Default:" line in a command's long help must name TOON, and the
-// help must say how to get text (--plain).
+// help must say how to get text (--plain). plan-type left for cadence in
+// epic 11.2 T3; git-changes keeps the defense.
 func TestCommandHelpStatesTheTOONDefault(t *testing.T) {
-	for _, name := range []string{"git-changes", "plan-type"} {
+	for _, name := range []string{"git-changes"} {
 		t.Run(name, func(t *testing.T) {
 			root := NewRootCmd()
 			cmd, _, err := root.Find([]string{name})
@@ -50,8 +51,9 @@ func TestCommandHelpStatesTheTOONDefault(t *testing.T) {
 // is a documented no-op — a usage line that promises the old behaviour
 // is the accepted-and-silently-ignored flag class this repo exists to
 // prevent. Each local --min usage must match the root persistent flag's.
+// plan-type left for cadence in epic 11.2 T3.
 func TestMinFlagUsageMatchesTheRootPromise(t *testing.T) {
-	for _, name := range []string{"git-changes", "plan-type", "git-context"} {
+	for _, name := range []string{"git-changes", "git-context"} {
 		t.Run(name, func(t *testing.T) {
 			root := NewRootCmd()
 			cmd, _, err := root.Find([]string{name})

@@ -287,19 +287,6 @@ func GetToolDefinitions() []ToolDefinition {
 					}`),
 		},
 		{
-			Name:        ToolPrefix + "plan_type",
-			Description: "Extract plan type from planning metadata.",
-			InputSchema: json.RawMessage(`{
-						"type": "object",
-						"properties": {
-							"path": {
-								"type": "string",
-								"description": "Plan directory path (default: current directory)"
-							}
-						}
-					}`),
-		},
-		{
 			Name:        ToolPrefix + "git_changes",
 			Description: "Count and list git working tree changes with optional path filtering.",
 			InputSchema: json.RawMessage(`{
@@ -516,44 +503,6 @@ func GetToolDefinitions() []ToolDefinition {
 							}
 						},
 						"required": ["start"]
-					}`),
-		},
-		{
-			Name:        ToolPrefix + "tier_classifier",
-			Description: "Classify packages into documentation tiers (critical/important/pattern/utility/skip) via deterministic passes 1-3: explicit config map, glob patterns, keyword categories. Returns assigned map + unassigned list (for the model's Pass 4) + per-pass counts. Deterministic replacement for in-model tier assignment in /init-documentation.",
-			InputSchema: json.RawMessage(`{
-						"type": "object",
-						"properties": {
-							"packages": {"type": "string", "description": "Comma-separated package names"},
-							"config": {"type": "string", "description": "Path to package-tiers.yaml (packages/patterns/categories)"}
-						},
-						"required": ["packages"]
-					}`),
-		},
-		{
-			Name:        ToolPrefix + "diff_smell",
-			Description: "Scan a diff for over-simplification / reward-hack fingerprints: the change touched only tests (test_only), a test removed assertions without replacing them (weakened_assertion), or an added line suppressed a linter/type-checker (suppression), swallowed an exception (empty_catch), or stubbed a body (stub_body). Deterministic, model-independent gate for /resolve-td — the inverse of its too-complex SAFE_SCOPE check. Returns smells (type, file, line, severity; evidence with full) + summary.verdict (hard=force review / soft_only=adjudicate / clean). Source is a diff file (`diff`) or a commit (`repo`+`rev`, via git show).",
-			InputSchema: json.RawMessage(`{
-						"type": "object",
-						"properties": {
-							"diff": {"type": "string", "description": "Path to a unified diff file (takes precedence over repo/rev)"},
-							"repo": {"type": "string", "description": "Repository to read the commit diff from when diff is not given"},
-							"rev": {"type": "string", "description": "Commit to scan via 'git show <rev>' (default HEAD)"},
-							"full": {"type": "boolean", "description": "Add each smell's evidence (the matching added line) to its row"}
-						}
-					}`),
-		},
-		{
-			Name:        ToolPrefix + "project_components",
-			Description: "Read project config and return normalized component list.",
-			InputSchema: json.RawMessage(`{
-						"type": "object",
-						"properties": {
-							"file": {
-								"type": "string"
-							}
-						},
-						"required": ["file"]
 					}`),
 		},
 	}

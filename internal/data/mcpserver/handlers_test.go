@@ -6,70 +6,6 @@ import (
 	"testing"
 )
 
-func TestBuildDiffSmellArgs(t *testing.T) {
-	tests := []struct {
-		name string
-		args map[string]interface{}
-		want []string
-	}{
-		{
-			name: "diff file",
-			args: map[string]interface{}{"diff": "/tmp/fix.diff"},
-			want: []string{"diff-smell", "--diff", "/tmp/fix.diff", "--json"},
-		},
-		{
-			name: "repo + rev",
-			args: map[string]interface{}{"repo": "/r", "rev": "HEAD"},
-			want: []string{"diff-smell", "--repo", "/r", "--rev", "HEAD", "--json"},
-		},
-		{
-			name: "repo default rev",
-			args: map[string]interface{}{"repo": "/r"},
-			want: []string{"diff-smell", "--repo", "/r", "--json"},
-		},
-		{
-			// Evidence is behind --full since EST-6876; without this input an
-			// MCP client could not reach it.
-			name: "full",
-			args: map[string]interface{}{"diff": "/tmp/fix.diff", "full": true},
-			want: []string{"diff-smell", "--diff", "/tmp/fix.diff", "--full", "--json"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := buildDiffSmellArgs(tt.args); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("buildDiffSmellArgs() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestBuildTierClassifierArgs(t *testing.T) {
-	tests := []struct {
-		name string
-		args map[string]interface{}
-		want []string
-	}{
-		{
-			name: "packages only",
-			args: map[string]interface{}{"packages": "react,lodash"},
-			want: []string{"tier-classifier", "--packages", "react,lodash", "--json"},
-		},
-		{
-			name: "with config",
-			args: map[string]interface{}{"packages": "react", "config": "tiers.yaml"},
-			want: []string{"tier-classifier", "--packages", "react", "--config", "tiers.yaml", "--json"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := buildTierClassifierArgs(tt.args); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("buildTierClassifierArgs() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestBuildTreeArgs(t *testing.T) {
 	tests := []struct {
 		name string
@@ -485,7 +421,6 @@ func TestBuildArgsDispatcher(t *testing.T) {
 		{"count", map[string]interface{}{"mode": "lines", "path": "f"}, 6}, // now includes --json --min
 		{"git_context", map[string]interface{}{}, 3},                       // now includes --json --min
 		{"repo_root", map[string]interface{}{}, 1},
-		{"plan_type", map[string]interface{}{}, 3},   // now includes --json --min
 		{"git_changes", map[string]interface{}{}, 3}, // now includes --json --min
 	}
 
@@ -542,6 +477,37 @@ func TestRemovedExtractToolsAreRejectedAsUnknown(t *testing.T) {
 		if _, err := buildArgs(name, map[string]interface{}{"context": "c", "url": "u"}); err == nil {
 			t.Errorf("buildArgs(%s) succeeded, want unknown command", name)
 		}
+	}
+}
+
+// The four workflow tools moved to cadence (epic 11.2 T3). A call must fail
+// with the same moved-command text the CLI prints — naming the cadence
+// replacement — before any binary is exec'd: not "unknown command", which
+// tells an agent nothing, and not silently run something. The messages are
+// pinned in removed_commands_test.go on the CLI side; the two must match.
+func TestMovedToolsReturnTheCadenceError(t *testing.T) {
+	for _, c := range []struct{ tool, message string }{
+		{"plan_type", `command "plan-type" has moved to cadence: run "cadence plan type" instead`},
+		{"project_components", `command "project-components" has moved to cadence: run "cadence plan components" instead`},
+		{"tier_classifier", `command "tier-classifier" has moved to cadence: run "cadence tier classify" instead`},
+		{"diff_smell", `command "diff-smell" has moved to cadence: run "cadence diff smell" instead`},
+	} {
+		t.Run(c.tool, func(t *testing.T) {
+			if _, err := buildArgs(c.tool, map[string]interface{}{}); err == nil || err.Error() != c.message {
+				t.Errorf("buildArgs(%s) = %v, want %q", c.tool, err, c.message)
+			}
+			// ExecuteHandler is the MCP call path. The moved error must come
+			// back as the call's error, with no output, without exec'ing anything.
+			for _, args := range []map[string]interface{}{{}, {"format": "json"}} {
+				out, err := ExecuteHandler(ToolPrefix+c.tool, args)
+				if err == nil || err.Error() != c.message {
+					t.Errorf("ExecuteHandler(%s, %v) = %v, want %q", c.tool, args, err, c.message)
+				}
+				if out != "" {
+					t.Errorf("ExecuteHandler(%s) returned output with the error: %q", c.tool, out)
+				}
+			}
+		})
 	}
 }
 
@@ -651,44 +617,6 @@ func TestNormalizeArgsIntegration(t *testing.T) {
 			}
 			if !found {
 				t.Errorf("buildArgs() = %v, expected to contain %q", got, tt.wantArg)
-			}
-		})
-	}
-}
-
-func TestBuildPlanTypeArgs(t *testing.T) {
-	tests := []struct {
-		name string
-		args map[string]interface{}
-		want []string
-	}{
-		{
-			name: "empty (defaults to json+min)",
-			args: map[string]interface{}{},
-			want: []string{"plan-type", "--json", "--min"},
-		},
-		{
-			name: "with path (defaults to json+min)",
-			args: map[string]interface{}{"path": "/plan"},
-			want: []string{"plan-type", "--path", "/plan", "--json", "--min"},
-		},
-		{
-			name: "with all flags explicitly",
-			args: map[string]interface{}{"path": "/plan", "json": true, "min": true},
-			want: []string{"plan-type", "--path", "/plan", "--json", "--min"},
-		},
-		{
-			name: "with json+min disabled",
-			args: map[string]interface{}{"json": false, "min": false},
-			want: []string{"plan-type"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := buildPlanTypeArgs(tt.args)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("buildPlanTypeArgs() = %v, want %v", got, tt.want)
 			}
 		})
 	}

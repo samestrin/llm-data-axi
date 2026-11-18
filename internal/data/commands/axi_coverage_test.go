@@ -22,6 +22,7 @@ import (
 //
 // Commands audited by grepping for a --json declaration with no output.New in
 // the same file: epic_number, context, git_changes, plan_type, math, yaml.
+// plan_type left for cadence in epic 11.2 T3.
 
 func withAXI(t *testing.T) {
 	t.Helper()

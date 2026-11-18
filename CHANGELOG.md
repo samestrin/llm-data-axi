@@ -22,6 +22,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Command output is now TOON by default instead of plain text.** Every command emits token-dense TOON when no output flag is given; `--axi` still explicitly selects TOON and `--json` still selects JSON. **Breaking:** callers that need the previous plain-text output must now pass `--plain`.
 - **Conflicting output flags are rejected.** Combining `--plain` with `--json` or `--axi` is now a usage error (exit 2) that names the conflicting flags, instead of silently choosing one output format.
 - **The skill `setup` writes says TOON is the default output.** It told agents to add `--axi` for TOON; it now says output is TOON by default and `--plain` gives text. The committed `skills/llm-data/SKILL.md` matches.
+- **Breaking (v2.0.0): `tree`, `stats` and `multigrep` print paths relative to the working directory by default.** Pass `--absolute` to restore the previous absolute paths. Paths outside the working directory stay absolute, and `repo-root` still prints an absolute root.
+
+### Removed
+
+- **`plan-type` is removed.** Use `cadence plan type` instead.
+- **`project-components` is removed.** Use `cadence plan components` instead.
+- **`tier-classifier` is removed.** Use `cadence tier classify` instead.
+- **`diff-smell` is removed.** Use `cadence diff smell` instead.
 
 ### Fixed
 
