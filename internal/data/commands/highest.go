@@ -196,7 +196,7 @@ func runHighest(cmd *cobra.Command, args []string) error {
 			version, sortKey := buildVersionInfo(matches)
 			versioned = append(versioned, versionedEntry{
 				name:     name,
-				fullPath: filepath.Join(searchPath, name),
+				fullPath: showPaths(searchPath).show(filepath.Join(searchPath, name)),
 				version:  version,
 				sortKey:  sortKey,
 			})

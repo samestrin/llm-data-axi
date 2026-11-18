@@ -75,6 +75,7 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 	// and fails the run: it used to be dropped with at most a stderr warning,
 	// and an exit 0 that read as the whole input.
 	var files []string
+	shown := make(map[string]string) // file -> the path it is printed as
 	var unreadable []pathFailure
 	for _, pathStr := range args {
 		absPath, err := filepath.Abs(pathStr)
@@ -87,6 +88,7 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("path not found: %s", pathStr)
 		}
 
+		shownAt := showPaths(absPath)
 		if info.IsDir() {
 			var ignorer *gitignore.Parser
 			if !catfilesNoGitignore {
@@ -102,7 +104,7 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 					if ignorer != nil && (ignorer.IsIgnored(path) || ignorer.IsIgnored(filepath.Join(path, "_"))) {
 						return nil
 					}
-					unreadable = append(unreadable, pathFailure{Path: path, Reason: failureReason(err)})
+					unreadable = append(unreadable, pathFailure{Path: shownAt.show(path), Reason: failureReason(err)})
 					return nil
 				}
 				if info.IsDir() {
@@ -115,10 +117,16 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 					return nil
 				}
 				files = append(files, path)
+				if _, ok := shown[path]; !ok {
+					shown[path] = shownAt.show(path)
+				}
 				return nil
 			})
 		} else {
 			files = append(files, absPath)
+			if _, ok := shown[absPath]; !ok {
+				shown[absPath] = shownAt.shown
+			}
 		}
 	}
 
@@ -138,7 +146,7 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 	for _, filePath := range uniqueFiles {
 		info, err := os.Stat(filePath)
 		if err != nil {
-			unreadable = append(unreadable, pathFailure{Path: filePath, Reason: failureReason(err)})
+			unreadable = append(unreadable, pathFailure{Path: shown[filePath], Reason: failureReason(err)})
 			continue
 		}
 
@@ -150,18 +158,18 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 
 		content, err := os.ReadFile(filePath)
 		if err != nil {
-			unreadable = append(unreadable, pathFailure{Path: filePath, Reason: failureReason(err)})
+			unreadable = append(unreadable, pathFailure{Path: shown[filePath], Reason: failureReason(err)})
 			continue
 		}
 
 		// Check if binary
 		if !isTextFile(content) {
-			fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: Skipping binary file: %s\n", filePath)
+			fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: Skipping binary file: %s\n", shown[filePath])
 			continue
 		}
 
 		entries = append(entries, CatFileEntry{
-			Path:    filePath,
+			Path:    shown[filePath],
 			Size:    size,
 			Content: string(content),
 		})

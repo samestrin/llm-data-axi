@@ -147,7 +147,10 @@ func runStats(cmd *cobra.Command, args []string) error {
 		exts = append(exts, extInfo{ext, count, extSizes[ext]})
 	}
 	sort.Slice(exts, func(i, j int) bool {
-		return exts[i].count > exts[j].count
+		if exts[i].count != exts[j].count {
+			return exts[i].count > exts[j].count
+		}
+		return exts[i].ext < exts[j].ext
 	})
 
 	extensions := []ExtensionInfo{}

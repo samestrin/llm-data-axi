@@ -377,7 +377,7 @@ func TestStatsExtensionOrderStable(t *testing.T) {
 		var doc struct {
 			Extensions []struct {
 				Extension string `json:"extension"`
-			} `json:"extensions"`
+			} `json:"by_extension"`
 		}
 		_, out, _ := runCLI(t, "stats", "--path", ".", "--json")
 		if err := json.Unmarshal([]byte(out), &doc); err != nil {

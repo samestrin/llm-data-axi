@@ -108,9 +108,10 @@ text; --axi is accepted and prints the same TOON as no flag. --plain cannot
 be combined with --json or --axi. --min shortens --json and --plain output
 and has no effect on TOON, which is already token-dense.
 
-tree, stats and multigrep print paths relative to the working directory; a
-path outside it stays absolute. --absolute prints them absolute, and any
-other command rejects it.`,
+tree, stats, multigrep, grep, catfiles, highest and git-context print paths
+relative to the working directory; a path outside it stays absolute.
+--absolute prints them absolute, and any other command rejects it. repo-root
+always prints an absolute root.`,
 		Version: DisplayVersion(),
 		// No Args validator on purpose: with Args nil, cobra's legacyArgs rejects a
 		// stray word as "unknown command" before it looks at --help. cobra.NoArgs
