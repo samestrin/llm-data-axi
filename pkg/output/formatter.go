@@ -278,6 +278,22 @@ func RelativePathCwd(path string) string {
 	return RelativePath(path, cwd)
 }
 
+// RelativePathWithin is RelativePath for a path that must sit at or under
+// base: it returns the path relative to base and true, or "" and false for a
+// path outside base. RelativePath allows up to two "../" steps; this allows
+// none, so a caller keeps an outside path absolute instead of printing a
+// chain the reader has to resolve.
+func RelativePathWithin(path, base string) (string, bool) {
+	if !filepath.IsAbs(path) || base == "" {
+		return "", false
+	}
+	rel := RelativePath(path, base)
+	if filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return rel, true
+}
+
 // FilterEmpty removes empty/zero values from a map.
 func FilterEmpty(m map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{})

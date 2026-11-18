@@ -227,6 +227,7 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build result struct
+	shownPath := showPaths(path).shown
 	filesSearched := len(files)
 	keywordsSearchedCount := len(keywords)
 	var mgResult MultigrepResult
@@ -235,7 +236,7 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 			KS:  &keywordsSearchedCount,
 			KWM: &keywordsWithMatches,
 			TM:  &totalMatches,
-			SP:  path,
+			SP:  shownPath,
 			FS:  &filesSearched,
 			R:   results,
 		}
@@ -244,7 +245,7 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 			KeywordsSearched:    &keywordsSearchedCount,
 			KeywordsWithMatches: &keywordsWithMatches,
 			TotalMatches:        &totalMatches,
-			SearchPath:          path,
+			SearchPath:          shownPath,
 			FilesSearched:       &filesSearched,
 			Results:             results,
 		}
@@ -262,7 +263,7 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(w, strings.Repeat("=", 70))
 		fmt.Fprintln(w, "MULTIGREP RESULTS")
 		fmt.Fprintln(w, strings.Repeat("=", 70))
-		fmt.Fprintf(w, "Search Path: %s\n", path)
+		fmt.Fprintf(w, "Search Path: %s\n", shownPath)
 		fmt.Fprintf(w, "Files Searched: %d\n", len(files))
 		fmt.Fprintf(w, "Keywords: %d\n", len(keywords))
 		fmt.Fprintf(w, "Total Matches: %d\n", totalMatches)
