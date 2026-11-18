@@ -16,10 +16,10 @@ var GlobalAbsolutePaths bool
 // absoluteCommands are the commands whose output --absolute changes. Every
 // other command refuses the flag (see checkAbsolute): accepted and ignored,
 // it would exit 0 with output it never touched.
-var absoluteCommands = []string{"tree", "stats", "multigrep"}
+var absoluteCommands = []string{"tree", "stats", "multigrep", "grep", "catfiles", "highest", "git-context"}
 
 // absoluteScope names absoluteCommands for the flag's help and its error.
-const absoluteScope = "tree, stats and multigrep"
+const absoluteScope = "tree, stats, multigrep, grep, catfiles, highest and git-context"
 
 // absoluteHelp is --absolute's help line. It states the commands the flag
 // affects and the outside-path rule, as --min's states its no-op on TOON.
