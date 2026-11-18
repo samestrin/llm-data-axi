@@ -545,6 +545,37 @@ func TestRemovedExtractToolsAreRejectedAsUnknown(t *testing.T) {
 	}
 }
 
+// The four workflow tools moved to cadence (epic 11.2 T3). A call must fail
+// with the same moved-command text the CLI prints — naming the cadence
+// replacement — before any binary is exec'd: not "unknown command", which
+// tells an agent nothing, and not silently run something. The messages are
+// pinned in removed_commands_test.go on the CLI side; the two must match.
+func TestMovedToolsReturnTheCadenceError(t *testing.T) {
+	for _, c := range []struct{ tool, message string }{
+		{"plan_type", `command "plan-type" has moved to cadence: run "cadence plan type" instead`},
+		{"project_components", `command "project-components" has moved to cadence: run "cadence plan components" instead`},
+		{"tier_classifier", `command "tier-classifier" has moved to cadence: run "cadence tier classify" instead`},
+		{"diff_smell", `command "diff-smell" has moved to cadence: run "cadence diff smell" instead`},
+	} {
+		t.Run(c.tool, func(t *testing.T) {
+			if _, err := buildArgs(c.tool, map[string]interface{}{}); err == nil || err.Error() != c.message {
+				t.Errorf("buildArgs(%s) = %v, want %q", c.tool, err, c.message)
+			}
+			// ExecuteHandler is the MCP call path. The moved error must come
+			// back as the call's error, with no output, without exec'ing anything.
+			for _, args := range []map[string]interface{}{{}, {"format": "json"}} {
+				out, err := ExecuteHandler(ToolPrefix+c.tool, args)
+				if err == nil || err.Error() != c.message {
+					t.Errorf("ExecuteHandler(%s, %v) = %v, want %q", c.tool, args, err, c.message)
+				}
+				if out != "" {
+					t.Errorf("ExecuteHandler(%s) returned output with the error: %q", c.tool, out)
+				}
+			}
+		})
+	}
+}
+
 func TestNormalizeArgs(t *testing.T) {
 	tests := []struct {
 		name string

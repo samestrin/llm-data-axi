@@ -62,6 +62,23 @@ func TestGetToolDefinitionsRegistersExactlyThePortedSet(t *testing.T) {
 	}
 }
 
+// The four workflow tools moved to cadence (epic 11.2 T3). Each must be
+// absent from both the advertised list and the dispatch registry: a tool
+// advertised after the move invites a call that cannot work, and a registry
+// entry with no tool is unreachable dead wiring.
+func TestMovedToolsAreNotRegistered(t *testing.T) {
+	for _, name := range []string{"plan_type", "project_components", "tier_classifier", "diff_smell"} {
+		if _, ok := commandRegistry[name]; ok {
+			t.Errorf("commandRegistry still has %s", name)
+		}
+		for _, tool := range GetToolDefinitions() {
+			if tool.Name == ToolPrefix+name {
+				t.Errorf("GetToolDefinitions still advertises %s%s", ToolPrefix, name)
+			}
+		}
+	}
+}
+
 func TestEveryToolNameCarriesThePrefix(t *testing.T) {
 	for _, tool := range GetToolDefinitions() {
 		if len(tool.Name) < len(ToolPrefix) || tool.Name[:len(ToolPrefix)] != ToolPrefix {
