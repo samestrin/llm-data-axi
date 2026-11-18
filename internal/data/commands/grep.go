@@ -79,6 +79,11 @@ type GrepResult struct {
 	Help          []string `json:"help,omitempty"`
 }
 
+// grepFile is a file to search: path is opened, shown is printed.
+type grepFile struct {
+	path, shown string
+}
+
 // newGrepCmd creates the grep command
 func newGrepCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -113,8 +118,8 @@ func runGrep(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid pattern: %v", err)
 	}
 
-	// Collect files
-	var files []string
+	// Collect files, each with the path it is printed as
+	var files []grepFile
 	walkedDir := false
 	for _, pathStr := range paths {
 		absPath, err := filepath.Abs(pathStr)
@@ -132,6 +137,7 @@ func runGrep(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
+		shownAt := showPaths(absPath)
 		if info.IsDir() {
 			walkedDir = true
 			var ignorer *gitignore.Parser
@@ -160,11 +166,11 @@ func runGrep(cmd *cobra.Command, args []string) error {
 						return nil
 					}
 				}
-				files = append(files, path)
+				files = append(files, grepFile{path: path, shown: shownAt.show(path)})
 				return nil
 			})
 		} else {
-			files = append(files, absPath)
+			files = append(files, grepFile{path: absPath, shown: shownAt.shown})
 		}
 	}
 
@@ -175,7 +181,8 @@ func runGrep(cmd *cobra.Command, args []string) error {
 	matchedFiles := make(map[string]bool)
 	truncatedLines := false
 
-	for _, filePath := range files {
+	for _, f := range files {
+		filePath := f.path
 		file, err := grepOpen(filePath)
 		if err != nil {
 			continue
@@ -187,7 +194,7 @@ func runGrep(cmd *cobra.Command, args []string) error {
 		br := bufio.NewReaderSize(file, grepBinarySniff)
 		if grepIsBinary(br) {
 			file.Close()
-			result.BinarySkipped = append(result.BinarySkipped, filePath)
+			result.BinarySkipped = append(result.BinarySkipped, f.shown)
 			continue
 		}
 
@@ -198,14 +205,14 @@ func runGrep(cmd *cobra.Command, args []string) error {
 			if re.MatchString(line) {
 				if grepFilesOnly {
 					if !matchedFiles[filePath] {
-						result.Files = append(result.Files, filePath)
+						result.Files = append(result.Files, f.shown)
 						matchedFiles[filePath] = true
 					}
 					return false
 				}
 
 				match := GrepMatch{
-					File: filePath,
+					File: f.shown,
 					Text: line,
 				}
 				// The truncation itself, not only the marker, must be here: the

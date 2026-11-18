@@ -136,8 +136,8 @@ func runGitContext(cmd *cobra.Command, args []string) error {
 	// Get repository info
 	root, _ := runGitOutput(absPath, "rev-parse", "--show-toplevel")
 	ctx.Repository = GitRepository{
-		Path: absPath,
-		Root: strings.TrimSpace(root),
+		Path: showPaths(absPath).shown,
+		Root: showPaths(strings.TrimSpace(root)).shown,
 	}
 
 	// Get branch info
@@ -309,13 +309,7 @@ func parseGitRemotes(output string) []GitRemote {
 }
 
 func printGitContext(out io.Writer, ctx GitContext, minimal bool) {
-	// Use relative path in minimal mode
-	repoPath := ctx.Repository.Root
-	if minimal {
-		repoPath = output.RelativePathCwd(repoPath)
-	}
-
-	fmt.Fprintf(out, "REPOSITORY: %s\n", repoPath)
+	fmt.Fprintf(out, "REPOSITORY: %s\n", ctx.Repository.Root)
 	fmt.Fprintf(out, "BRANCH: %s\n", ctx.Branch.Current)
 	if ctx.Branch.Tracking != "" {
 		fmt.Fprintf(out, "TRACKING: %s\n", ctx.Branch.Tracking)

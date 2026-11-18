@@ -20,16 +20,25 @@ func realTempDir(t *testing.T) string {
 	return dir
 }
 
-// writeProject creates <dir>/proj/src/a.go holding a line multigrep finds.
+// writeProject creates <dir>/proj, a git repository holding src/a.go with a
+// line multigrep and grep find, src/bin.dat that grep skips as binary, and
+// v01-notes.md that highest finds.
 func writeProject(t *testing.T, dir string) string {
 	t.Helper()
 	proj := filepath.Join(dir, "proj")
 	if err := os.MkdirAll(filepath.Join(proj, "src"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(proj, "src", "a.go"), []byte("func needle() {}\n"), 0o644); err != nil {
-		t.Fatal(err)
+	for name, body := range map[string]string{
+		filepath.Join("src", "a.go"):    "func needle() {}\n",
+		filepath.Join("src", "bin.dat"): "needle\x00",
+		"v01-notes.md":                  "notes\n",
+	} {
+		if err := os.WriteFile(filepath.Join(proj, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
+	gitAt(t, proj, "2026-01-01T00:00:00Z", "init", "-q")
 	return proj
 }
 
@@ -68,6 +77,79 @@ var pathCommands = []struct {
 			return []string{str(t, doc, "search_path")}
 		},
 	},
+	{
+		name: "grep",
+		args: func(p string) []string { return []string{"grep", "needle", p} },
+		paths: func(t *testing.T, doc map[string]any) []string {
+			got := strs(t, doc, "binary_skipped")
+			for _, m := range doc["matches"].([]any) {
+				got = append(got, str(t, m.(map[string]any), "file"))
+			}
+			return wantN(t, got, 2)
+		},
+	},
+	{
+		name: "grep-l",
+		args: func(p string) []string { return []string{"grep", "-l", "needle", p} },
+		paths: func(t *testing.T, doc map[string]any) []string {
+			return wantN(t, strs(t, doc, "files"), 1)
+		},
+	},
+	{
+		name: "catfiles",
+		args: func(p string) []string { return []string{"catfiles", p} },
+		paths: func(t *testing.T, doc map[string]any) []string {
+			var got []string
+			for _, f := range doc["files"].([]any) {
+				got = append(got, str(t, f.(map[string]any), "path"))
+			}
+			// catfiles also walks proj/.git today, so at least a.go and
+			// v01-notes.md, and every path checked.
+			if len(got) < 2 {
+				t.Fatalf("got %d paths %v, want at least 2", len(got), got)
+			}
+			return got
+		},
+	},
+	{
+		name: "highest",
+		args: func(p string) []string { return []string{"highest", "--path", p, "--pattern", `^v(\d+)-`} },
+		paths: func(t *testing.T, doc map[string]any) []string {
+			return []string{str(t, doc, "full_path")}
+		},
+	},
+	{
+		name: "git-context",
+		args: func(p string) []string { return []string{"git-context", "--path", p} },
+		paths: func(t *testing.T, doc map[string]any) []string {
+			repo, _ := doc["repository"].(map[string]any)
+			return []string{str(t, repo, "path"), str(t, repo, "root")}
+		},
+	},
+}
+
+// strs returns the string array at key.
+func strs(t *testing.T, m map[string]any, key string) []string {
+	t.Helper()
+	arr, ok := m[key].([]any)
+	if !ok {
+		t.Fatalf("field %q missing or not an array in %v", key, m)
+	}
+	got := make([]string, len(arr))
+	for i, v := range arr {
+		got[i] = v.(string)
+	}
+	return got
+}
+
+// wantN fails unless got holds n paths: a check over the paths that holds
+// vacuously when none came back defends nothing.
+func wantN(t *testing.T, got []string, n int) []string {
+	t.Helper()
+	if len(got) != n {
+		t.Fatalf("got %d paths %v, want %d", len(got), got, n)
+	}
+	return got
 }
 
 func str(t *testing.T, m map[string]any, key string) string {
@@ -99,8 +181,9 @@ var formats = []struct {
 	flag []string
 }{{"toon", nil}, {"plain", []string{"--plain"}}, {"json", []string{"--json"}}}
 
-// Defends epic 11.2 T1: tree, stats and multigrep printed absolute paths, so
-// their output depended on where the checkout sat on disk. Paths are now
+// Defends epic 11.2 T1 and T2: tree, stats, multigrep, grep, catfiles,
+// highest and git-context printed absolute paths, so their output depended on
+// where the checkout sat on disk. Paths are now
 // relative to the working directory, and --absolute brings the old paths
 // back, in every format.
 func TestPathsRelativeByDefaultAbsoluteOnRequest(t *testing.T) {
@@ -170,15 +253,15 @@ func TestPathOutputIdenticalAtTwoLocations(t *testing.T) {
 
 // Defends "a path outside the working directory stays absolute": `..` and an
 // absolute path elsewhere must not become a chain of "../" a caller has to
-// resolve against a directory it may not know.
+// resolve against a directory it may not know. The working directory is
+// proj/src, so `..` is proj, a repository git-context can read.
 func TestPathOutsideWorkingDirectoryStaysAbsolute(t *testing.T) {
-	dir := realTempDir(t)
-	proj := writeProject(t, dir)
+	proj := writeProject(t, realTempDir(t))
 	elsewhere := writeProject(t, realTempDir(t))
-	t.Chdir(proj)
+	t.Chdir(filepath.Join(proj, "src"))
 
 	for i, c := range pathCommands {
-		for _, tc := range []struct{ arg, want string }{{"..", dir}, {elsewhere, elsewhere}} {
+		for _, tc := range []struct{ arg, want string }{{"..", proj}, {elsewhere, elsewhere}} {
 			t.Run(c.name+"/"+tc.arg, func(t *testing.T) {
 				for _, p := range jsonPaths(t, i, c.args(tc.arg)...) {
 					if p != tc.want && !strings.HasPrefix(p, tc.want+string(filepath.Separator)) {
@@ -217,7 +300,7 @@ func TestPathsRelativeUnderSymlinkedWorkingDirectory(t *testing.T) {
 }
 
 // Defends against a flag accepted and silently ignored: --absolute changes
-// only tree, stats and multigrep, so any other command refuses it rather
+// only the commands that print paths, so any other command refuses it rather
 // than exiting 0 with output it did not change.
 func TestAbsoluteRejectedWhereItHasNoEffect(t *testing.T) {
 	for _, args := range [][]string{{"count", "--path", ".", "--absolute"}, {"repo-root", "--absolute"}, {"--absolute"}} {
@@ -225,7 +308,7 @@ func TestAbsoluteRejectedWhereItHasNoEffect(t *testing.T) {
 		if code != 2 {
 			t.Errorf("%v: exit %d, want 2: %s", args, code, out)
 		}
-		if !strings.Contains(out, "--absolute") || !strings.Contains(out, "tree, stats and multigrep") {
+		if !strings.Contains(out, "--absolute") || !strings.Contains(out, absoluteScope) {
 			t.Errorf("%v: error must name the commands --absolute affects: %s", args, out)
 		}
 	}
@@ -235,9 +318,77 @@ func TestAbsoluteRejectedWhereItHasNoEffect(t *testing.T) {
 // rule, as --min's help names its no-op under TOON.
 func TestAbsoluteHelpStatesScope(t *testing.T) {
 	_, out, _ := runCLI(t, "tree", "--help")
-	for _, want := range []string{"--absolute", "tree, stats and multigrep", "outside the working directory"} {
+	for _, want := range []string{"--absolute", absoluteScope, "outside the working directory"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("tree --help must contain %q:\n%s", want, out)
+		}
+	}
+}
+
+// Defends catfiles' unreadable paths following the same rule as its entries:
+// the error names each path a caller asked for, and an absolute one there
+// made the failure depend on where the checkout sat.
+func TestCatfilesUnreadablePathsRelative(t *testing.T) {
+	dir := realTempDir(t)
+	proj := writeProject(t, dir)
+	if err := os.Symlink("missing", filepath.Join(proj, "src", "dangling")); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+
+	for _, tc := range []struct {
+		flags []string
+		want  string
+	}{{nil, filepath.Join("proj", "src", "dangling")}, {[]string{"--absolute"}, filepath.Join(proj, "src", "dangling")}} {
+		code, out, _ := runCLI(t, append([]string{"catfiles", "proj", "--json"}, tc.flags...)...)
+		if code == 0 {
+			t.Fatalf("%v: exit 0 with an unreadable file: %s", tc.flags, out)
+		}
+		var doc struct {
+			Message    string `json:"message"`
+			Unreadable []struct {
+				Path string `json:"path"`
+			} `json:"unreadable"`
+		}
+		if err := json.Unmarshal([]byte(out), &doc); err != nil {
+			t.Fatalf("not JSON: %v\n%s", err, out)
+		}
+		if len(doc.Unreadable) != 1 || doc.Unreadable[0].Path != tc.want {
+			t.Errorf("%v: unreadable %+v, want one entry %q", tc.flags, doc.Unreadable, tc.want)
+		}
+		if !strings.Contains(doc.Message, tc.want+":") || (tc.flags == nil && strings.Contains(out, dir)) {
+			t.Errorf("%v: error must name %q and no absolute path: %s", tc.flags, tc.want, out)
+		}
+	}
+}
+
+// Defends byte-identical output: stats ordered extensions by count alone, so
+// extensions with equal counts came out in map order and two runs over the
+// same tree could differ. Ties are now broken by extension.
+func TestStatsExtensionOrderStable(t *testing.T) {
+	dir := realTempDir(t)
+	for _, ext := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
+		if err := os.WriteFile(filepath.Join(dir, "f."+ext), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(dir)
+	for i := 0; i < 20; i++ {
+		var doc struct {
+			Extensions []struct {
+				Extension string `json:"extension"`
+			} `json:"by_extension"`
+		}
+		_, out, _ := runCLI(t, "stats", "--path", ".", "--json")
+		if err := json.Unmarshal([]byte(out), &doc); err != nil {
+			t.Fatalf("not JSON: %v\n%s", err, out)
+		}
+		var got []string
+		for _, e := range doc.Extensions {
+			got = append(got, e.Extension)
+		}
+		if want := ".a .b .c .d .e .f .g .h"; strings.Join(got, " ") != want {
+			t.Fatalf("run %d: extensions %v, want %s", i, got, want)
 		}
 	}
 }
