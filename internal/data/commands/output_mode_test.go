@@ -23,10 +23,8 @@ func modeFixture(t *testing.T) string {
 		"a.go":          "package m\n\n// needle\nfunc A() {}\n",
 		"a_test.go":     "package m\n\nimport \"testing\"\n\nfunc TestA(t *testing.T) {}\n",
 		"config.yaml":   "name: demo\nowner: sam\n",
-		"tiers.yaml":    "packages:\n  cobra: core\n",
 		"greet.tmpl":    "hello [[who]]\n",
 		"plan/plan.md":  "# Plan\n\n- [ ] one\n- [x] two\n",
-		"change.diff":   "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1 +1,2 @@\n package m\n+// TODO later\n",
 		"items/01_a.md": "a\n",
 		"items/02_b.md": "b\n",
 	}
@@ -65,7 +63,6 @@ func modeCases() []modeCase {
 		{"catfiles", []string{"catfiles", "a.go"}, newCatfilesCmd},
 		{"count", []string{"count", "--path", "plan", "--mode", "checkboxes", "-r"}, newCountCmd},
 		{"detect", []string{"detect"}, newDetectCmd},
-		{"diff-smell", []string{"diff-smell", "--diff", "change.diff"}, newDiffSmellCmd},
 		{"discover-tests", []string{"discover-tests"}, newDiscoverTestsCmd},
 		{"git-changes", []string{"git-changes"}, newGitChangesCmd},
 		{"git-context", []string{"git-context", "--max-commits", "1"}, newGitContextCmd},
@@ -74,14 +71,11 @@ func modeCases() []modeCase {
 		{"math", []string{"math", "2+2"}, newMathCmd},
 		{"multiexists", []string{"multiexists", "a.go", "go.mod"}, newMultiexistsCmd},
 		{"multigrep", []string{"multigrep", "--path", ".", "--keywords", "needle,func"}, newMultigrepCmd},
-		{"plan-type", []string{"plan-type", "--path", "plan"}, newPlanTypeCmd},
-		{"project-components", []string{"project-components", "--file", "config.yaml"}, newProjectComponentsCmd},
 		{"repo-root", []string{"repo-root"}, newRepoRootCmd},
 		{"runtime", []string{"runtime", "--start", "1000", "--end", "4600"}, newRuntimeCmd},
 		{"setup", []string{"setup", "--dry-run"}, newSetupCmd},
 		{"stats", []string{"stats", "--path", "plan"}, newStatsCmd},
 		{"template", []string{"template", "greet.tmpl", "--var", "who=sam", "--syntax", "brackets"}, newTemplateCmd},
-		{"tier-classifier", []string{"tier-classifier", "--packages", "cobra", "--config", "tiers.yaml"}, newTierClassifierCmd},
 		{"tree", []string{"tree", "--path", "plan"}, newTreeCmd},
 		yaml("get", "name", "--file", "config.yaml"),
 		yaml("multiget", "name", "owner", "--file", "config.yaml"),
@@ -203,7 +197,6 @@ func TestPlainConflictsWithStructuredFormats(t *testing.T) {
 		{[]string{"--plain", "--axi"}, "--axi"},
 		{[]string{"math", "2+2", "--axi", "--plain"}, "--axi"},
 		{[]string{"yaml", "get", "name", "--file", "config.yaml", "--plain", "--axi"}, "--axi"},
-		{[]string{"diff-smell", "--diff", "change.diff", "--plain", "--json"}, "--json"},
 	} {
 		code, stdout, stderr := runCLI(t, c.args...)
 		if code != 2 {

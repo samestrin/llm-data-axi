@@ -11,4 +11,4 @@ Run `llm-data --help` for the full command list. Output is token-dense TOON by d
 - `llm-data tree`, `llm-data count` and `llm-data catfiles` list, count and read files.
 - `llm-data yaml get|set|multiget|multiset` reads and edits YAML in place.
 - `llm-data git-changes`, `llm-data git-context` and `llm-data repo-root` describe the repository.
-- `llm-data detect` and `llm-data project-components` describe the project's stack and layout.
+- `llm-data detect` describes the project's stack and layout.

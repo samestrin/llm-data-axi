@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samestrin/llm-data-axi/v2/internal/data/moved"
 	"github.com/samestrin/llm-data-axi/v2/pkg/output"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -174,7 +175,6 @@ other command rejects it.`,
 		newCatfilesCmd(),
 		newCountCmd(),
 		newDetectCmd(),
-		newDiffSmellCmd(),
 		newDiscoverTestsCmd(),
 		newGitChangesCmd(),
 		newGitContextCmd(),
@@ -183,17 +183,19 @@ other command rejects it.`,
 		newMathCmd(),
 		newMultiexistsCmd(),
 		newMultigrepCmd(),
-		newPlanTypeCmd(),
-		newProjectComponentsCmd(),
 		newRepoRootCmd(),
 		newRuntimeCmd(),
 		newSetupCmd(),
 		newStatsCmd(),
 		newTemplateCmd(),
-		newTierClassifierCmd(),
 		newTreeCmd(),
 		newYamlCmd(),
 	)
+	// Moved commands leave a hidden stub that fails naming the cadence
+	// replacement (epic 11.2 T3), instead of a bare "unknown command".
+	for name := range moved.Table {
+		root.AddCommand(newMovedCmd(name))
+	}
 	argErrorsAreUsage(root)
 	return root
 }
@@ -553,22 +555,4 @@ func invalidValue(cmd *cobra.Command, msg string) error {
 		}
 	}
 	return &output.UsageError{Msg: fmt.Sprintf("invalid value %q for --%s: %s", value, name, reason)}
-}
-
-// splitCSV splits a comma-separated string, trimming blanks.
-//
-// Ported from td_filter.go, which does not travel to this repo; tier_classifier
-// is its only caller here.
-func splitCSV(s string) []string {
-	if strings.TrimSpace(s) == "" {
-		return nil
-	}
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if t := strings.TrimSpace(p); t != "" {
-			out = append(out, t)
-		}
-	}
-	return out
 }

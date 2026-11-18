@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/samestrin/llm-data-axi/v2/internal/data/commands"
 	"github.com/samestrin/llm-data-axi/v2/internal/data/mcpserver"
+	"github.com/samestrin/llm-data-axi/v2/internal/data/moved"
 )
 
 // serverVersion is stamped at build time with -X main.serverVersion. It must
@@ -90,6 +92,30 @@ func main() {
 			}, nil
 		})
 	}
+
+	// A call to a tool that moved to cadence (epic 11.2 T3) must fail with the
+	// same moved-command text the CLI prints, naming the replacement. The tool
+	// is no longer registered, so without this middleware the SDK would reject
+	// the call as "unknown tool" before any handler runs, telling an agent
+	// nothing about where the command went. The moved tools stay unadvertised:
+	// tools/list is untouched.
+	server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			if method == "tools/call" {
+				if params, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
+					if err := moved.ErrorFor(strings.TrimPrefix(params.Name, mcpserver.ToolPrefix)); err != nil {
+						return &mcp.CallToolResult{
+							Content: []mcp.Content{
+								&mcp.TextContent{Text: "Error: " + err.Error()},
+							},
+							IsError: true,
+						}, nil
+					}
+				}
+			}
+			return next(ctx, method, req)
+		}
+	})
 
 	// Log startup
 	fmt.Fprintf(os.Stderr, "%s v%s started with %d tools\n", serverName, version, len(tools))

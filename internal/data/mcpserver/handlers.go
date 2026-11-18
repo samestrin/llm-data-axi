@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/samestrin/llm-data-axi/v2/internal/data/moved"
 )
 
 // paramAliases maps canonical parameter names to their accepted aliases.
@@ -300,34 +302,35 @@ func ExecuteHandler(toolName string, args map[string]interface{}) (string, error
 // command cannot exist, and tests check it against GetToolDefinitions in both
 // directions.
 var commandRegistry = map[string]func(map[string]interface{}) []string{
-	"tree":               buildTreeArgs,
-	"grep":               buildGrepArgs,
-	"multiexists":        buildMultiexistsArgs,
-	"template":           buildTemplateArgs,
-	"discover_tests":     buildDiscoverTestsArgs,
-	"multigrep":          buildMultigrepArgs,
-	"detect":             buildDetectArgs,
-	"project_components": buildProjectComponentsArgs,
-	"count":              buildCountArgs,
-	"git_context":        buildGitContextArgs,
-	"repo_root":          buildRepoRootArgs,
-	"highest":            buildHighestArgs,
-	"plan_type":          buildPlanTypeArgs,
-	"git_changes":        buildGitChangesArgs,
-	"yaml_get":           buildYamlGetArgs,
-	"yaml_set":           buildYamlSetArgs,
-	"yaml_multiget":      buildYamlMultigetArgs,
-	"yaml_multiset":      buildYamlMultisetArgs,
-	"catfiles":           buildCatfilesArgs,
-	"math":               buildMathArgs,
-	"stats":              buildStatsArgs,
-	"runtime":            buildRuntimeArgs,
-	"diff_smell":         buildDiffSmellArgs,
-	"tier_classifier":    buildTierClassifierArgs,
+	"tree":           buildTreeArgs,
+	"grep":           buildGrepArgs,
+	"multiexists":    buildMultiexistsArgs,
+	"template":       buildTemplateArgs,
+	"discover_tests": buildDiscoverTestsArgs,
+	"multigrep":      buildMultigrepArgs,
+	"detect":         buildDetectArgs,
+	"count":          buildCountArgs,
+	"git_context":    buildGitContextArgs,
+	"repo_root":      buildRepoRootArgs,
+	"highest":        buildHighestArgs,
+	"git_changes":    buildGitChangesArgs,
+	"yaml_get":       buildYamlGetArgs,
+	"yaml_set":       buildYamlSetArgs,
+	"yaml_multiget":  buildYamlMultigetArgs,
+	"yaml_multiset":  buildYamlMultisetArgs,
+	"catfiles":       buildCatfilesArgs,
+	"math":           buildMathArgs,
+	"stats":          buildStatsArgs,
+	"runtime":        buildRuntimeArgs,
 }
 
 // buildArgs builds CLI arguments for the given tool
 func buildArgs(cmdName string, args map[string]interface{}) ([]string, error) {
+	// A moved command fails naming its cadence replacement, with the same
+	// text the CLI prints (epic 11.2 T3), before anything is exec'd.
+	if err := moved.ErrorFor(cmdName); err != nil {
+		return nil, err
+	}
 	build, ok := commandRegistry[cmdName]
 	if !ok {
 		return nil, fmt.Errorf("unknown command: %s", cmdName)
@@ -516,20 +519,6 @@ func buildDetectArgs(args map[string]interface{}) []string {
 	return cmdArgs
 }
 
-func buildProjectComponentsArgs(args map[string]interface{}) []string {
-	cmdArgs := []string{"project-components"}
-	if file, ok := args["file"].(string); ok {
-		cmdArgs = append(cmdArgs, "--file", file)
-	}
-	if getBoolDefault(args, "json", true) {
-		cmdArgs = append(cmdArgs, "--json")
-	}
-	if getBool(args, "min") {
-		cmdArgs = append(cmdArgs, "--min")
-	}
-	return cmdArgs
-}
-
 func buildCountArgs(args map[string]interface{}) []string {
 	cmdArgs := []string{"count"}
 	if mode, ok := args["mode"].(string); ok {
@@ -612,20 +601,6 @@ func buildHighestArgs(args map[string]interface{}) []string {
 	}
 	if prefix, ok := args["prefix"].(string); ok {
 		cmdArgs = append(cmdArgs, "--prefix", prefix)
-	}
-	if getBoolDefault(args, "json", true) {
-		cmdArgs = append(cmdArgs, "--json")
-	}
-	if getBoolDefault(args, "min", true) {
-		cmdArgs = append(cmdArgs, "--min")
-	}
-	return cmdArgs
-}
-
-func buildPlanTypeArgs(args map[string]interface{}) []string {
-	cmdArgs := []string{"plan-type"}
-	if path, ok := args["path"].(string); ok {
-		cmdArgs = append(cmdArgs, "--path", path)
 	}
 	if getBoolDefault(args, "json", true) {
 		cmdArgs = append(cmdArgs, "--json")
@@ -953,39 +928,5 @@ func buildRuntimeArgs(args map[string]interface{}) []string {
 		cmdArgs = append(cmdArgs, "--min")
 	}
 
-	return cmdArgs
-}
-
-func buildDiffSmellArgs(args map[string]interface{}) []string {
-	cmdArgs := []string{"diff-smell"}
-	if v, ok := args["diff"].(string); ok && v != "" {
-		cmdArgs = append(cmdArgs, "--diff", v)
-	}
-	if v, ok := args["repo"].(string); ok && v != "" {
-		cmdArgs = append(cmdArgs, "--repo", v)
-	}
-	if v, ok := args["rev"].(string); ok && v != "" {
-		cmdArgs = append(cmdArgs, "--rev", v)
-	}
-	if getBool(args, "full") {
-		cmdArgs = append(cmdArgs, "--full")
-	}
-	if getBoolDefault(args, "json", true) {
-		cmdArgs = append(cmdArgs, "--json")
-	}
-	return cmdArgs
-}
-
-func buildTierClassifierArgs(args map[string]interface{}) []string {
-	cmdArgs := []string{"tier-classifier"}
-	if v, ok := args["packages"].(string); ok && v != "" {
-		cmdArgs = append(cmdArgs, "--packages", v)
-	}
-	if v, ok := args["config"].(string); ok && v != "" {
-		cmdArgs = append(cmdArgs, "--config", v)
-	}
-	if getBoolDefault(args, "json", true) {
-		cmdArgs = append(cmdArgs, "--json")
-	}
 	return cmdArgs
 }

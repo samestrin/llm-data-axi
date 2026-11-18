@@ -25,9 +25,11 @@ import (
 )
 
 // portedToolCount is the size of the set carried over from llm-support by the
-// Phase 2 port rule. llm-tools asserted 77 here; llm-data ships the 24 tools
-// that the cadence skills actually call.
-const portedToolCount = 24
+// Phase 2 port rule. llm-tools asserted 77 here; llm-data shipped the 24 tools
+// that the cadence skills actually call, minus the four that moved back to
+// cadence in epic 11.2 T3 (plan_type, project_components, tier_classifier,
+// diff_smell).
+const portedToolCount = 20
 
 func TestToolCount(t *testing.T) {
 	if got := len(mcpserver.GetToolDefinitions()); got != portedToolCount {
@@ -267,6 +269,10 @@ func TestServerListsEveryPortedToolOverStdio(t *testing.T) {
 		if strings.HasPrefix(tool.Name, "llm_data_extract_") {
 			t.Errorf("the running server still advertises %s, which moved to llm-extract-axi", tool.Name)
 		}
+		switch tool.Name {
+		case "llm_data_plan_type", "llm_data_project_components", "llm_data_tier_classifier", "llm_data_diff_smell":
+			t.Errorf("the running server still advertises %s, which moved to cadence (epic 11.2 T3)", tool.Name)
+		}
 	}
 }
 
@@ -288,6 +294,38 @@ func TestRemovedExtractToolCallIsRejectedOverStdio(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(string(resp.Error)), "unknown tool") {
 		t.Errorf("rejection does not say unknown tool: %s", resp.Error)
+	}
+}
+
+// A call to a tool that moved to cadence (epic 11.2 T3) must fail over the
+// wire with the same moved-command text the CLI prints, naming the cadence
+// replacement — not "unknown tool", which tells an agent nothing about where
+// the command went, and not a result that reads as success.
+func TestMovedToolCallNamesCadenceOverStdio(t *testing.T) {
+	got := speak(t, []string{
+		initRequest,
+		initNotification,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"llm_data_plan_type","arguments":{}}}`,
+	})
+	resp, ok := got[2]
+	if !ok {
+		t.Fatal("no response to tools/call")
+	}
+	var result struct {
+		IsError bool `json:"isError"`
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("tools/call result: %v\n%s", err, resp.Result)
+	}
+	if !result.IsError || len(result.Content) == 0 {
+		t.Fatalf("want an error result with content, got: %s", resp.Result)
+	}
+	want := `command "plan-type" has moved to cadence: run "cadence plan type" instead`
+	if !strings.Contains(result.Content[0].Text, want) {
+		t.Errorf("rejection does not carry the moved-command text %q: %s", want, result.Content[0].Text)
 	}
 }
 
