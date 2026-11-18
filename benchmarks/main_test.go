@@ -220,10 +220,16 @@ func TestCommittedResultsCarryTheTable(t *testing.T) {
 	if !strings.Contains(s, tableHeader) {
 		t.Fatal("RESULTS.md does not carry the table header")
 	}
-	// tree, stats, grep and multigrep print absolute paths, so their byte
-	// counts depend on the checkout location; the report must say so.
-	if !strings.Contains(s, "`tree`, `stats`, `grep` and `multigrep` print absolute paths") {
-		t.Fatal("RESULTS.md does not name the commands whose bytes depend on the checkout path")
+	// Since epic 11.2 the path-printing commands are relative to the working
+	// directory by default, so the totals no longer shift with the checkout
+	// location; the report must say that, not the old absolute-path caveat.
+	// (This assertion deliberately replaces the one that pinned the caveat:
+	// the behaviour it defended was removed, not the test weakened.)
+	if !strings.Contains(s, "print paths relative to the working directory by default") {
+		t.Fatal("RESULTS.md does not say paths are relative by default")
+	}
+	if strings.Contains(s, "print absolute paths") {
+		t.Fatal("RESULTS.md still carries the absolute-path caveat the relative default removed")
 	}
 	for _, c := range commands {
 		if !strings.Contains(s, "| `"+c.Name+"` |") {
