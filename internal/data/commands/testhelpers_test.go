@@ -16,6 +16,7 @@ func restoreOutputMode(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
 		GlobalAXIOutput, GlobalJSONOutput, GlobalMinOutput, GlobalPlainOutput = false, false, false, false
+		GlobalAbsolutePaths = false
 		output.SetDefaultAXI(false)
 	})
 }

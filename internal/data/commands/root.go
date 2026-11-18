@@ -107,7 +107,11 @@ output that costs fewer tokens than JSON.
 Output is TOON by default. --json prints JSON and --plain prints plain
 text; --axi is accepted and prints the same TOON as no flag. --plain cannot
 be combined with --json or --axi. --min shortens --json and --plain output
-and has no effect on TOON, which is already token-dense.`,
+and has no effect on TOON, which is already token-dense.
+
+tree, stats and multigrep print paths relative to the working directory; a
+path outside it stays absolute. --absolute prints them absolute, and any
+other command rejects it.`,
 		Version: DisplayVersion(),
 		// No Args validator on purpose: with Args nil, cobra's legacyArgs rejects a
 		// stray word as "unknown command" before it looks at --help. cobra.NoArgs
@@ -125,6 +129,9 @@ and has no effect on TOON, which is already token-dense.`,
 			}
 			jsonOn := flagOn(cmd, "json")
 			if err := formatConflict(GlobalPlainOutput, jsonOn, GlobalAXIOutput); err != nil {
+				return err
+			}
+			if err := checkAbsolute(cmd.Name(), GlobalAbsolutePaths); err != nil {
 				return err
 			}
 			GlobalAXIOutput = GlobalAXIOutput || (!jsonOn && !GlobalPlainOutput)
@@ -162,6 +169,7 @@ and has no effect on TOON, which is already token-dense.`,
 	root.PersistentFlags().BoolVar(&GlobalPlainOutput, "plain", false, "Output as plain text instead of TOON")
 	root.PersistentFlags().BoolVar(&GlobalMinOutput, "min", false, "Minimal --json or --plain output (no effect on TOON)")
 	root.PersistentFlags().BoolVar(&GlobalAXIOutput, "axi", false, "Output as TOON, the default (accepted alias)")
+	root.PersistentFlags().BoolVar(&GlobalAbsolutePaths, "absolute", false, absoluteHelp)
 
 	root.AddCommand(
 		newCatfilesCmd(),

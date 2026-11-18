@@ -298,3 +298,31 @@ func TestProcessForMinimalJSONPassesScalarsThrough(t *testing.T) {
 		t.Errorf("a bare scalar rendered as %q", buf.String())
 	}
 }
+
+// Defends the rule epic 11.2 states for relative output paths: a path under
+// the base is shortened, and anything outside it, even one level up, is
+// refused rather than turned into a "../" chain.
+func TestRelativePathWithinRefusesAnythingOutsideTheBase(t *testing.T) {
+	base := filepath.Join("/", "work", "proj")
+	for _, tc := range []struct {
+		path, want string
+		ok         bool
+	}{
+		{base, ".", true},
+		{filepath.Join(base, "src", "a.go"), filepath.Join("src", "a.go"), true},
+		{filepath.Join("/", "work"), "", false},
+		{filepath.Join("/", "work", "other"), "", false},
+		{filepath.Join("/", "work", "proj2"), "", false},
+		{filepath.Join(base, "..foo"), "..foo", true},
+		{"relative", "", false},
+		{"", "", false},
+	} {
+		got, ok := RelativePathWithin(tc.path, base)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("RelativePathWithin(%q) = %q, %v; want %q, %v", tc.path, got, ok, tc.want, tc.ok)
+		}
+	}
+	if _, ok := RelativePathWithin(base, ""); ok {
+		t.Error("an empty base must refuse")
+	}
+}
