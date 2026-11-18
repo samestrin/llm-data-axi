@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-18
+
 ### Added
 
 - **Performance benchmark.** `go run ./benchmarks -perf` times `llm-data` for three cases: cold start (`--version`), a typical command (`detect --path .`) and a large input (`stats --path .` over at least 3,000 files: `BENCH_DIR`, or a generated directory when it is unset). It writes every raw timing to `benchmarks/results-performance.json` and the table to `benchmarks/results-performance.md`, whose header names the version, date, machine and method; `-perf -from-json` regenerates the table from the JSON alone. A case that fails, prints nothing or records no timing exits non-zero and writes nothing. The committed result is from the v1.1.0 release binary.
