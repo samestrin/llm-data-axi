@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **`template --plain --min` prints plain text.** It printed minimal JSON (`{"c":...,"s":"success"}`) with exit 0, although `--min` only shortens `--json` and `--plain` output. `--json --min` still prints minimal JSON.
+
 ## [2.0.0] - 2026-11-18
 
 ### Added
