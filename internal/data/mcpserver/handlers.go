@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -284,18 +285,33 @@ func ExecuteHandler(toolName string, args map[string]interface{}) (string, error
 	}
 
 	if err != nil {
-		// Return output even on error (may contain useful error message)
-		if len(output) > 0 {
+		// A non-zero exit is a failure even when it printed something: the
+		// output used to come back with a nil error, so the server sent the
+		// CLI's own error payload marked as a success. The output is still
+		// returned, because the CLI prints its error there in every format.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			if Debug {
 				fmt.Fprintf(os.Stderr, "[LLM_DATA_MCP] Command failed with output: %q\n", string(output))
 			}
-			return string(output), nil
+			return string(output), &CommandFailedError{ExitCode: exitErr.ExitCode(), err: err}
 		}
 		return "", fmt.Errorf("command failed: %w", err)
 	}
 
 	return string(output), nil
 }
+
+// CommandFailedError is a CLI run that exited non-zero. ExecuteHandler
+// returns it together with the run's output, which is the CLI's error
+// payload, so the caller can pass the payload on and still mark it an error.
+type CommandFailedError struct {
+	ExitCode int
+	err      error
+}
+
+func (e *CommandFailedError) Error() string { return "command failed: " + e.err.Error() }
+func (e *CommandFailedError) Unwrap() error { return e.err }
 
 // commandRegistry maps each command name to its argument builder. It is the
 // only place a command is wired to a builder, so a case for an unregistered

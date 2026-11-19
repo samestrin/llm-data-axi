@@ -265,3 +265,115 @@ func TestFailureReasonKeepsPlainErrorText(t *testing.T) {
 		t.Errorf("failureReason(PathError) = %q, want the cause without the path", got)
 	}
 }
+
+// Defends grep against a file it cannot open: the open error was skipped with
+// `continue`, so `total: 0` and exit 0 read the same as a search of that file
+// that found nothing. A dangling symlink fails the open for any user, root
+// included. The match in the readable file must not be printed as a result.
+func TestGrepUnopenableFileIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("needle\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "missing"), filepath.Join(dir, "b.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, _ := runCLI(t, "grep", "needle", dir, "--json")
+	if code != 1 {
+		t.Errorf("exit %d, want 1", code)
+	}
+	var got struct {
+		Error      bool `json:"error"`
+		Unreadable []struct {
+			Path   string `json:"path"`
+			Reason string `json:"reason"`
+		} `json:"unreadable"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
+	}
+	if !got.Error || len(got.Unreadable) != 1 || filepath.Base(got.Unreadable[0].Path) != "b.txt" || got.Unreadable[0].Reason == "" {
+		t.Errorf("want an error listing b.txt with a reason, got %+v", got)
+	}
+	if strings.Contains(stdout, "total_matches") {
+		t.Errorf("a failed run must not report matches as a result: %s", stdout)
+	}
+}
+
+// Defends grep against a mode-000 file: it was skipped and the run exited 0.
+// Root reads a mode-000 file, so there the case cannot be built.
+func TestGrepUnreadableFileIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	locked := filepath.Join(dir, "locked.txt")
+	if err := os.WriteFile(locked, []byte("needle\n"), 0000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.ReadFile(locked); err == nil {
+		t.Skip("running as a user that reads mode-000 files")
+	}
+
+	code, stdout, _ := runCLI(t, "grep", "needle", dir)
+	if code != 1 {
+		t.Errorf("exit %d, want 1", code)
+	}
+	if !strings.HasPrefix(stdout, "error: true\n") || !strings.Contains(stdout, "locked.txt") || !strings.Contains(stdout, "permission denied") {
+		t.Errorf("want a TOON error naming locked.txt and why, got %q", stdout)
+	}
+}
+
+// Defends grep against an unreadable subdirectory: the walk error returned
+// nil, so everything under it vanished from a run that exited 0.
+func TestGrepUnreadableSubdirIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("alpha\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "c.txt"), []byte("needle\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(sub, 0000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(sub, 0755) })
+	if _, err := os.ReadDir(sub); err == nil {
+		t.Skip("running as a user that reads mode-000 directories")
+	}
+
+	code, stdout, _ := runCLI(t, "grep", "needle", dir, "--plain")
+	if code != 1 || !strings.Contains(stdout, "sub") || !strings.Contains(stdout, "permission denied") {
+		t.Errorf("want exit 1 and an error naming sub, got exit %d, %q", code, stdout)
+	}
+}
+
+// Defends grep's gitignore filter against the unreadable-entry check: an
+// ignored directory was never searched, so failing on it would turn a correct
+// result into an error.
+func TestGrepIgnoredUnreadableSubdirIsNotAnError(t *testing.T) {
+	for _, pattern := range []string{"locked/", "locked"} {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(pattern+"\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("needle\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		locked := filepath.Join(dir, "locked")
+		if err := os.Mkdir(locked, 0000); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Chmod(locked, 0755) })
+		if _, err := os.ReadDir(locked); err == nil {
+			t.Skip("running as a user that reads mode-000 directories")
+		}
+
+		code, stdout, _ := runCLI(t, "grep", "needle", dir, "--plain")
+		if code != 0 || !strings.Contains(stdout, "a.txt:needle") {
+			t.Errorf("pattern %q: want exit 0 with the a.txt match, got exit %d, %q", pattern, code, stdout)
+		}
+	}
+}

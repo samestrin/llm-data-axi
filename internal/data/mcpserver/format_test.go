@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -397,5 +398,67 @@ func TestResolveBinaryPathFallsBackWhenTheExecutableIsUnknown(t *testing.T) {
 
 	if got := resolveBinaryPath(); got != "/usr/local/bin/llm-data" {
 		t.Errorf("resolveBinaryPath() = %q, want the install-location fallback", got)
+	}
+}
+
+// Defends against MCP reporting a CLI failure as success. ExecuteHandler
+// returned the output of a non-zero exit with a nil error, so the server sent
+// it with IsError false: an agent saw `error: true` text in a result marked
+// as a success. The failure must be an error that still carries the payload.
+func TestExecuteHandlerReportsANonZeroExitAsAnError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake binary is a shell script")
+	}
+	script := filepath.Join(t.TempDir(), "llm-data")
+	body := "#!/bin/sh\necho 'error: true'\necho 'message: path not found: nope'\nexit 3\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original := BinaryPath
+	BinaryPath = script
+	t.Cleanup(func() { BinaryPath = original })
+
+	out, err := ExecuteHandler(ToolPrefix+"count", map[string]interface{}{})
+	if err == nil {
+		t.Fatalf("a non-zero exit was reported as success: %q", out)
+	}
+	var failed *CommandFailedError
+	if !errors.As(err, &failed) {
+		t.Fatalf("err = %T %v, want a *CommandFailedError", err, err)
+	}
+	if failed.ExitCode != 3 {
+		t.Errorf("ExitCode = %d, want 3", failed.ExitCode)
+	}
+	// The underlying *exec.ExitError stays reachable for a caller that wants it.
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Errorf("err does not unwrap to the *exec.ExitError: %v", err)
+	}
+	if !strings.Contains(out, "path not found: nope") {
+		t.Errorf("the CLI's error payload was not passed through: %q", out)
+	}
+}
+
+// A non-zero exit with no output must still be an error naming the exit, not
+// an empty success.
+func TestExecuteHandlerReportsASilentNonZeroExitAsAnError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake binary is a shell script")
+	}
+	script := filepath.Join(t.TempDir(), "llm-data")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nexit 2\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original := BinaryPath
+	BinaryPath = script
+	t.Cleanup(func() { BinaryPath = original })
+
+	out, err := ExecuteHandler(ToolPrefix+"count", map[string]interface{}{})
+	var failed *CommandFailedError
+	if !errors.As(err, &failed) || failed.ExitCode != 2 {
+		t.Fatalf("err = %v, want a *CommandFailedError with exit 2", err)
+	}
+	if out != "" || !strings.Contains(err.Error(), "2") {
+		t.Errorf("out = %q, err = %q; want no output and an error naming the exit status", out, err)
 	}
 }

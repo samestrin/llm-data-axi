@@ -31,10 +31,10 @@ The release asset names are `llm-data-<os>-<arch>` and `llm-data-mcp-<os>-<arch>
 
 For each selected platform, the installer downloads `SHA256SUMS.txt`, downloads both matching assets and verifies each SHA-256 checksum before installing either binary. A missing entry or mismatched checksum stops the installation.
 
-Pin the latest release, `v1.1.0`, or choose another installed location:
+Pin the latest release, `v2.0.0`, or choose another installed location:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v1.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v2.0.0 sh
 curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_INSTALL_DIR="$HOME/bin" sh
 ```
 
@@ -52,7 +52,7 @@ go install github.com/samestrin/llm-data-axi/v2/cmd/llm-data-mcp@latest
 ```bash
 git clone https://github.com/samestrin/llm-data-axi.git
 cd llm-data-axi
-git checkout v1.1.0
+git checkout v2.0.0
 make build
 make install
 ```
@@ -61,11 +61,20 @@ make install
 
 ### Agent integration
 
-Run `setup` in a project to merge a Claude Code SessionStart hook into `.claude/settings.json` and write `.claude/skills/llm-data/SKILL.md`. It preserves existing settings, writes only inside the project and leaves bytes unchanged on a second run. The project path defaults to `.`:
+Run `setup` in a project to register llm-data with each agent named by `--target`, a comma-separated or repeated list of `claude`, `codex` and `opencode`. The default is `claude` alone:
+
+| Target | What `setup` writes |
+|---|---|
+| `claude` | A SessionStart hook merged into `.claude/settings.json`, and the Agent Skill at `.claude/skills/llm-data/SKILL.md` |
+| `codex` | A SessionStart hook merged into `.codex/hooks.json`, and `[features] hooks = true` in `.codex/config.toml` |
+| `opencode` | A plugin at `.opencode/plugins/llm-data.js` that adds the home view to OpenCode's system context |
+
+It preserves existing settings, writes only inside the project and leaves bytes unchanged on a second run. An unknown target is a usage error and nothing is written. The project path defaults to `.`:
 
 ```bash
 llm-data setup
 llm-data setup --dry-run
+llm-data setup --target claude,codex,opencode
 ```
 
 Install the same Agent Skill without the hook:
@@ -79,7 +88,7 @@ npx skills add samestrin/llm-data-axi --skill llm-data
 Run these commands in a Git project directory:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v1.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v2.0.0 sh
 export PATH="$HOME/.local/bin:$PATH"
 llm-data detect --path . --axi
 llm-data git-changes --axi
@@ -113,7 +122,7 @@ stack: go
 | `multigrep` | Search for multiple keywords in parallel |
 | `repo-root` | Find and output git repository root |
 | `runtime` | Calculate and format elapsed time from epoch timestamps |
-| `setup` | Register llm-data with Claude Code in this project |
+| `setup` | Register llm-data with Claude Code, Codex or OpenCode in this project |
 | `stats` | Display directory statistics |
 | `template` | Variable substitution in templates |
 | `tree` | Display directory tree structure |
@@ -154,7 +163,7 @@ llm-data yaml multiset --file config.yaml server.port 8080 server.host localhost
 
 | Name | Default | Meaning |
 |---|---|---|
-| `LLM_DATA_VERSION` | latest release | Release tag fetched by `install.sh`, such as `v1.1.0` |
+| `LLM_DATA_VERSION` | latest release | Release tag fetched by `install.sh`, such as `v2.0.0` |
 | `LLM_DATA_INSTALL_DIR` | `$HOME/.local/bin` | Directory where `install.sh` places both binaries |
 | `LLM_DATA_BASE_URL` | release selected by `LLM_DATA_VERSION` | Alternative release-asset base URL; takes precedence over `LLM_DATA_VERSION` |
 | `LLM_DATA_BINARY` | automatic lookup | Explicit `llm-data` path for `llm-data-mcp`; otherwise lookup tries `PATH`, the server binary's directory and `/usr/local/bin/llm-data` |
@@ -167,10 +176,11 @@ No API key or other secret is used.
 
 | Flag | Output |
 |---|---|
-| none | Human-readable text |
-| `--axi` | Token-dense TOON |
+| none | Token-dense TOON, the default |
+| `--axi` | TOON, the same as no flag (accepted alias) |
 | `--json` | JSON |
-| `--min` | Shorter human-readable or JSON output; no effect on TOON |
+| `--plain` | Human-readable text; cannot be combined with `--json` or `--axi` (usage error, exit 2) |
+| `--min` | Shorter `--json` or `--plain` output; no effect on TOON |
 | `--absolute` | Absolute paths in `tree`, `stats`, `multigrep`, `grep`, `catfiles`, `highest` and `git-context`; by default they print paths relative to the working directory, and a path outside it stays absolute. Other commands reject the flag; `repo-root` always prints an absolute root |
 
 A bare `llm-data` prints the executable path, a description and the current repository context instead of a help page. Use `llm-data --help` for command help.
@@ -181,9 +191,9 @@ A bare `llm-data` prints the executable path, a description and the current repo
 | 1 | The command failed; the error identifies the failure |
 | 2 | Usage error, such as an unknown flag, invalid value or missing required argument |
 
-With `--json` or `--axi`, errors are written to stdout in the selected output format. Without an output flag, errors are written to stderr as `Error: ...`; stderr otherwise carries diagnostics only.
+Errors are written to stdout in the selected output format: TOON by default, JSON with `--json`, and `Error: ...` with `--plain`. A caller reads one stream whatever the format; stderr carries diagnostics only.
 
-`llm-data-mcp` exposes the same commands over MCP stdio. Start it with `llm-data-mcp`; it invokes the CLI rather than reimplementing command behavior. A tool call can request `"format": "axi"` or `"format": "json"` to override the server default for that call, except on `runtime`, where `format` selects the elapsed-time format.
+`llm-data-mcp` exposes the same commands over MCP stdio. Start it with `llm-data-mcp`; it invokes the CLI rather than reimplementing command behavior. A tool call can request `"format": "axi"` or `"format": "json"` to override the server default for that call, except on `runtime`, where `format` selects the elapsed-time format. A command that exits non-zero comes back as an error result (`isError: true`) carrying the CLI's own error output.
 
 ## Performance
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -78,9 +79,16 @@ func main() {
 			// Execute the tool using the handler
 			output, err := mcpserver.ExecuteHandler(td.Name, args)
 			if err != nil {
+				// A CLI that exited non-zero printed its own error payload in
+				// the requested format; pass it on, marked as the error it is.
+				text := "Error: " + err.Error()
+				var failed *mcpserver.CommandFailedError
+				if errors.As(err, &failed) && output != "" {
+					text = output
+				}
 				return &mcp.CallToolResult{
 					Content: []mcp.Content{
-						&mcp.TextContent{Text: "Error: " + err.Error()},
+						&mcp.TextContent{Text: text},
 					},
 					IsError: true,
 				}, nil

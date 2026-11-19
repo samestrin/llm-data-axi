@@ -118,8 +118,11 @@ func runGrep(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid pattern: %v", err)
 	}
 
-	// Collect files, each with the path it is printed as
+	// Collect files, each with the path it is printed as. Anything that cannot
+	// be read is collected here and fails the run, as in catfiles: skipping it
+	// made `total: 0` a search that never happened.
 	var files []grepFile
+	var unreadable []pathFailure
 	walkedDir := false
 	for _, pathStr := range paths {
 		absPath, err := filepath.Abs(pathStr)
@@ -147,6 +150,14 @@ func runGrep(cmd *cobra.Command, args []string) error {
 
 			filepath.Walk(absPath, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
+					// An ignored entry was never part of the search, so it
+					// cannot fail the run. A directory is probed through a
+					// child path, because a "dir/" pattern matches only what
+					// sits under it.
+					if ignorer != nil && (ignorer.IsIgnored(path) || ignorer.IsIgnored(filepath.Join(path, "_"))) {
+						return nil
+					}
+					unreadable = append(unreadable, pathFailure{Path: shownAt.show(path), Reason: failureReason(err)})
 					return nil
 				}
 				if info.IsDir() {
@@ -185,6 +196,7 @@ func runGrep(cmd *cobra.Command, args []string) error {
 		filePath := f.path
 		file, err := grepOpen(filePath)
 		if err != nil {
+			unreadable = append(unreadable, pathFailure{Path: f.shown, Reason: failureReason(err)})
 			continue
 		}
 
@@ -242,6 +254,17 @@ func runGrep(cmd *cobra.Command, args []string) error {
 				return readErr
 			}
 			return fmt.Errorf("read %s: %w", filePath, readErr)
+		}
+	}
+
+	if len(unreadable) > 0 {
+		names := make([]string, len(unreadable))
+		for i, u := range unreadable {
+			names[i] = u.Path + ": " + u.Reason
+		}
+		return &dataError{
+			msg:    fmt.Sprintf("cannot read %d of the requested paths: %s", len(unreadable), strings.Join(names, "; ")),
+			fields: map[string]any{"unreadable": unreadable},
 		}
 	}
 
