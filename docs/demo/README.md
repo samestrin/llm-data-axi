@@ -43,7 +43,7 @@ make build
 vhs docs/demo/llm-data.tape
 ```
 
-That writes `docs/demo/llm-data.gif`. Commit it with the tape change. The session is under 30 seconds; if a change pushes it past that, trim a `Sleep`, not a command.
+The tape sets the font to JetBrains Mono; install it first, because the fallback font is wide enough to wrap the `yaml get` line. That writes `docs/demo/llm-data.gif`. Commit it with the tape change. The session is under 30 seconds; if a change pushes it past that, trim a `Sleep`, not a command.
 
 Re-render it when a command the demo shows, its output, or `docs/demo/example` changes. `docs/release-checklist.md` makes that part of each release.
 
