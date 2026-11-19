@@ -329,6 +329,43 @@ func TestMovedToolCallNamesCadenceOverStdio(t *testing.T) {
 	}
 }
 
+// A CLI failure must reach the client as an error result carrying the CLI's
+// own error payload. The server used to send it with isError false, so an
+// agent checking isError was told a grep of a missing path succeeded.
+func TestToolCallFailureIsAnErrorResultOverStdio(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	call, err := json.Marshal(map[string]interface{}{
+		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+		"params": map[string]interface{}{
+			"name":      "llm_data_grep",
+			"arguments": map[string]interface{}{"pattern": "foo", "paths": []string{missing}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := speak(t, []string{initRequest, initNotification, string(call)})
+	resp, ok := got[2]
+	if !ok {
+		t.Fatal("no response to tools/call")
+	}
+	var result struct {
+		IsError bool `json:"isError"`
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("tools/call result: %v\n%s", err, resp.Result)
+	}
+	if !result.IsError {
+		t.Errorf("a failed grep was reported with isError false: %s", resp.Result)
+	}
+	if len(result.Content) == 0 || !strings.Contains(result.Content[0].Text, "path not found") || !strings.Contains(result.Content[0].Text, missing) {
+		t.Errorf("the CLI's error payload naming the path did not reach the client: %s", resp.Result)
+	}
+}
+
 // The end-to-end proof of the MCP encoding. llm-tools appended "--json --min"
 // unconditionally, so no MCP client could ever obtain TOON no matter what the
 // CLI supported. Epic 03 T6 made TOON the default: a client that sends no
