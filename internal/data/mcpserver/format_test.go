@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -427,6 +428,11 @@ func TestExecuteHandlerReportsANonZeroExitAsAnError(t *testing.T) {
 	}
 	if failed.ExitCode != 3 {
 		t.Errorf("ExitCode = %d, want 3", failed.ExitCode)
+	}
+	// The underlying *exec.ExitError stays reachable for a caller that wants it.
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Errorf("err does not unwrap to the *exec.ExitError: %v", err)
 	}
 	if !strings.Contains(out, "path not found: nope") {
 		t.Errorf("the CLI's error payload was not passed through: %q", out)
