@@ -207,7 +207,8 @@ func runTemplate(cmd *cobra.Command, args []string) error {
 	// Stdout output - use Formatter for TOON/JSON/minimal, otherwise raw
 	// content. TOON is the default output, so only --plain reaches the raw
 	// branch; before it was listed here, --axi printed raw text with exit 0.
-	if GlobalAXIOutput || templateJSON || templateMinimal {
+	// --min does not select a format: listed here, --plain --min printed JSON.
+	if GlobalAXIOutput || templateJSON {
 		var res TemplateResult
 		if templateMinimal {
 			res = TemplateResult{

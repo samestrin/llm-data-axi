@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -251,5 +252,40 @@ func TestTemplateEnvironmentVariable(t *testing.T) {
 	// The output should contain the value
 	if !strings.Contains(output, "Value:") {
 		t.Errorf("output %q should contain 'Value:'", output)
+	}
+}
+
+// TestTemplatePlainMinPrintsPlainText defends the flag contract that --min
+// only shortens --json and --plain output: `template --plain --min` printed
+// minimal JSON {"c":...,"s":"success"} with exit 0, because --min alone
+// selected the formatter. Run through the root so --plain is the real flag.
+func TestTemplatePlainMinPrintsPlainText(t *testing.T) {
+	tmplFile := filepath.Join(t.TempDir(), "t.txt")
+	if err := os.WriteFile(tmplFile, []byte("hello [[who]]\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	base := []string{"template", tmplFile, "--syntax", "brackets", "--var", "who=world"}
+
+	for _, mode := range [][]string{{"--plain", "--min"}, {"--plain"}} {
+		code, stdout, stderr := runCLI(t, append(base, mode...)...)
+		if code != 0 {
+			t.Fatalf("%v: exit %d, stderr=%q", mode, code, stderr)
+		}
+		if stdout != "hello world\n" {
+			t.Errorf("%v: stdout %q, want the plain rendered text", mode, stdout)
+		}
+	}
+
+	// The other way: --json --min still prints the minimal JSON.
+	code, stdout, stderr := runCLI(t, append(base, "--json", "--min")...)
+	if code != 0 {
+		t.Fatalf("--json --min: exit %d, stderr=%q", code, stderr)
+	}
+	var got map[string]string
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("--json --min: stdout is not JSON: %v\n%s", err, stdout)
+	}
+	if got["c"] != "hello world\n" || got["s"] != "success" {
+		t.Errorf("--json --min: got %v, want c and s keys", got)
 	}
 }
