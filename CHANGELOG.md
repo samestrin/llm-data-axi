@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **The committed performance results are from the 2.0.1 release binary.** `benchmarks/results-performance.json` and `.md` were measured on 1.1.0; they are regenerated from the v2.0.1 release build, and the README Performance section quotes them. A test fails when the committed results name a version other than the latest release in this changelog. (epic 10)
 - **The release documentation stays on the latest release.** The checklist now requires re-running `go run ./benchmarks -perf` against the installed release binary and committing the regenerated results and README Performance table at each release. The README install, quick-start, source and configuration examples pin v2.0.1. Documentation only.
+- **The AXI catalog entry and audit are pinned to v2.0.1.** `docs/axi-catalog-entry.yaml` names the v2.0.1 release commit as `reviewed_revision`, and its observations were re-probed on a build of that tag: the `template --plain --min` fix is described as fixed, not as an open defect. `docs/axi-audit.md` was re-checked at the same tag, and its `root.go`, `grep.go`, `multigrep.go` and MCP handler line citations, which pointed a few lines off since v2.0.0, now point at the lines they name. Documentation only.
 
 ## [2.0.1] - 2026-11-19
 
