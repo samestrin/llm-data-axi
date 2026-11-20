@@ -1,6 +1,6 @@
 # Release checklist
 
-Steps for cutting a release of `llm-data`. Run steps 1 to 5 from the repository root on the commit that will be tagged; step 6 follows the published release.
+Steps for cutting a release of `llm-data`. Run steps 1 to 3 from the repository root on the commit that will be tagged; step 4 publishes the release, and steps 5 and 6 follow its publication.
 
 ## 1. Green before a tag
 
@@ -30,22 +30,12 @@ vhs docs/demo/llm-data.tape
 
 The tape's commands are replayed without `vhs` by `go test ./tests/demo`, so a command that stopped working fails CI before the render is needed.
 
-## 3. Re-run the performance benchmark
-
-Re-run the performance script at each release so the committed measurements describe the version being released:
-
-```bash
-go run ./benchmarks -perf
-```
-
-- [ ] The regenerated `benchmarks/results-performance.*` files and the README Performance table are committed.
-
-## 4. CHANGELOG
+## 3. CHANGELOG
 
 - [ ] `CHANGELOG.md` has an `[Unreleased]` section that lists every user-visible change since the last tag, in plain words, without ticket IDs.
 - [ ] That section is renamed to the version and today's date when the tag is pushed.
 
-## 5. Tag and publish
+## 4. Tag and publish
 
 ```bash
 git tag v<version>
@@ -58,7 +48,7 @@ The `release` workflow tests the tagged commit, builds `llm-data` and `llm-data-
 - [ ] The release page lists both binaries per platform plus `SHA256SUMS.txt`.
 - [ ] The binaries report the tagged version (`llm-data --version`).
 
-## 6. Check the install path
+## 5. Check the install path
 
 - [ ] On a machine without a checkout, the install one-liner installs the new version from the new release:
 
@@ -68,3 +58,13 @@ The `release` workflow tests the tagged commit, builds `llm-data` and `llm-data-
       ```
 
 - [ ] A checksum mismatch or a failed download still installs nothing (the installer's own tests cover this, but the published assets are what it reads).
+
+## 6. Re-run the performance benchmark
+
+From the repository root, re-run the performance script at each release against the published binary installed in step 5, so the committed measurements describe that release rather than an unstamped local build:
+
+```bash
+go run ./benchmarks -perf -bin "$(command -v llm-data)"
+```
+
+- [ ] The regenerated `benchmarks/results-performance.*` files and the README Performance table are committed, and both result files name the published release version, not `dev`.

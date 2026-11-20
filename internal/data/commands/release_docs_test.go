@@ -85,9 +85,9 @@ func TestReleaseChecklistBenchmarksPublishedReleaseBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 	checklist := string(b)
-	publish := strings.Index(checklist, "## 5. Tag and publish")
-	install := strings.Index(checklist, "## 6. Check the install path")
-	benchmark := strings.Index(checklist, "## 7. Re-run the performance benchmark")
+	publish := strings.Index(checklist, "Tag and publish\n")
+	install := strings.Index(checklist, "Check the install path\n")
+	benchmark := strings.Index(checklist, "Re-run the performance benchmark\n")
 	if publish < 0 || install < 0 || benchmark < 0 || !(publish < install && install < benchmark) {
 		t.Error("release checklist must publish and install the release before benchmarking it")
 	}
