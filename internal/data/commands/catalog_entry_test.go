@@ -185,3 +185,75 @@ func TestCatalogEntryProseDraftIsGone(t *testing.T) {
 		}
 	}
 }
+
+// workflowGlobMatches reports whether a GitHub Actions `paths` glob matches a
+// repository path: `**` crosses directories, `*` stays within one.
+func workflowGlobMatches(glob, path string) bool {
+	var re strings.Builder
+	re.WriteString("^")
+	for i := 0; i < len(glob); i++ {
+		switch {
+		case strings.HasPrefix(glob[i:], "**"):
+			re.WriteString(".*")
+			i++
+		case glob[i] == '*':
+			re.WriteString("[^/]*")
+		default:
+			re.WriteString(regexp.QuoteMeta(string(glob[i])))
+		}
+	}
+	re.WriteString("$")
+	return regexp.MustCompile(re.String()).MatchString(path)
+}
+
+// Defends the guards above against never running: test.yml filters on paths,
+// and a pull request that edits only the entry (a re-pin, a re-quoted
+// benchmark) registered zero checks because no glob matched the .yaml.
+func TestCatalogEntryEditTriggersCI(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRootDir, ".github", "workflows", "test.yml"))
+	if err != nil {
+		t.Fatalf("read test.yml: %v", err)
+	}
+	var wf struct {
+		On map[string]struct {
+			Paths []string `yaml:"paths"`
+		} `yaml:"on"`
+	}
+	if err := yaml.Unmarshal(raw, &wf); err != nil {
+		t.Fatalf("test.yml does not parse: %v", err)
+	}
+	for _, event := range []string{"push", "pull_request"} {
+		trig, ok := wf.On[event]
+		if !ok {
+			t.Errorf("test.yml has no %s trigger", event)
+			continue
+		}
+		if len(trig.Paths) == 0 {
+			continue // no filter: every change runs CI
+		}
+		matched := false
+		for _, g := range trig.Paths {
+			if workflowGlobMatches(g, catalogEntryFile) {
+				matched = true
+			}
+		}
+		if !matched {
+			t.Errorf("test.yml %s paths %v do not match %s, so an edit to it alone runs no check", event, trig.Paths, catalogEntryFile)
+		}
+	}
+	// The matcher itself, both ways, so a broken matcher cannot pass the check.
+	for _, c := range []struct {
+		glob, path string
+		want       bool
+	}{
+		{"**.md", "docs/axi-audit.md", true},
+		{"**.go", "docs/axi-catalog-entry.yaml", false},
+		{"docs/demo/**", "docs/demo/llm-data.tape", true},
+		{"docs/demo/**", "docs/axi-catalog-entry.yaml", false},
+		{"go.mod", "go.mod", true},
+	} {
+		if got := workflowGlobMatches(c.glob, c.path); got != c.want {
+			t.Errorf("workflowGlobMatches(%q, %q) = %v, want %v", c.glob, c.path, got, c.want)
+		}
+	}
+}
