@@ -1,6 +1,6 @@
 # Release checklist
 
-Steps for cutting a release of `llm-data`. Run steps 1 to 4 from the repository root on the commit that will be tagged; step 5 follows the published release.
+Steps for cutting a release of `llm-data`. Run steps 1 to 3 from the repository root on the commit that will be tagged; step 4 publishes the release, and steps 5 and 6 follow its publication.
 
 ## 1. Green before a tag
 
@@ -58,3 +58,13 @@ The `release` workflow tests the tagged commit, builds `llm-data` and `llm-data-
       ```
 
 - [ ] A checksum mismatch or a failed download still installs nothing (the installer's own tests cover this, but the published assets are what it reads).
+
+## 6. Re-run the performance benchmark
+
+From the repository root, re-run the performance script at each release against the published binary installed in step 5, so the committed measurements describe that release rather than an unstamped local build:
+
+```bash
+go run ./benchmarks -perf -bin "$(command -v llm-data)"
+```
+
+- [ ] The regenerated `benchmarks/results-performance.*` files and the README Performance table are committed, and both result files name the published release version, not `dev`.
