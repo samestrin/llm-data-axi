@@ -221,8 +221,8 @@ The repository was extracted from [llm-tools](https://github.com/samestrin/llm-t
 
 ## Limits
 
-- There is no session-end lifecycle-capture hook. `llm-data` keeps no transcript, session state or record of files touched, so it has no session history to capture.
-- `help[]` next steps are scoped rather than universal. They appear in the home view and selected search results; other successful results do not carry them.
+- There is no session-end lifecycle-capture hook, because `llm-data` keeps no session state (no transcript, no record of files touched) and has nothing of its own to capture; the session-start half ships for Claude Code, Codex and OpenCode.
+- `help[]` next steps are scoped, not universal: the home view, an empty grep or multigrep and a truncated search line carry them; other commands do not.
 - The release platform matrix is best effort. Another OS or architecture requires a source build.
 - Search and directory commands respect `.gitignore` and apply their documented size, entry or line limits unless a flag changes that behavior. Large generated or binary trees may need narrower paths or explicit filter flags.
 - `setup` does not remove agent configuration during uninstall. Remove its project-local hook and skill separately when they are no longer wanted.
