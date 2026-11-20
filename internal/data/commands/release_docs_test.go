@@ -75,3 +75,32 @@ func TestReleaseChecklistRegeneratesPerformanceResults(t *testing.T) {
 	}
 	t.Error("release checklist has no checkbox requiring regenerated results and the README Performance table to be committed")
 }
+
+// Defends the release procedure against benchmarking an unstamped local build:
+// without -bin the script builds a binary that reports dev, so its results fail
+// the latest-release guard. The published release is installed before measuring.
+func TestReleaseChecklistBenchmarksPublishedReleaseBinary(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(repoRootDir, "docs", "release-checklist.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checklist := string(b)
+	publish := strings.Index(checklist, "## 5. Tag and publish")
+	install := strings.Index(checklist, "## 6. Check the install path")
+	benchmark := strings.Index(checklist, "## 7. Re-run the performance benchmark")
+	if publish < 0 || install < 0 || benchmark < 0 || !(publish < install && install < benchmark) {
+		t.Error("release checklist must publish and install the release before benchmarking it")
+	}
+	if want := `go run ./benchmarks -perf -bin "$(command -v llm-data)"`; !strings.Contains(checklist, want) {
+		t.Errorf("release checklist does not measure the installed release binary with %q", want)
+	}
+	for _, line := range strings.Split(checklist, "\n") {
+		if strings.HasPrefix(line, "- [ ]") &&
+			strings.Contains(line, "benchmarks/results-performance.*") &&
+			strings.Contains(line, "published release version") &&
+			strings.Contains(line, "not `dev`") {
+			return
+		}
+	}
+	t.Error("release checklist does not require results naming the published release instead of dev")
+}
