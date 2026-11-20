@@ -234,7 +234,7 @@ The [AXI audit](docs/axi-audit.md) records the conformance evidence and remainin
 ## Documentation
 
 - [AXI audit](docs/axi-audit.md)
-- [AXI catalog entry](docs/axi-catalog-entry.md)
+- [AXI catalog entry](docs/axi-catalog-entry.yaml)
 - [Demo source and rendering](docs/demo/README.md)
 - [Release checklist](docs/release-checklist.md)
 - [Agent Skill](skills/llm-data/SKILL.md)
