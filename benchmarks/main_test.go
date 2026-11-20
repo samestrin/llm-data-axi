@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -749,5 +750,42 @@ func TestRunPerfAgainstTheRealBinary(t *testing.T) {
 	}
 	if n := strings.Count(out.String(), "| `llm-data "); n != 3 {
 		t.Fatalf("got %d case rows, want 3:\n%s", n, out.String())
+	}
+}
+
+// Defends against the committed timings lagging the release they are quoted
+// for: results measured on 1.1.0 sat beside a README and catalog entry that
+// describe 2.0.x. The newest dated heading in CHANGELOG.md names the release;
+// the committed JSON, and the README sentence that quotes it, must name the
+// same version. No tag lookup, so a shallow CI checkout reads the same thing.
+func TestCommittedPerfResultsAreFromTheLatestRelease(t *testing.T) {
+	changelog, err := os.ReadFile(filepath.Join("..", "CHANGELOG.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`(?m)^## \[(\d+\.\d+\.\d+)\] - \d{4}-\d{2}-\d{2}$`).FindSubmatch(changelog)
+	if m == nil {
+		t.Fatal("CHANGELOG.md has no dated release heading")
+	}
+	release := string(m[1])
+
+	b, err := os.ReadFile(perfJSONName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r PerfResults
+	if err := json.Unmarshal(b, &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Version != release {
+		t.Fatalf("%s records llm-data %s, but the latest release is %s; build the release and run go run ./benchmarks -perf", perfJSONName, r.Version, release)
+	}
+
+	readme, err := os.ReadFile(filepath.Join("..", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "committed measurements for `llm-data " + release + "`"; !bytes.Contains(readme, []byte(want)) {
+		t.Fatalf("README Performance section does not quote %q", want)
 	}
 }
