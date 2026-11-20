@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - **The committed performance results are from the 2.0.1 release binary.** `benchmarks/results-performance.json` and `.md` were measured on 1.1.0; they are regenerated from the v2.0.1 release build, and the README Performance section quotes them. A test fails when the committed results name a version other than the latest release in this changelog. (epic 10)
+- **The release documentation stays on the latest release.** The checklist now requires re-running `go run ./benchmarks -perf` and committing the regenerated results and README Performance table at each release. The README install, quick-start, source and configuration examples pin v2.0.1. Documentation only.
 
 ## [2.0.1] - 2026-11-19
 

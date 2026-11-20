@@ -31,10 +31,10 @@ The release asset names are `llm-data-<os>-<arch>` and `llm-data-mcp-<os>-<arch>
 
 For each selected platform, the installer downloads `SHA256SUMS.txt`, downloads both matching assets and verifies each SHA-256 checksum before installing either binary. A missing entry or mismatched checksum stops the installation.
 
-Pin the latest release, `v2.0.0`, or choose another installed location:
+Pin the latest release, `v2.0.1`, or choose another installed location:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v2.0.0 sh
+curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v2.0.1 sh
 curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_INSTALL_DIR="$HOME/bin" sh
 ```
 
@@ -52,7 +52,7 @@ go install github.com/samestrin/llm-data-axi/v2/cmd/llm-data-mcp@latest
 ```bash
 git clone https://github.com/samestrin/llm-data-axi.git
 cd llm-data-axi
-git checkout v2.0.0
+git checkout v2.0.1
 make build
 make install
 ```
@@ -88,7 +88,7 @@ npx skills add samestrin/llm-data-axi --skill llm-data
 Run these commands in a Git project directory:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v2.0.0 sh
+curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v2.0.1 sh
 export PATH="$HOME/.local/bin:$PATH"
 llm-data detect --path . --axi
 llm-data git-changes --axi
@@ -163,7 +163,7 @@ llm-data yaml multiset --file config.yaml server.port 8080 server.host localhost
 
 | Name | Default | Meaning |
 |---|---|---|
-| `LLM_DATA_VERSION` | latest release | Release tag fetched by `install.sh`, such as `v2.0.0` |
+| `LLM_DATA_VERSION` | latest release | Release tag fetched by `install.sh`, such as `v2.0.1` |
 | `LLM_DATA_INSTALL_DIR` | `$HOME/.local/bin` | Directory where `install.sh` places both binaries |
 | `LLM_DATA_BASE_URL` | release selected by `LLM_DATA_VERSION` | Alternative release-asset base URL; takes precedence over `LLM_DATA_VERSION` |
 | `LLM_DATA_BINARY` | automatic lookup | Explicit `llm-data` path for `llm-data-mcp`; otherwise lookup tries `PATH`, the server binary's directory and `/usr/local/bin/llm-data` |
