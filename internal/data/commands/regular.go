@@ -49,3 +49,12 @@ func requireRegularFile(path string) error {
 func invalidFlagValue(name string, value interface{}, want string) error {
 	return &output.UsageError{Msg: fmt.Sprintf("invalid value \"%v\" for --%s: want %s", value, name, want)}
 }
+
+// skipGitDir reports whether a walk rooted at root should pass over path, a
+// directory: a .git below the root, while ignored files are filtered. A
+// search of a repository used to match git's own files and list .git/index
+// and every pack as binary_skipped. Naming .git as the root, or passing
+// --no-gitignore, still reaches it.
+func skipGitDir(root, path string, info os.FileInfo, filtering bool) bool {
+	return filtering && info.IsDir() && info.Name() == ".git" && path != root
+}

@@ -164,6 +164,9 @@ func runGrep(cmd *cobra.Command, args []string) error {
 					unreadable = append(unreadable, pathFailure{Path: shownAt.show(path), Reason: failureReason(err)})
 					return nil
 				}
+				if skipGitDir(absPath, path, info, !grepNoGitignore) {
+					return filepath.SkipDir
+				}
 				if info.IsDir() {
 					return nil
 				}

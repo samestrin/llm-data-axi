@@ -130,6 +130,9 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 					unreadable = append(unreadable, pathFailure{Path: shownAt.show(path), Reason: failureReason(err)})
 					return nil
 				}
+				if skipGitDir(absPath, path, info, !catfilesNoGitignore) {
+					return filepath.SkipDir
+				}
 				if info.IsDir() {
 					return nil
 				}
