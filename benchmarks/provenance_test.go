@@ -14,7 +14,7 @@ import (
 func versionedFake(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "llm-data")
-	script := "#!/bin/sh\n[ \"$1\" = --version ] && { echo 'llm-data version 9.9.9'; exit 0; }\nfor a in \"$@\"; do [ \"$a\" = --axi ] && { echo 'a: 1'; exit 0; }; done\necho '{\"a\": 1}'\n"
+	script := "#!/bin/sh\n[ \"$1\" = --version ] && { echo '9.9.9'; exit 0; }\nfor a in \"$@\"; do [ \"$a\" = --axi ] && { echo 'a: 1'; exit 0; }; done\necho '{\"a\": 1}'\n"
 	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestReportNamesTheBinaryVersionAndEachRepositoryCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(b)
-	for _, want := range []string{"Measured with `llm-data version 9.9.9`", "at commit " + commit, "not a git checkout"} {
+	for _, want := range []string{"Measured with `llm-data` version `9.9.9`", "at commit " + commit, "not a git checkout"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("report does not contain %q:\n%s", want, s)
 		}
@@ -103,7 +103,7 @@ func TestCommittedResultsNameTheBinaryAndTheCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(b)
-	if !strings.Contains(s, "Measured with `llm-data") || !strings.Contains(s, "- llm-data-axi at commit ") {
+	if !strings.Contains(s, "Measured with `llm-data` version `") || !strings.Contains(s, "- llm-data-axi: at commit ") {
 		t.Errorf("RESULTS.md does not name the binary version and the llm-data-axi commit")
 	}
 }
