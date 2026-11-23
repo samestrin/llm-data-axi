@@ -50,6 +50,3 @@ Sleep 2s
 
 Type "llm-data yaml get --file config.yaml server" Enter
 Sleep 3s
-
-Hide
-Type "rm -f config.yaml.lock" Enter
