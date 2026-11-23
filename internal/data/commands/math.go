@@ -30,7 +30,12 @@ Supported functions:
 
 Note: For expressions starting with -, use quotes or = prefix:
   llm-data math "(-5 + 10)"
-  llm-data math -- -5 + 10`,
+  llm-data math -- -5 + 10
+
+Examples:
+  llm-data math "2 + 2"
+  llm-data math "round(10 / 3)"
+  llm-data math "max(3, 7) ** 2" --json`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: runMath,
 	}

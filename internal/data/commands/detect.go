@@ -41,13 +41,18 @@ func newDetectCmd() *cobra.Command {
 		Short: "Detect project type and technology stack",
 		Long: `Detect project type, language, package manager, and framework.
 
-Output fields:
-  STACK: node | python | go | rust | java | ruby | php | dotnet | unknown
-  LANGUAGE: typescript | javascript | python | go | rust | java | ruby | php | csharp | unknown
-  PACKAGE_MANAGER: npm | yarn | pnpm | pip | poetry | go | cargo | maven | bundler | composer
-  FRAMEWORK: nextjs | remix | express | fastapi | django | flask | gin | actix | spring | rails
-  HAS_TESTS: true | false
-  PYTEST_AVAILABLE: true | false`,
+Output fields (TOON and --json):
+  stack: node | python | go | rust | java | ruby | php | dotnet | unknown
+  language: typescript | javascript | python | go | rust | java | ruby | php | csharp | unknown
+  package_manager: npm | yarn | pnpm | pip | poetry | go | cargo | maven | bundler | composer
+  framework: nextjs | remix | express | fastapi | django | flask | gin | actix | spring | rails
+  has_tests: true | false
+  pytest_available: true | false
+
+Examples:
+  llm-data detect
+  llm-data detect --path ../service
+  llm-data detect --dirs backend,frontend`,
 		Args: cobra.NoArgs,
 		RunE: runDetect,
 	}

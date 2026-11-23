@@ -42,7 +42,16 @@ func newTemplateCmd() *cobra.Command {
 		Long: `Perform variable substitution in template files.
 
 Supports {{variable}} or [[variable]] syntax with optional defaults.
-Example: {{name|Guest}} uses "Guest" if name is not defined.`,
+Example: {{name|Guest}} uses "Guest" if name is not defined.
+
+--var KEY=@PATH reads the value from the file at PATH, any file the process
+can read, and --env makes every environment variable a template variable.
+Both are opt-in; pass them only with templates and paths you trust.
+
+Examples:
+  llm-data template greeting.txt --var name=Ada
+  llm-data template prompt.md --syntax brackets --var body=@notes.txt
+  llm-data template config.tmpl --data values.json --strict -o config.yaml`,
 		Args: cobra.ExactArgs(1),
 		RunE: runTemplate,
 	}

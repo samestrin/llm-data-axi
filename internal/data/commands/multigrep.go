@@ -96,8 +96,14 @@ func newMultigrepCmd() *cobra.Command {
 		Long: `Search for multiple keywords in parallel with intelligent output management.
 Prioritizes definition matches (function, class, const declarations) over usage matches.
 
-Example:
-  llm-data multigrep --path ./src --keywords "useState,useEffect" --extensions "ts,tsx"`,
+With --path naming a file, matches are labelled with that file's path. With
+--output-dir each keyword is written to its own file, and output_files maps
+each keyword to the file it was written to.
+
+Examples:
+  llm-data multigrep --path ./src --keywords "useState,useEffect" --extensions "ts,tsx"
+  llm-data multigrep --path . --keywords "NewRootCmd" -d
+  llm-data multigrep --path src --keywords "parse,render" --output-dir /tmp/kw`,
 		RunE: runMultigrep,
 	}
 

@@ -70,12 +70,20 @@ type catfilesMinResult struct {
 // newCatfilesCmd creates the catfiles command
 func newCatfilesCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "catfiles [paths...]",
+		Use:   "catfiles <path>...",
 		Short: "Concatenate multiple files with headers",
 		Long: `Concatenate multiple files or directory contents with headers.
 Each file is prefixed with a header showing the file path and size.
 
-Respects .gitignore patterns by default.`,
+Respects .gitignore patterns by default and skips .git. Reads regular files
+only: a FIFO, device or socket in a directory is listed in skipped, and one
+named outright is an error. Binary files are listed in skipped too. A stop at
+--max-size sets truncated and not_read.
+
+Examples:
+  llm-data catfiles README.md docs/
+  llm-data catfiles src --max-size 2
+  llm-data catfiles src --json --min`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: runCatfiles,
 	}

@@ -93,7 +93,18 @@ func newGrepCmd() *cobra.Command {
 		Use:   "grep <pattern> <path>...",
 		Short: "Search for pattern in files",
 		Long: `Search for a pattern in files using regular expressions.
-Respects .gitignore patterns by default.`,
+The pattern and at least one path are required.
+
+Respects .gitignore patterns by default and skips .git; --no-gitignore
+searches both. Binary files are listed in binary_skipped, and FIFOs, devices
+and sockets found in a directory in non_regular_skipped. A matching line is
+cut at 200 bytes unless --full is passed.
+
+Examples:
+  llm-data grep TODO src
+  llm-data grep -i -n "func main" cmd internal
+  llm-data grep -l "deprecated" . --json
+  llm-data grep -- -v docs`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: runGrep,
 	}

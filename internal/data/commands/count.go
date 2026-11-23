@@ -62,12 +62,15 @@ Modes (use --mode or legacy flags):
   --mode lines       or  --lines       - Count lines in files
   --mode files       or  --files       - Count files matching pattern
 
-Output format:
-  TOTAL: N
-  CHECKED: N (for checkboxes mode)
-  UNCHECKED: N (for checkboxes mode)
-  PARTIAL: N (for checkboxes mode)
-  PERCENT: N% (for checkboxes mode)`,
+Output fields (TOON and --json):
+  count      the total
+  checked, unchecked, partial, percent   checkboxes mode only
+  skipped    FIFOs, devices and sockets passed over, when there were any
+
+Examples:
+  llm-data count --mode checkboxes --path PLAN.md
+  llm-data count --mode lines --path src -r
+  llm-data count --mode files --path src --pattern "*.go" -r`,
 		RunE: runCount,
 	}
 	cmd.Flags().StringVar(&countPath, "path", "", "Path to count in (required)")

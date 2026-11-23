@@ -27,7 +27,12 @@ func newStatsCmd() *cobra.Command {
 		Use:   "stats",
 		Short: "Display directory statistics",
 		Long: `Display statistics about a directory including file counts,
-total size, and breakdown by file extension.`,
+total size, and breakdown by file extension.
+
+Examples:
+  llm-data stats
+  llm-data stats --path src
+  llm-data stats --path . --no-gitignore --json`,
 		Args: cobra.NoArgs,
 		RunE: runStats,
 	}

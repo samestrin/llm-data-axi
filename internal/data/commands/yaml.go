@@ -69,9 +69,9 @@ Output Formats:
   --min:   just the value, with --plain or --json. No effect on TOON.
 
 Examples:
-  yaml get --file config.yaml helper.llm
-  yaml get --file config.yaml helper.llm --plain --min
-  yaml get --file config.yaml missing.key --default "fallback"`,
+  llm-data yaml get --file config.yaml helper.llm
+  llm-data yaml get --file config.yaml helper.llm --plain --min
+  llm-data yaml get --file config.yaml missing.key --default "fallback"`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if file == "" {
@@ -147,18 +147,20 @@ func newYamlSetCmd() *cobra.Command {
 		Long: `Store a value in the YAML config file at the specified key.
 
 Creates intermediate keys if they don't exist.
-Preserves comments where possible.
+Preserves comments where possible, including the comment on the edited line.
+A symlinked file is written through to its target, and the file keeps its mode.
+An empty key, or one with an empty segment such as a..b, is a usage error (exit 2).
 
 Use '-' as VALUE to read from stdin (for piping values or multi-line input).
 Use --dry-run to preview changes without writing to the file.
 Use --quiet to suppress success messages (errors still output).
 
 Examples:
-  yaml set --file config.yaml helper.llm claude
-  yaml set --file config.yaml helper.max_lines 2500
-  yaml set --file config.yaml new.nested.key value --create
-  echo "piped" | yaml set --file config.yaml key -
-  yaml set --file config.yaml key value --dry-run`,
+  llm-data yaml set --file config.yaml helper.llm claude
+  llm-data yaml set --file config.yaml helper.max_lines 2500
+  llm-data yaml set --file config.yaml new.nested.key value --create
+  echo "piped" | llm-data yaml set --file config.yaml key -
+  llm-data yaml set --file config.yaml key value --dry-run`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if file == "" {
@@ -292,10 +294,10 @@ Output Formats:
   --min:   values only, with --plain or --json. No effect on TOON.
 
 Examples:
-  yaml multiget --file config.yaml helper.llm project.type
-  yaml multiget --file config.yaml helper.llm missing.key --defaults '{"missing.key": "default"}'
-  yaml multiget --file config.yaml helper.llm project.type --plain --min
-  yaml multiget --file config.yaml --required-file keys.txt`,
+  llm-data yaml multiget --file config.yaml helper.llm project.type
+  llm-data yaml multiget --file config.yaml helper.llm missing.key --defaults '{"missing.key": "default"}'
+  llm-data yaml multiget --file config.yaml helper.llm project.type --plain --min
+  llm-data yaml multiget --file config.yaml --required-file keys.txt`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if file == "" {
@@ -416,15 +418,16 @@ func newYamlMultisetCmd() *cobra.Command {
 		Short: "Store multiple values atomically",
 		Long: `Store multiple key-value pairs in the YAML config file in a single atomic operation.
 
-All keys are validated before any writes occur.
+All keys are validated before any writes occur: an empty key, or one with an
+empty segment such as a..b, is a usage error (exit 2) and nothing is written.
 Arguments must be in KEY VALUE pairs.
 Use --dry-run to preview changes without writing to the file.
 Use --quiet to suppress success messages (errors still output).
 
 Examples:
-  yaml multiset --file config.yaml helper.llm claude helper.max_lines 2500
-  yaml multiset --file config.yaml --create new.key value1 other.key value2
-  yaml multiset --file config.yaml key1 val1 key2 val2 --dry-run`,
+  llm-data yaml multiset --file config.yaml helper.llm claude helper.max_lines 2500
+  llm-data yaml multiset --file config.yaml --create new.key value1 other.key value2
+  llm-data yaml multiset --file config.yaml key1 val1 key2 val2 --dry-run`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if file == "" {
