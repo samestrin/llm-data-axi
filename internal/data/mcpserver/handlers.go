@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -255,9 +256,9 @@ func ExecuteHandler(toolName string, args map[string]interface{}) (string, error
 	// --axi wins over --json — but relying on that makes the encoding depend on
 	// a precedence rule rather than on what was asked for.
 	if axi {
-		cmdArgs = append(cmdArgs, "--axi")
+		cmdArgs = withEncoding(cmdArgs, []string{"--axi"})
 	} else {
-		cmdArgs = append(cmdArgs, "--json", "--min")
+		cmdArgs = withEncoding(cmdArgs, []string{"--json", "--min"})
 	}
 
 	// Determine timeout based on command type
@@ -300,6 +301,51 @@ func ExecuteHandler(toolName string, args map[string]interface{}) (string, error
 	}
 
 	return string(output), nil
+}
+
+// withEncoding inserts the encoding flags straight after the command words,
+// ahead of the builder's own flags. They used to be appended at the end of the
+// line, which is behind the "--" that ends option parsing, where the CLI would
+// read them as positionals. Command words never start with "-", and every
+// builder puts its flags and then "--" after them, so the first token that
+// starts with "-" marks the end of the command words.
+func withEncoding(cmdArgs, encoding []string) []string {
+	at := len(cmdArgs)
+	for i, a := range cmdArgs {
+		if strings.HasPrefix(a, "-") {
+			at = i
+			break
+		}
+	}
+	out := make([]string, 0, len(cmdArgs)+len(encoding))
+	out = append(out, cmdArgs[:at]...)
+	out = append(out, encoding...)
+	return append(out, cmdArgs[at:]...)
+}
+
+// appendPositionals ends option parsing with "--" and then appends values
+// built from tool input. Without the separator a value spelled like an option
+// is read as one: the yaml_multiset pair {"--file=h.yaml": "--create"} once
+// redirected a write to h.yaml, and a grep pattern of "-v" could not be
+// searched for at all. Builders call it last, after every flag.
+func appendPositionals(cmdArgs []string, values ...string) []string {
+	if len(values) == 0 {
+		return cmdArgs
+	}
+	return append(append(cmdArgs, "--"), values...)
+}
+
+// stringList returns the string elements of an array argument.
+func stringList(args map[string]interface{}, key string) []string {
+	var out []string
+	if items, ok := args[key].([]interface{}); ok {
+		for _, item := range items {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
 }
 
 // CommandFailedError is a CLI run that exited non-zero. ExecuteHandler
@@ -387,16 +433,11 @@ func buildTreeArgs(args map[string]interface{}) []string {
 
 func buildGrepArgs(args map[string]interface{}) []string {
 	cmdArgs := []string{"grep"}
+	var positionals []string
 	if pattern, ok := args["pattern"].(string); ok {
-		cmdArgs = append(cmdArgs, pattern)
+		positionals = append(positionals, pattern)
 	}
-	if paths, ok := args["paths"].([]interface{}); ok {
-		for _, p := range paths {
-			if s, ok := p.(string); ok {
-				cmdArgs = append(cmdArgs, s)
-			}
-		}
-	}
+	positionals = append(positionals, stringList(args, "paths")...)
 	if getBool(args, "ignore_case") {
 		cmdArgs = append(cmdArgs, "-i")
 	}
@@ -406,18 +447,11 @@ func buildGrepArgs(args map[string]interface{}) []string {
 	if getBool(args, "files_only") {
 		cmdArgs = append(cmdArgs, "-l")
 	}
-	return cmdArgs
+	return appendPositionals(cmdArgs, positionals...)
 }
 
 func buildMultiexistsArgs(args map[string]interface{}) []string {
 	cmdArgs := []string{"multiexists"}
-	if paths, ok := args["paths"].([]interface{}); ok {
-		for _, p := range paths {
-			if s, ok := p.(string); ok {
-				cmdArgs = append(cmdArgs, s)
-			}
-		}
-	}
 	if getBool(args, "verbose") {
 		cmdArgs = append(cmdArgs, "--verbose")
 	}
@@ -428,7 +462,7 @@ func buildMultiexistsArgs(args map[string]interface{}) []string {
 	if getBoolDefault(args, "min", true) {
 		cmdArgs = append(cmdArgs, "--min")
 	}
-	return cmdArgs
+	return appendPositionals(cmdArgs, stringList(args, "paths")...)
 }
 
 func buildTemplateArgs(args map[string]interface{}) []string {
@@ -448,8 +482,8 @@ func buildTemplateArgs(args map[string]interface{}) []string {
 		return []string{"template"}
 	}
 
-	// Build args: template command needs file as positional arg FIRST
-	cmdArgs := []string{"template", templateFile}
+	// The file is the one positional, so it goes last, after "--".
+	cmdArgs := []string{"template"}
 
 	if vars, ok := args["vars"].(map[string]interface{}); ok {
 		for k, v := range vars {
@@ -469,7 +503,7 @@ func buildTemplateArgs(args map[string]interface{}) []string {
 	if getBoolDefault(args, "min", true) {
 		cmdArgs = append(cmdArgs, "--min")
 	}
-	return cmdArgs
+	return appendPositionals(cmdArgs, templateFile)
 }
 
 func buildDiscoverTestsArgs(args map[string]interface{}) []string {
@@ -710,11 +744,6 @@ func buildYamlGetArgs(args map[string]interface{}) []string {
 		cmdArgs = append(cmdArgs, "--file", file)
 	}
 
-	// Add key as positional argument
-	if key, ok := args["key"].(string); ok {
-		cmdArgs = append(cmdArgs, key)
-	}
-
 	// Default value
 	if def, ok := args["default"].(string); ok {
 		cmdArgs = append(cmdArgs, "--default", def)
@@ -728,6 +757,11 @@ func buildYamlGetArgs(args map[string]interface{}) []string {
 		cmdArgs = append(cmdArgs, "--min")
 	}
 
+	// The key is a positional, so it goes last, after "--".
+	if key, ok := args["key"].(string); ok {
+		cmdArgs = appendPositionals(cmdArgs, key)
+	}
+
 	return cmdArgs
 }
 
@@ -739,12 +773,13 @@ func buildYamlSetArgs(args map[string]interface{}) []string {
 		cmdArgs = append(cmdArgs, "--file", file)
 	}
 
-	// Add key and value as positional arguments
+	// Key and value are positionals, appended last after "--".
+	var positionals []string
 	if key, ok := args["key"].(string); ok {
-		cmdArgs = append(cmdArgs, key)
+		positionals = append(positionals, key)
 	}
 	if value, ok := args["value"].(string); ok {
-		cmdArgs = append(cmdArgs, value)
+		positionals = append(positionals, value)
 	}
 
 	// Create flag
@@ -770,7 +805,7 @@ func buildYamlSetArgs(args map[string]interface{}) []string {
 		cmdArgs = append(cmdArgs, "--min")
 	}
 
-	return cmdArgs
+	return appendPositionals(cmdArgs, positionals...)
 }
 
 func buildYamlMultigetArgs(args map[string]interface{}) []string {
@@ -779,15 +814,6 @@ func buildYamlMultigetArgs(args map[string]interface{}) []string {
 	// Add --file flag (required)
 	if file, ok := args["file"].(string); ok {
 		cmdArgs = append(cmdArgs, "--file", file)
-	}
-
-	// Add keys as positional arguments
-	if keys, ok := args["keys"].([]interface{}); ok {
-		for _, k := range keys {
-			if s, ok := k.(string); ok {
-				cmdArgs = append(cmdArgs, s)
-			}
-		}
 	}
 
 	// Add defaults as JSON string to --defaults flag
@@ -812,7 +838,8 @@ func buildYamlMultigetArgs(args map[string]interface{}) []string {
 		cmdArgs = append(cmdArgs, "--min")
 	}
 
-	return cmdArgs
+	// The keys are positionals, appended last after "--".
+	return appendPositionals(cmdArgs, stringList(args, "keys")...)
 }
 
 func buildYamlMultisetArgs(args map[string]interface{}) []string {
@@ -823,14 +850,21 @@ func buildYamlMultisetArgs(args map[string]interface{}) []string {
 		cmdArgs = append(cmdArgs, "--file", file)
 	}
 
-	// Convert pairs object to KEY VALUE arguments
+	// Convert the pairs object to KEY VALUE positionals, appended last after
+	// "--". Keys are sorted so the command line does not depend on map order.
+	var positionals []string
 	if pairs, ok := args["pairs"].(map[string]interface{}); ok {
-		for key, value := range pairs {
-			cmdArgs = append(cmdArgs, key)
-			if v, ok := value.(string); ok {
-				cmdArgs = append(cmdArgs, v)
+		keys := make([]string, 0, len(pairs))
+		for key := range pairs {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			positionals = append(positionals, key)
+			if v, ok := pairs[key].(string); ok {
+				positionals = append(positionals, v)
 			} else {
-				cmdArgs = append(cmdArgs, fmt.Sprintf("%v", value))
+				positionals = append(positionals, fmt.Sprintf("%v", pairs[key]))
 			}
 		}
 	}
@@ -858,19 +892,12 @@ func buildYamlMultisetArgs(args map[string]interface{}) []string {
 		cmdArgs = append(cmdArgs, "--min")
 	}
 
-	return cmdArgs
+	return appendPositionals(cmdArgs, positionals...)
 }
 
 func buildCatfilesArgs(args map[string]interface{}) []string {
 	cmdArgs := []string{"catfiles"}
 
-	if paths, ok := args["paths"].([]interface{}); ok {
-		for _, p := range paths {
-			if s, ok := p.(string); ok {
-				cmdArgs = append(cmdArgs, s)
-			}
-		}
-	}
 	if maxSize, ok := getInt(args, "max_size"); ok {
 		cmdArgs = append(cmdArgs, "--max-size", strconv.Itoa(maxSize))
 	}
@@ -884,14 +911,15 @@ func buildCatfilesArgs(args map[string]interface{}) []string {
 		cmdArgs = append(cmdArgs, "--min")
 	}
 
-	return cmdArgs
+	return appendPositionals(cmdArgs, stringList(args, "paths")...)
 }
 
 func buildMathArgs(args map[string]interface{}) []string {
 	cmdArgs := []string{"math"}
 
+	// A leading "-" is common in an expression ("-1+2"), so it goes after "--".
 	if expr, ok := args["expression"].(string); ok {
-		cmdArgs = append(cmdArgs, expr)
+		cmdArgs = appendPositionals(cmdArgs, expr)
 	}
 
 	return cmdArgs
