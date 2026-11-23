@@ -90,7 +90,7 @@ type grepFile struct {
 // newGrepCmd creates the grep command
 func newGrepCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "grep [pattern] [paths...]",
+		Use:   "grep <pattern> <path>...",
 		Short: "Search for pattern in files",
 		Long: `Search for a pattern in files using regular expressions.
 Respects .gitignore patterns by default.`,

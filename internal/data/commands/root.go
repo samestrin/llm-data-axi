@@ -367,7 +367,65 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	axi, jsonOut, minOut := outputMode(cmd, args)
 	output.SetDefaultAXI(axi)
-	return output.New(jsonOut, minOut, stdout).PrintError(err)
+	return output.New(jsonOut, minOut, stdout).PrintError(withUsageHelp(cmd, err))
+}
+
+// usageHelpError is a usage error with the next steps that fix it, as a help
+// list beside the message. cobra's own usage errors ("requires at least 2
+// arg(s), only received 1", `required flag(s) "path" not set`) named nothing
+// to pass and nowhere to look.
+type usageHelpError struct {
+	err  error
+	help []string
+}
+
+func (e *usageHelpError) Error() string { return e.err.Error() }
+func (e *usageHelpError) Unwrap() error { return e.err }
+
+// ErrorFields is the help list, with the fields of the error it wraps, such
+// as an unknown flag's valid_flags.
+func (e *usageHelpError) ErrorFields() map[string]any {
+	fields := map[string]any{}
+	var inner output.FieldsError
+	if errors.As(e.err, &inner) {
+		for k, v := range inner.ErrorFields() {
+			fields[k] = v
+		}
+	}
+	fields["help"] = e.help
+	return fields
+}
+
+// requiredFlagsPattern is cobra's missing-required-flag error; the names are
+// quoted and comma-separated.
+var requiredFlagsPattern = regexp.MustCompile(`required flag\(s\) (.*) not set`)
+
+// withUsageHelp adds the help list to a usage error (exit 2): each missing
+// required flag and what it takes, the command's usage line, and its --help.
+// Help already on the error comes first. Any other error is returned as is.
+func withUsageHelp(cmd *cobra.Command, err error) error {
+	// A moved command's stub is hidden; its error already names the
+	// replacement, and its usage line would point back at the old name.
+	if cmd == nil || cmd.Hidden || output.ExitCodeFor(err) != 2 {
+		return err
+	}
+	var help []string
+	var existing *usageHelpError
+	if errors.As(err, &existing) {
+		help = append(help, existing.help...)
+		err = existing.err
+	}
+	if m := requiredFlagsPattern.FindStringSubmatch(err.Error()); m != nil {
+		for _, q := range regexp.MustCompile(`"([^"]+)"`).FindAllStringSubmatch(m[1], -1) {
+			if f := cmd.Flags().Lookup(q[1]); f != nil {
+				help = append(help, fmt.Sprintf("Pass --%s <%s>: %s", f.Name, f.Value.Type(), f.Usage))
+			}
+		}
+	}
+	help = append(help,
+		"Usage: "+cmd.UseLine(),
+		fmt.Sprintf("Run `%s --help` for flags and examples", cmd.CommandPath()))
+	return &usageHelpError{err: err, help: help}
 }
 
 // versionShorthand rewrites -V to -v when the run is the root command, so -V

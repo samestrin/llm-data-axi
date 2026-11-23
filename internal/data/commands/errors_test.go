@@ -163,7 +163,9 @@ func TestMissingFlagValueKeepsCobraMessage(t *testing.T) {
 	if code != 2 || stderr != "" {
 		t.Errorf("exit %d stderr %q, want 2 and empty", code, stderr)
 	}
-	if stdout != "error: true\nmessage: \"flag needs an argument: --file\"\n" {
+	// The message is cobra's, unchanged, and no flag list is added. The help
+	// list (usage line and --help) is on every usage error since v2.0.2.
+	if !strings.HasPrefix(stdout, "error: true\n") || !strings.Contains(stdout, "message: \"flag needs an argument: --file\"\n") || strings.Contains(stdout, "valid_flags") {
 		t.Errorf("want cobra's message unchanged in TOON, got %q", stdout)
 	}
 }

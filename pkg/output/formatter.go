@@ -386,8 +386,17 @@ func (f *Formatter) PrintError(err error) int {
 			// Minimal: just the error message
 			fmt.Fprintln(f.Writer, err.Error())
 		} else {
-			// Default: "Error: " prefix
+			// Default: "Error: " prefix, then the error's help list, which
+			// TOON and JSON print as a field.
 			fmt.Fprintf(f.Writer, "Error: %v\n", err)
+			var fe FieldsError
+			if errors.As(err, &fe) {
+				if help, ok := fe.ErrorFields()["help"].([]string); ok {
+					for _, h := range help {
+						fmt.Fprintf(f.Writer, "  %s\n", h)
+					}
+				}
+			}
 		}
 	}
 	// Classified rather than always 1: AXI requires a malformed invocation to

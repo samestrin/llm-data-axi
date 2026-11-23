@@ -113,7 +113,10 @@ func runCount(cmd *cobra.Command, args []string) error {
 	}
 
 	if mode == "" {
-		return fmt.Errorf("must specify --mode or one of --checkboxes, --lines, --files")
+		return &usageHelpError{
+			err:  &output.UsageError{Msg: "missing --mode: pass --mode checkboxes, lines or files (or --checkboxes, --lines, --files)"},
+			help: []string{"Pass --mode checkboxes, lines or files"},
+		}
 	}
 	switch mode {
 	case "checkboxes", "lines", "files":
