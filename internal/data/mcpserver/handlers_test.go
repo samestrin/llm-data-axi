@@ -61,7 +61,7 @@ func TestBuildGrepArgs(t *testing.T) {
 				"pattern": "TODO",
 				"paths":   []interface{}{"src"},
 			},
-			want: []string{"grep", "TODO", "src"},
+			want: []string{"grep", "--", "TODO", "src"},
 		},
 		{
 			name: "with flags",
@@ -71,7 +71,7 @@ func TestBuildGrepArgs(t *testing.T) {
 				"ignore_case":  true,
 				"line_numbers": true,
 			},
-			want: []string{"grep", "error", ".", "lib", "-i", "-n"},
+			want: []string{"grep", "-i", "-n", "--", "error", ".", "lib"},
 		},
 	}
 
@@ -97,7 +97,7 @@ func TestBuildMultiexistsArgs(t *testing.T) {
 				"paths":   []interface{}{"file1.txt", "dir/file2.txt"},
 				"verbose": true,
 			},
-			want: []string{"multiexists", "file1.txt", "dir/file2.txt", "--verbose", "--no-fail", "--json", "--min"},
+			want: []string{"multiexists", "--verbose", "--no-fail", "--json", "--min", "--", "file1.txt", "dir/file2.txt"},
 		},
 		{
 			name: "with json+min disabled",
@@ -106,7 +106,7 @@ func TestBuildMultiexistsArgs(t *testing.T) {
 				"json":  false,
 				"min":   false,
 			},
-			want: []string{"multiexists", "file.txt", "--no-fail"},
+			want: []string{"multiexists", "--no-fail", "--", "file.txt"},
 		},
 	}
 
@@ -281,12 +281,12 @@ func TestBuildTemplateArgs(t *testing.T) {
 		{
 			name: "basic",
 			args: map[string]interface{}{"file": "template.txt"},
-			want: []string{"template", "template.txt", "--syntax", "brackets", "--json", "--min"},
+			want: []string{"template", "--syntax", "brackets", "--json", "--min", "--", "template.txt"},
 		},
 		{
 			name: "with syntax",
 			args: map[string]interface{}{"file": "template.txt", "syntax": "braces"},
-			want: []string{"template", "template.txt", "--syntax", "braces", "--json", "--min"},
+			want: []string{"template", "--syntax", "braces", "--json", "--min", "--", "template.txt"},
 		},
 	}
 
@@ -679,17 +679,17 @@ func TestBuildYamlGetArgs(t *testing.T) {
 		{
 			name: "basic get (defaults to json+min)",
 			args: map[string]interface{}{"file": "/tmp/config.yaml", "key": "helper.llm"},
-			want: []string{"yaml", "get", "--file", "/tmp/config.yaml", "helper.llm", "--json", "--min"},
+			want: []string{"yaml", "get", "--file", "/tmp/config.yaml", "--json", "--min", "--", "helper.llm"},
 		},
 		{
 			name: "with default value",
 			args: map[string]interface{}{"file": "/tmp/config.yaml", "key": "missing.key", "default": "fallback"},
-			want: []string{"yaml", "get", "--file", "/tmp/config.yaml", "missing.key", "--default", "fallback", "--json", "--min"},
+			want: []string{"yaml", "get", "--file", "/tmp/config.yaml", "--default", "fallback", "--json", "--min", "--", "missing.key"},
 		},
 		{
 			name: "with json+min disabled",
 			args: map[string]interface{}{"file": "/tmp/config.yaml", "key": "helper.llm", "json": false, "min": false},
-			want: []string{"yaml", "get", "--file", "/tmp/config.yaml", "helper.llm"},
+			want: []string{"yaml", "get", "--file", "/tmp/config.yaml", "--", "helper.llm"},
 		},
 	}
 
@@ -712,32 +712,32 @@ func TestBuildYamlSetArgs(t *testing.T) {
 		{
 			name: "basic set (defaults to json+min)",
 			args: map[string]interface{}{"file": "/tmp/config.yaml", "key": "helper.llm", "value": "claude"},
-			want: []string{"yaml", "set", "--file", "/tmp/config.yaml", "helper.llm", "claude", "--json", "--min"},
+			want: []string{"yaml", "set", "--file", "/tmp/config.yaml", "--json", "--min", "--", "helper.llm", "claude"},
 		},
 		{
 			name: "with create flag",
 			args: map[string]interface{}{"file": "/tmp/config.yaml", "key": "new.key", "value": "newvalue", "create": true},
-			want: []string{"yaml", "set", "--file", "/tmp/config.yaml", "new.key", "newvalue", "--create", "--json", "--min"},
+			want: []string{"yaml", "set", "--file", "/tmp/config.yaml", "--create", "--json", "--min", "--", "new.key", "newvalue"},
 		},
 		{
 			name: "with json+min disabled",
 			args: map[string]interface{}{"file": "/tmp/config.yaml", "key": "helper.llm", "value": "claude", "json": false, "min": false},
-			want: []string{"yaml", "set", "--file", "/tmp/config.yaml", "helper.llm", "claude"},
+			want: []string{"yaml", "set", "--file", "/tmp/config.yaml", "--", "helper.llm", "claude"},
 		},
 		{
 			name: "with dry_run flag",
 			args: map[string]interface{}{"file": "/tmp/config.yaml", "key": "helper.llm", "value": "claude", "dry_run": true},
-			want: []string{"yaml", "set", "--file", "/tmp/config.yaml", "helper.llm", "claude", "--dry-run", "--json", "--min"},
+			want: []string{"yaml", "set", "--file", "/tmp/config.yaml", "--dry-run", "--json", "--min", "--", "helper.llm", "claude"},
 		},
 		{
 			name: "with quiet flag",
 			args: map[string]interface{}{"file": "/tmp/config.yaml", "key": "helper.llm", "value": "claude", "quiet": true},
-			want: []string{"yaml", "set", "--file", "/tmp/config.yaml", "helper.llm", "claude", "--quiet", "--json", "--min"},
+			want: []string{"yaml", "set", "--file", "/tmp/config.yaml", "--quiet", "--json", "--min", "--", "helper.llm", "claude"},
 		},
 		{
 			name: "with both dry_run and quiet",
 			args: map[string]interface{}{"file": "/tmp/config.yaml", "key": "helper.llm", "value": "claude", "dry_run": true, "quiet": true},
-			want: []string{"yaml", "set", "--file", "/tmp/config.yaml", "helper.llm", "claude", "--dry-run", "--quiet", "--json", "--min"},
+			want: []string{"yaml", "set", "--file", "/tmp/config.yaml", "--dry-run", "--quiet", "--json", "--min", "--", "helper.llm", "claude"},
 		},
 	}
 
@@ -763,7 +763,7 @@ func TestBuildYamlMultigetArgs(t *testing.T) {
 				"file": "/tmp/config.yaml",
 				"keys": []interface{}{"helper.llm", "project.type"},
 			},
-			want: []string{"yaml", "multiget", "--file", "/tmp/config.yaml", "helper.llm", "project.type", "--json", "--min"},
+			want: []string{"yaml", "multiget", "--file", "/tmp/config.yaml", "--json", "--min", "--", "helper.llm", "project.type"},
 		},
 		{
 			name: "with json+min disabled",
@@ -773,7 +773,7 @@ func TestBuildYamlMultigetArgs(t *testing.T) {
 				"json": false,
 				"min":  false,
 			},
-			want: []string{"yaml", "multiget", "--file", "/tmp/config.yaml", "helper.llm"},
+			want: []string{"yaml", "multiget", "--file", "/tmp/config.yaml", "--", "helper.llm"},
 		},
 		{
 			name: "with defaults as JSON object",
@@ -784,7 +784,7 @@ func TestBuildYamlMultigetArgs(t *testing.T) {
 					"missing.key": "default_value",
 				},
 			},
-			want: []string{"yaml", "multiget", "--file", "/tmp/config.yaml", "helper.llm", "missing.key", "--defaults", `{"missing.key":"default_value"}`, "--json", "--min"},
+			want: []string{"yaml", "multiget", "--file", "/tmp/config.yaml", "--defaults", `{"missing.key":"default_value"}`, "--json", "--min", "--", "helper.llm", "missing.key"},
 		},
 		{
 			name: "with empty defaults (should not add flag)",
@@ -793,7 +793,7 @@ func TestBuildYamlMultigetArgs(t *testing.T) {
 				"keys":     []interface{}{"helper.llm"},
 				"defaults": map[string]interface{}{},
 			},
-			want: []string{"yaml", "multiget", "--file", "/tmp/config.yaml", "helper.llm", "--json", "--min"},
+			want: []string{"yaml", "multiget", "--file", "/tmp/config.yaml", "--json", "--min", "--", "helper.llm"},
 		},
 		{
 			name: "with required_file parameter",
@@ -802,7 +802,7 @@ func TestBuildYamlMultigetArgs(t *testing.T) {
 				"keys":          []interface{}{"helper.llm"},
 				"required_file": "/tmp/required-keys.txt",
 			},
-			want: []string{"yaml", "multiget", "--file", "/tmp/config.yaml", "helper.llm", "--required-file", "/tmp/required-keys.txt", "--json", "--min"},
+			want: []string{"yaml", "multiget", "--file", "/tmp/config.yaml", "--required-file", "/tmp/required-keys.txt", "--json", "--min", "--", "helper.llm"},
 		},
 	}
 
