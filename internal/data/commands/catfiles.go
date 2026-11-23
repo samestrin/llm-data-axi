@@ -39,6 +39,24 @@ type CatfilesResult struct {
 	Files     []CatFileEntry `json:"files"`
 	FileCount int            `json:"file_count"`
 	TotalSize int64          `json:"total_size"`
+	catfilesOmissions
+}
+
+// catfilesOmissions is what a run left out, on stdout beside the files. Both
+// used to go to stderr only, so stdout read as every file in full. Truncated
+// is a stop at --max-size, with NotRead the files after it; Skipped names each
+// file passed over and why (binary, or not a regular file).
+type catfilesOmissions struct {
+	Truncated bool           `json:"truncated,omitempty"`
+	NotRead   int            `json:"not_read,omitempty"`
+	Skipped   []catfilesSkip `json:"skipped,omitempty"`
+	Help      []string       `json:"help,omitempty"`
+}
+
+// catfilesSkip is one file catfiles passed over, and why.
+type catfilesSkip struct {
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
 }
 
 // catfilesMinResult is CatfilesResult under --min, with only the short keys.
@@ -46,6 +64,7 @@ type catfilesMinResult struct {
 	F  []CatFileEntry `json:"f,omitempty"`
 	FC int            `json:"fc"`
 	TS int64          `json:"ts"`
+	catfilesOmissions
 }
 
 // newCatfilesCmd creates the catfiles command
@@ -77,6 +96,7 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 	var files []string
 	shown := make(map[string]string) // file -> the path it is printed as
 	var unreadable []pathFailure
+	var omitted catfilesOmissions
 	for _, pathStr := range args {
 		absPath, err := filepath.Abs(pathStr)
 		if err != nil {
@@ -116,12 +136,19 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 				if ignorer != nil && ignorer.IsIgnored(path) {
 					return nil
 				}
+				if isSpecialFile(path, info) {
+					omitted.Skipped = append(omitted.Skipped, catfilesSkip{Path: shownAt.show(path), Reason: notRegularReason})
+					return nil
+				}
 				files = append(files, path)
 				if _, ok := shown[path]; !ok {
 					shown[path] = shownAt.show(path)
 				}
 				return nil
 			})
+		} else if !info.Mode().IsRegular() {
+			// Named outright, a special file is a path that cannot be read.
+			unreadable = append(unreadable, pathFailure{Path: shownAt.shown, Reason: notRegularReason})
 		} else {
 			files = append(files, absPath)
 			if _, ok := shown[absPath]; !ok {
@@ -143,7 +170,7 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 
 	// Process files and collect entries
 	entries := []CatFileEntry{}
-	for _, filePath := range uniqueFiles {
+	for i, filePath := range uniqueFiles {
 		info, err := os.Stat(filePath)
 		if err != nil {
 			unreadable = append(unreadable, pathFailure{Path: shown[filePath], Reason: failureReason(err)})
@@ -152,7 +179,10 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 
 		size := info.Size()
 		if totalSize+size > maxSizeBytes {
-			fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: Size limit reached (%dMB), stopping\n", catfilesMaxSize)
+			omitted.Truncated = true
+			omitted.NotRead = len(uniqueFiles) - i
+			omitted.Help = append(omitted.Help, fmt.Sprintf(
+				"Stopped at the %dMB --max-size limit with %d file(s) not read: rerun with a larger --max-size, or name fewer paths", catfilesMaxSize, omitted.NotRead))
 			break
 		}
 
@@ -164,7 +194,7 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 
 		// Check if binary
 		if !isTextFile(content) {
-			fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: Skipping binary file: %s\n", shown[filePath])
+			omitted.Skipped = append(omitted.Skipped, catfilesSkip{Path: shown[filePath], Reason: "binary"})
 			continue
 		}
 
@@ -202,20 +232,30 @@ func runCatfiles(cmd *cobra.Command, args []string) error {
 			}
 		}
 		result = catfilesMinResult{
-			F:  minEntries,
-			FC: fileCount,
-			TS: totalSize,
+			F:                 minEntries,
+			FC:                fileCount,
+			TS:                totalSize,
+			catfilesOmissions: omitted,
 		}
 	} else {
 		result = CatfilesResult{
-			Files:     entries,
-			FileCount: fileCount,
-			TotalSize: totalSize,
+			Files:             entries,
+			FileCount:         fileCount,
+			TotalSize:         totalSize,
+			catfilesOmissions: omitted,
 		}
 	}
 
 	formatter := output.New(catfilesJSON, catfilesMinimal, cmd.OutOrStdout())
 	return formatter.Print(result, func(w io.Writer, data interface{}) {
+		defer func() {
+			for _, s := range omitted.Skipped {
+				fmt.Fprintf(w, "SKIPPED: %s (%s)\n", s.Path, s.Reason)
+			}
+			for _, h := range omitted.Help {
+				fmt.Fprintf(w, "TRUNCATED: %s\n", h)
+			}
+		}()
 		if len(entries) == 0 {
 			fmt.Fprintln(w, "FILES: 0")
 			return

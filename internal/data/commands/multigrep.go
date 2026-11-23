@@ -78,8 +78,11 @@ type MultigrepResult struct {
 	FilesSearched       *int                      `json:"files_searched,omitempty"`
 	FS                  *int                      `json:"fs,omitempty"`
 	Results             map[string]*keywordResult `json:"results,omitempty"`
-	R                   map[string]*keywordResult `json:"r,omitempty"`
-	Help                []string                  `json:"help,omitempty"`
+	// NonRegularSkipped names each FIFO, device or socket the walk passed
+	// over: reading a FIFO with no writer blocked the run forever.
+	NonRegularSkipped []string                  `json:"non_regular_skipped,omitempty"`
+	R                 map[string]*keywordResult `json:"r,omitempty"`
+	Help              []string                  `json:"help,omitempty"`
 }
 
 // newMultigrepCmd creates the multigrep command
@@ -141,7 +144,7 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 	}
 
 	// Collect files to search
-	files := collectFiles(path, extensions)
+	files, nonRegular := collectFiles(path, extensions)
 
 	// Definition patterns
 	defPatterns := []string{
@@ -251,6 +254,11 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	shownAt := showPaths(path)
+	for _, p := range nonRegular {
+		mgResult.NonRegularSkipped = append(mgResult.NonRegularSkipped, shownAt.show(p))
+	}
+
 	if totalMatches == 0 {
 		mgResult.Help = multigrepZeroMatchHelp()
 	}
@@ -265,6 +273,9 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(w, strings.Repeat("=", 70))
 		fmt.Fprintf(w, "Search Path: %s\n", shownPath)
 		fmt.Fprintf(w, "Files Searched: %d\n", len(files))
+		for _, p := range mgResult.NonRegularSkipped {
+			fmt.Fprintf(w, "Skipped (not a regular file): %s\n", p)
+		}
 		fmt.Fprintf(w, "Keywords: %d\n", len(keywords))
 		fmt.Fprintf(w, "Total Matches: %d\n", totalMatches)
 		fmt.Fprintln(w, strings.Repeat("=", 70))
@@ -332,8 +343,7 @@ func parseKeywords(s string) []string {
 	return keywords
 }
 
-func collectFiles(basePath string, extensions []string) []string {
-	var files []string
+func collectFiles(basePath string, extensions []string) (files, nonRegular []string) {
 	binaryExts := map[string]bool{
 		"exe": true, "dll": true, "so": true, "dylib": true, "bin": true,
 		"pyc": true, "pyo": true, "class": true, "jar": true, "zip": true,
@@ -373,11 +383,16 @@ func collectFiles(basePath string, extensions []string) []string {
 			}
 		}
 
+		if isSpecialFile(path, info) {
+			nonRegular = append(nonRegular, path)
+			return nil
+		}
+
 		files = append(files, path)
 		return nil
 	})
 
-	return files
+	return files, nonRegular
 }
 
 func searchKeyword(basePath string, files []string, keyword string, defPatterns []string) *keywordResult {

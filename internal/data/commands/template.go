@@ -68,6 +68,9 @@ func runTemplate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("stdin not supported, use file path")
 	}
 
+	if err := requireRegularFile(args[0]); err != nil {
+		return err
+	}
 	content, err := os.ReadFile(args[0])
 	if err != nil {
 		return fmt.Errorf("failed to read template: %w", err)
@@ -79,6 +82,9 @@ func runTemplate(cmd *cobra.Command, args []string) error {
 
 	// From JSON file (lowest priority)
 	if templateData != "" {
+		if err := requireRegularFile(templateData); err != nil {
+			return err
+		}
 		data, err := os.ReadFile(templateData)
 		if err != nil {
 			return fmt.Errorf("failed to read data file: %w", err)
@@ -110,6 +116,9 @@ func runTemplate(cmd *cobra.Command, args []string) error {
 			// Check if value is a file reference (@path)
 			if strings.HasPrefix(value, "@") {
 				filePath := value[1:]
+				if err := requireRegularFile(filePath); err != nil {
+					return err
+				}
 				fileContent, err := os.ReadFile(filePath)
 				if err != nil {
 					return fmt.Errorf("failed to read file for variable %s: %w", key, err)
