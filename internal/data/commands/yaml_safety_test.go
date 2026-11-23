@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -204,5 +205,50 @@ func TestYamlCommandsLeaveNoLockFileBehind(t *testing.T) {
 	}
 	if names := dirNames(t, sub); len(names) != 0 {
 		t.Errorf("sub after get on a missing file = %v, want empty", names)
+	}
+}
+
+// Defends the write lock now that it removes its file on release: a waiter
+// blocked on the old lock file wakes holding a lock on a file no longer at the
+// path, and without the identity check two writers run at once and one
+// update is lost. Each goroutine does a read-modify-write under the lock.
+func TestYamlWriteLockSerialisesWritersAndLeavesNothing(t *testing.T) {
+	dir := realTempDir(t)
+	counter := filepath.Join(dir, "n.yaml")
+	if err := os.WriteFile(counter, []byte("0"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const writers = 20
+	errs := make(chan error, writers)
+	for i := 0; i < writers; i++ {
+		go func() {
+			release, err := yamlWriteLock(counter)
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer release()
+			b, err := os.ReadFile(counter)
+			if err != nil {
+				errs <- err
+				return
+			}
+			n := 0
+			for _, c := range string(b) {
+				n = n*10 + int(c-'0')
+			}
+			errs <- writeYAMLFileRaw(counter, []byte(strconv.Itoa(n+1)))
+		}()
+	}
+	for i := 0; i < writers; i++ {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := readString(t, counter); got != strconv.Itoa(writers) {
+		t.Errorf("counter = %s after %d locked increments: an update was lost", got, writers)
+	}
+	if names := dirNames(t, dir); strings.Join(names, ",") != "n.yaml" {
+		t.Errorf("directory after the writers = %v, want only n.yaml", names)
 	}
 }
