@@ -345,3 +345,23 @@ func TestFormatter_Print_Slice(t *testing.T) {
 		t.Error("Expected abbreviated key 'n' in slice items")
 	}
 }
+
+// helpFieldsError is a usage error carrying a help list, as the CLI's are.
+type helpFieldsError struct{}
+
+func (helpFieldsError) Error() string { return "requires at least 2 arg(s), only received 1" }
+func (helpFieldsError) ErrorFields() map[string]any {
+	return map[string]any{"help": []string{"Usage: llm-data grep <pattern> <path>...", "Run `llm-data grep --help`"}}
+}
+
+// Defends --plain against losing the next step: TOON and JSON print an
+// error's help list, and plain text printed the message alone, so a caller
+// reading --plain saw "requires at least 2 arg(s)" and nothing to do about it.
+func TestPlainErrorPrintsTheHelpList(t *testing.T) {
+	var buf bytes.Buffer
+	New(false, false, &buf).PrintError(helpFieldsError{})
+	got := buf.String()
+	if !strings.Contains(got, "Error: requires at least 2 arg(s)") || !strings.Contains(got, "Usage: llm-data grep <pattern> <path>...") || !strings.Contains(got, "llm-data grep --help") {
+		t.Errorf("plain error = %q, want the message and each help line", got)
+	}
+}
