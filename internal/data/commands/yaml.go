@@ -80,14 +80,8 @@ Examples:
 
 			key := args[0]
 
-			// Acquire read lock
-			lock, err := yamlFileLock(file, false)
-			if err != nil {
-				return err
-			}
-			defer lock.Unlock()
-
-			// Read file
+			// No lock: a write replaces the file by rename, so this read
+			// sees the old file or the new one, never a torn one.
 			data, err := readYAMLAsMap(file)
 			if err != nil {
 				if os.IsNotExist(err) {
@@ -173,6 +167,9 @@ Examples:
 
 			key := args[0]
 			value := args[1]
+			if err := validateKeyPath(key); err != nil {
+				return err
+			}
 
 			// Handle stdin input when value is "-"
 			if value == "-" {
@@ -206,13 +203,8 @@ Examples:
 			if dryRun {
 				var oldValue interface{}
 				if _, err := os.Stat(file); err == nil {
-					// Acquire read lock to prevent race condition with concurrent writes
-					lock, err := yamlFileLock(file, false) // false = read lock
-					if err != nil {
-						return fmt.Errorf("failed to acquire read lock for dry-run: %w", err)
-					}
+					// No lock: a dry run writes nothing, not even a lock file.
 					data, err := readYAMLAsMap(file)
-					lock.Unlock()
 					if err == nil {
 						oldValue, _ = getValueAtPath(data, key)
 					}
@@ -220,12 +212,11 @@ Examples:
 				return outputDryRunPreview(cmd, file, key, oldValue, typedValue, jsonOutput, minOutput)
 			}
 
-			// Acquire write lock
-			lock, err := yamlFileLock(file, true)
+			release, err := yamlWriteLock(file)
 			if err != nil {
 				return err
 			}
-			defer lock.Unlock()
+			defer release()
 
 			// Use comment-preserving set (uses AST manipulation)
 			if err := setValuePreservingComments(file, key, typedValue); err != nil {
@@ -341,14 +332,8 @@ Examples:
 				}
 			}
 
-			// Acquire read lock
-			lock, err := yamlFileLock(file, false)
-			if err != nil {
-				return err
-			}
-			defer lock.Unlock()
-
-			// Read file
+			// No lock: a write replaces the file by rename, so this read
+			// sees the old file or the new one, never a torn one.
 			data, err := readYAMLAsMap(file)
 			if err != nil {
 				if os.IsNotExist(err) {
@@ -458,6 +443,9 @@ Examples:
 					key:   args[i],
 					value: args[i+1],
 				}
+				if err := validateKeyPath(args[i]); err != nil {
+					return err
+				}
 			}
 
 			// Check if file exists
@@ -477,14 +465,9 @@ Examples:
 			if dryRun {
 				var data map[string]interface{}
 				if _, statErr := os.Stat(file); statErr == nil {
-					// Acquire read lock to prevent race condition with concurrent writes
-					lock, lockErr := yamlFileLock(file, false) // false = read lock
-					if lockErr != nil {
-						return fmt.Errorf("failed to acquire read lock for dry-run: %w", lockErr)
-					}
+					// No lock: a dry run writes nothing, not even a lock file.
 					var readErr error
 					data, readErr = readYAMLAsMap(file)
-					lock.Unlock()
 					if readErr != nil {
 						return fmt.Errorf("failed to read config file: %w", readErr)
 					}
@@ -509,9 +492,15 @@ Examples:
 				return outputMultiDryRunPreview(cmd, file, changes, jsonOutput, minOutput)
 			}
 
-			// Read file for actual update
+			release, err := yamlWriteLock(file)
+			if err != nil {
+				return err
+			}
+			defer release()
+
+			// Read the file under the lock, so another writer's change
+			// cannot land between this read and the write below.
 			var data map[string]interface{}
-			var err error
 			if _, statErr := os.Stat(file); statErr == nil {
 				data, err = readYAMLAsMap(file)
 				if err != nil {
@@ -520,13 +509,6 @@ Examples:
 			} else {
 				data = make(map[string]interface{})
 			}
-
-			// Acquire write lock
-			lock, err := yamlFileLock(file, true)
-			if err != nil {
-				return err
-			}
-			defer lock.Unlock()
 
 			// Type the values once; both paths below need them.
 			var keys []string
