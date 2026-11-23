@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"maps"
@@ -80,9 +81,11 @@ type MultigrepResult struct {
 	Results             map[string]*keywordResult `json:"results,omitempty"`
 	// NonRegularSkipped names each FIFO, device or socket the walk passed
 	// over: reading a FIFO with no writer blocked the run forever.
-	NonRegularSkipped []string                  `json:"non_regular_skipped,omitempty"`
-	R                 map[string]*keywordResult `json:"r,omitempty"`
-	Help              []string                  `json:"help,omitempty"`
+	NonRegularSkipped []string `json:"non_regular_skipped,omitempty"`
+	// OutputFiles maps each keyword to the file --output-dir wrote it to.
+	OutputFiles map[string]string         `json:"output_files,omitempty"`
+	R           map[string]*keywordResult `json:"r,omitempty"`
+	Help        []string                  `json:"help,omitempty"`
 }
 
 // newMultigrepCmd creates the multigrep command
@@ -166,7 +169,7 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 		wg.Add(1)
 		go func(keyword string) {
 			defer wg.Done()
-			result := searchKeyword(path, files, keyword, defPatterns)
+			result := searchKeyword(path, showPaths(path).shown, files, keyword, defPatterns)
 			mu.Lock()
 			results[keyword] = result
 			mu.Unlock()
@@ -186,6 +189,7 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write output files if requested
+	var outputFiles map[string]string
 	if multigrepOutputDir != "" {
 		if err := os.MkdirAll(multigrepOutputDir, 0755); err != nil {
 			return fmt.Errorf("failed to create output directory: %w", err)
@@ -195,11 +199,10 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 		// stdout reported the matches and the run exited 0, so a caller went
 		// looking for files that were never written.
 		var failed []pathFailure
+		outputFiles = keywordFileNames(multigrepOutputDir, slices.Sorted(maps.Keys(results)))
 		for _, keyword := range slices.Sorted(maps.Keys(results)) {
 			r := results[keyword]
-			// Safe filename - replace non-alphanumeric with underscore
-			safeKeyword := regexp.MustCompile(`[^\w\-]`).ReplaceAllString(keyword, "_")
-			keywordFile := filepath.Join(multigrepOutputDir, fmt.Sprintf("keyword_%s.txt", safeKeyword))
+			keywordFile := outputFiles[keyword]
 
 			var lines []string
 			for _, m := range r.DefinitionMatches {
@@ -254,6 +257,7 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	mgResult.OutputFiles = outputFiles
 	shownAt := showPaths(path)
 	for _, p := range nonRegular {
 		mgResult.NonRegularSkipped = append(mgResult.NonRegularSkipped, shownAt.show(p))
@@ -332,6 +336,32 @@ func multigrepZeroMatchHelp() []string {
 	return append(help, "Run `llm-data grep <regex> <path>` to search by regular expression")
 }
 
+// keywordFileNames picks the --output-dir file for each keyword. A keyword
+// that is already a safe file name keeps keyword_<keyword>.txt. Any other is
+// made safe by replacing each unsafe character with "_" and then given a
+// short hash of the keyword: "a b" and "a_b" both became keyword_a_b.txt, and
+// the second write replaced the first. Names are compared case-insensitively,
+// because "Foo" and "foo" are one file on a case-insensitive filesystem.
+func keywordFileNames(dir string, keywords []string) map[string]string {
+	unsafe := regexp.MustCompile(`[^\w\-]`)
+	names := make(map[string]string, len(keywords))
+	used := make(map[string]bool, len(keywords))
+	for _, keyword := range keywords {
+		if !unsafe.MatchString(keyword) && !used[strings.ToLower(keyword)] {
+			used[strings.ToLower(keyword)] = true
+			names[keyword] = filepath.Join(dir, "keyword_"+keyword+".txt")
+		}
+	}
+	for _, keyword := range keywords {
+		if _, ok := names[keyword]; ok {
+			continue
+		}
+		sum := sha256.Sum256([]byte(keyword))
+		names[keyword] = filepath.Join(dir, fmt.Sprintf("keyword_%s_%x.txt", unsafe.ReplaceAllString(keyword, "_"), sum[:4]))
+	}
+	return names
+}
+
 func parseKeywords(s string) []string {
 	var keywords []string
 	for _, kw := range strings.Split(s, ",") {
@@ -395,7 +425,10 @@ func collectFiles(basePath string, extensions []string) (files, nonRegular []str
 	return files, nonRegular
 }
 
-func searchKeyword(basePath string, files []string, keyword string, defPatterns []string) *keywordResult {
+// searchKeyword labels each match with its file's path relative to basePath.
+// When basePath is itself the file, that relative path is ".", which names no
+// file; the match is labelled fileLabel, the file as the run prints it.
+func searchKeyword(basePath, fileLabel string, files []string, keyword string, defPatterns []string) *keywordResult {
 	result := &keywordResult{
 		FilesMatched:      []string{},
 		DefinitionMatches: []matchInfo{},
@@ -431,6 +464,9 @@ func searchKeyword(basePath string, files []string, keyword string, defPatterns 
 			if matches {
 				result.MatchCount++
 				relPath, _ := filepath.Rel(basePath, filePath)
+				if relPath == "." {
+					relPath = fileLabel
+				}
 				filesMatchedSet[relPath] = true
 
 				// Check if it's a definition
