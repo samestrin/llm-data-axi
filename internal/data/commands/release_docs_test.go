@@ -76,31 +76,49 @@ func TestReleaseChecklistRegeneratesPerformanceResults(t *testing.T) {
 	t.Error("release checklist has no checkbox requiring regenerated results and the README Performance table to be committed")
 }
 
-// Defends the release procedure against benchmarking an unstamped local build:
-// without -bin the script builds a binary that reports dev, so its results fail
-// the latest-release guard. The published release is installed before measuring.
-func TestReleaseChecklistBenchmarksPublishedReleaseBinary(t *testing.T) {
+// Defends the release procedure against a tag whose own figures are stale.
+// The checklist measured the published binary after the tag, so the tagged
+// commit carried the previous release's results while its CHANGELOG named
+// the new one, and TestCommittedPerfResultsAreFromTheLatestRelease failed on
+// the tag itself (v2.0.1's README likewise pinned v2.0.0). The release
+// candidate is built from the commit to be tagged, stamped with the release
+// version so its results do not say dev, and measured before the tag; the
+// token benchmark is regenerated from a clean checkout of that commit.
+// (This replaces TestReleaseChecklistBenchmarksPublishedReleaseBinary: the
+// order it pinned is the one that left the tag stale, not a guard weakened.)
+func TestReleaseChecklistBenchmarksTheCandidateBeforeTheTag(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join(repoRootDir, "docs", "release-checklist.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	checklist := string(b)
+	benchmark := strings.Index(checklist, "Benchmark the release candidate\n")
 	publish := strings.Index(checklist, "Tag and publish\n")
-	install := strings.Index(checklist, "Check the install path\n")
-	benchmark := strings.Index(checklist, "Re-run the performance benchmark\n")
-	if publish < 0 || install < 0 || benchmark < 0 || !(publish < install && install < benchmark) {
-		t.Error("release checklist must publish and install the release before benchmarking it")
+	if benchmark < 0 || publish < 0 || benchmark > publish {
+		t.Error("release checklist must benchmark the release candidate before the tag")
 	}
-	if want := `go run ./benchmarks -perf -bin "$(command -v llm-data)"`; !strings.Contains(checklist, want) {
-		t.Errorf("release checklist does not measure the installed release binary with %q", want)
-	}
-	for _, line := range strings.Split(checklist, "\n") {
-		if strings.HasPrefix(line, "- [ ]") &&
-			strings.Contains(line, "benchmarks/results-performance.*") &&
-			strings.Contains(line, "published release version") &&
-			strings.Contains(line, "not `dev`") {
-			return
+	for _, want := range []string{
+		"make build VERSION=v<version>",
+		"go run ./benchmarks -perf -bin build/llm-data",
+		"go run ./benchmarks -bin build/llm-data -o benchmarks/RESULTS.md",
+	} {
+		if !strings.Contains(checklist, want) {
+			t.Errorf("release checklist does not contain %q", want)
 		}
 	}
-	t.Error("release checklist does not require results naming the published release instead of dev")
+	wantLine := func(parts ...string) {
+		t.Helper()
+		for _, line := range strings.Split(checklist, "\n") {
+			ok := strings.HasPrefix(line, "- [ ]")
+			for _, p := range parts {
+				ok = ok && strings.Contains(line, p)
+			}
+			if ok {
+				return
+			}
+		}
+		t.Errorf("release checklist has no checkbox containing %q", parts)
+	}
+	wantLine("benchmarks/results-performance.*", "release version", "not `dev`")
+	wantLine("clean checkout", "benchmarks/RESULTS.md", "catalog")
 }
