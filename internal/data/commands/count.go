@@ -115,16 +115,24 @@ func runCount(cmd *cobra.Command, args []string) error {
 	if mode == "" {
 		return fmt.Errorf("must specify --mode or one of --checkboxes, --lines, --files")
 	}
+	switch mode {
+	case "checkboxes", "lines", "files":
+	default:
+		return invalidFlagValue("mode", mode, "checkboxes, lines or files")
+	}
+	switch countStyle {
+	case "", "all", "list", "heading", "table":
+	default:
+		return invalidFlagValue("style", countStyle, "all, list, heading or table")
+	}
 
 	switch mode {
 	case "checkboxes":
 		return runCountCheckboxes(cmd, target, info)
 	case "lines":
 		return runCountLines(cmd, target, info)
-	case "files":
+	default: // "files"; the mode was validated above
 		return runCountFiles(cmd, target, info)
-	default:
-		return fmt.Errorf("unknown mode: %s (supported: checkboxes, lines, files)", mode)
 	}
 }
 

@@ -87,6 +87,9 @@ Respects .gitignore patterns by default.`,
 }
 
 func runCatfiles(cmd *cobra.Command, args []string) error {
+	if catfilesMaxSize < 1 {
+		return invalidFlagValue("max-size", catfilesMaxSize, "1 (MB) or more")
+	}
 	maxSizeBytes := int64(catfilesMaxSize) * 1024 * 1024
 	var totalSize int64
 

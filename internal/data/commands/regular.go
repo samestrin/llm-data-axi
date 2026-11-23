@@ -3,6 +3,8 @@ package commands
 import (
 	"fmt"
 	"os"
+
+	"github.com/samestrin/llm-data-axi/v2/pkg/output"
 )
 
 // notRegularReason is the reason a command gives for a path it will not read.
@@ -38,4 +40,12 @@ func requireRegularFile(path string) error {
 		return fmt.Errorf("%s: %s", notRegularReason, path)
 	}
 	return nil
+}
+
+// invalidFlagValue is a flag value the command cannot honour: an unknown
+// enum or a number out of range. It is a usage error, exit 2, as the README
+// promises; running anyway treated "bogus" as a default or printed an empty
+// result with exit 0.
+func invalidFlagValue(name string, value interface{}, want string) error {
+	return &output.UsageError{Msg: fmt.Sprintf("invalid value \"%v\" for --%s: want %s", value, name, want)}
 }
