@@ -131,3 +131,35 @@ func TestYamlSetEscapedDotWithHyphenStaysOneKey(t *testing.T) {
 		t.Errorf("want the single key a.my-key with the header kept:\n%s", got)
 	}
 }
+
+// Defends a new key under an existing array element (items[0].newkey): it
+// needs the [n] index parsed into the path, and a parser change that broke
+// that would send the write to the map fallback, which drops every comment
+// and sorts the keys while still reporting success.
+func TestYamlNewKeyUnderAnArrayElementKeepsComments(t *testing.T) {
+	const src = "# header\nzeta: 1\nitems:\n  - name: a # first\n    size: 2\n"
+	for _, args := range [][]string{
+		{"yaml", "set", "items[0].newkey", "v"},
+		{"yaml", "multiset", "items[0].newkey", "v", "zeta", "3"},
+	} {
+		t.Run(args[1], func(t *testing.T) {
+			_, file := yamlDir(t, src, 0o644)
+			full := append(append([]string{}, args[:2]...), append([]string{"--file", file}, args[2:]...)...)
+			if code, stdout, _ := runCLI(t, full...); code != 0 {
+				t.Fatalf("exit %d: %s", code, stdout)
+			}
+			got := readString(t, file)
+			for _, want := range []string{"# header", "- name: a # first", "    newkey: v"} {
+				if !strings.Contains(got, want) {
+					t.Errorf("missing %q:\n%s", want, got)
+				}
+			}
+			if z, i, s, n := strings.Index(got, "zeta:"), strings.Index(got, "items:"), strings.Index(got, "size: 2"), strings.Index(got, "newkey:"); z < 0 || z > i || s > n {
+				t.Errorf("keys reordered:\n%s", got)
+			}
+			if code, stdout, _ := runCLI(t, "yaml", "get", "--file", file, "items[0].newkey"); code != 0 || !strings.Contains(stdout, "v") {
+				t.Errorf("get items[0].newkey: exit %d %q", code, stdout)
+			}
+		})
+	}
+}
