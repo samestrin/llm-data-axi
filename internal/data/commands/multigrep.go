@@ -98,7 +98,9 @@ Prioritizes definition matches (function, class, const declarations) over usage 
 
 With --path naming a file, matches are labelled with that file's path. With
 --output-dir each keyword is written to its own file, and output_files maps
-each keyword to the file it was written to.
+each keyword to the file it was written to. A FIFO, device, directory or
+symlink already at a keyword's file name fails the run (exit 1,
+failed_writes) before any file is written.
 
 Examples:
   llm-data multigrep --path ./src --keywords "useState,useEffect" --extensions "ts,tsx"
@@ -206,6 +208,19 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 		// looking for files that were never written.
 		var failed []pathFailure
 		outputFiles = keywordFileNames(multigrepOutputDir, slices.Sorted(maps.Keys(results)))
+
+		// Check every target before writing any. A FIFO at a keyword's file
+		// name hung the run, and a symlink was written through, overwriting
+		// the file it pointed at.
+		for _, keyword := range slices.Sorted(maps.Keys(results)) {
+			if keywordFile := outputFiles[keyword]; !isWritableTarget(keywordFile) {
+				failed = append(failed, pathFailure{File: keywordFile, Reason: notRegularReason})
+			}
+		}
+		if len(failed) > 0 {
+			return failedKeywordWrites(fmt.Sprintf("refused %d of %d keyword files in %s, so wrote none", len(failed), len(results), multigrepOutputDir), failed)
+		}
+
 		for _, keyword := range slices.Sorted(maps.Keys(results)) {
 			r := results[keyword]
 			keywordFile := outputFiles[keyword]
@@ -227,14 +242,7 @@ func runMultigrep(cmd *cobra.Command, args []string) error {
 			}
 		}
 		if len(failed) > 0 {
-			names := make([]string, len(failed))
-			for i, f := range failed {
-				names[i] = f.File + ": " + f.Reason
-			}
-			return &dataError{
-				msg:    fmt.Sprintf("failed to write %d of %d keyword files to %s: %s", len(failed), len(results), multigrepOutputDir, strings.Join(names, "; ")),
-				fields: map[string]any{"failed_writes": failed},
-			}
+			return failedKeywordWrites(fmt.Sprintf("failed to write %d of %d keyword files to %s", len(failed), len(results), multigrepOutputDir), failed)
 		}
 	}
 
@@ -366,6 +374,19 @@ func keywordFileNames(dir string, keywords []string) map[string]string {
 		names[keyword] = filepath.Join(dir, fmt.Sprintf("keyword_%s_%x.txt", unsafe.ReplaceAllString(keyword, "_"), sum[:4]))
 	}
 	return names
+}
+
+// failedKeywordWrites is the error for keyword files that were refused or
+// failed to write: summary, then each file with its reason.
+func failedKeywordWrites(summary string, failed []pathFailure) error {
+	names := make([]string, len(failed))
+	for i, f := range failed {
+		names[i] = f.File + ": " + f.Reason
+	}
+	return &dataError{
+		msg:    summary + ": " + strings.Join(names, "; "),
+		fields: map[string]any{"failed_writes": failed},
+	}
 }
 
 func parseKeywords(s string) []string {

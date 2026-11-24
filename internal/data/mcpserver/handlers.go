@@ -483,7 +483,9 @@ func buildTemplateArgs(args map[string]interface{}) []string {
 	}
 
 	// The file is the one positional, so it goes last, after "--".
-	cmdArgs := []string{"template"}
+	// --literal-vars: the CLI reads a --var value starting with @ as a file,
+	// so {"k": "@sec.txt"} returned sec.txt to a caller that never opted in.
+	cmdArgs := []string{"template", "--literal-vars"}
 
 	if vars, ok := args["vars"].(map[string]interface{}); ok {
 		for k, v := range vars {

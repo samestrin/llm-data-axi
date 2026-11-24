@@ -75,7 +75,8 @@ func TestMultigrepOutputDirRefusesAFIFOAndASymlink(t *testing.T) {
 			t.Errorf("exit %d, want 1; stdout %q", code, stdout)
 		}
 		var got struct {
-			Error        bool `json:"error"`
+			Error        bool   `json:"error"`
+			Message      string `json:"message"`
 			FailedWrites []struct {
 				File   string `json:"file"`
 				Reason string `json:"reason"`
@@ -86,6 +87,9 @@ func TestMultigrepOutputDirRefusesAFIFOAndASymlink(t *testing.T) {
 		}
 		if !got.Error || len(got.FailedWrites) != 1 || got.FailedWrites[0].File != planted || got.FailedWrites[0].Reason != "not a regular file" {
 			t.Errorf("want failed_writes naming %s as not a regular file, got %+v", planted, got)
+		}
+		if !strings.Contains(got.Message, "wrote none") {
+			t.Errorf("message should say nothing was written: %q", got.Message)
 		}
 		if b := readString(t, src); b != "needle here\nother here\n" {
 			t.Errorf("source file changed: %q", b)

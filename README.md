@@ -178,7 +178,7 @@ llm-data yaml multiset --file config.yaml server.port 8080 server.host localhost
 | `LLM_DATA_MCP_AXI` | `true` | Requests TOON from the CLI; `false` selects `--json --min` |
 | `LLM_DATA_MCP_DEBUG` | disabled | Set to `true` to log each MCP command line and timeout to stderr |
 
-No API key or other secret is used. Two `template` options read data you name and put it in the output: `--var KEY=@PATH` reads any file the process can read, and `--env` makes every environment variable, secrets included, a template variable. Both are opt-in.
+No API key or other secret is used. Two `template` options read data you name and put it in the output: `--var KEY=@PATH` reads any file the process can read, and `--env` makes every environment variable, secrets included, a template variable. Both are opt-in on the CLI. The MCP `template` tool offers neither: it passes `--literal-vars`, so a `vars` value starting with `@` is substituted as given and no file is read.
 
 ## Output and exit codes
 
@@ -201,7 +201,7 @@ A bare `llm-data` prints the executable path, a description and the current repo
 
 Errors are written to stdout in the selected output format: TOON by default, JSON with `--json`, and `Error: ...` with `--plain`. A caller reads one stream whatever the format; stderr carries diagnostics only.
 
-`llm-data-mcp` exposes the commands over MCP stdio as 20 tools: every command except `setup`, with `yaml` as four tools (`yaml_get`, `yaml_set`, `yaml_multiget`, `yaml_multiset`). Start it with `llm-data-mcp`; it invokes the CLI rather than reimplementing command behavior. A tool call can request `"format": "axi"` or `"format": "json"` to override the server default for that call, except on `runtime`, where `format` selects the elapsed-time format. A command that exits non-zero comes back as an error result (`isError: true`) carrying the CLI's own error output.
+`llm-data-mcp` exposes the commands over MCP stdio as 20 tools: every command except `setup`, with `yaml` as four tools (`yaml_get`, `yaml_set`, `yaml_multiget`, `yaml_multiset`). Start it with `llm-data-mcp`; it invokes the CLI rather than reimplementing command behavior. A tool call can request `"format": "axi"` or `"format": "json"` to override the server default for that call, except on `runtime`, where `format` selects the elapsed-time format. A command that exits non-zero comes back as an error result (`isError: true`) carrying the CLI's own error output. The `template` tool defaults to `[[var]]` placeholders, where the CLI defaults to `{{var}}`; pass `"syntax": "braces"` for the CLI's form.
 
 ## Performance
 
@@ -223,7 +223,7 @@ Regenerate both result files with `go run ./benchmarks -perf`, or regenerate onl
 
 The release contains two binaries. `llm-data` runs deterministic file, project, data and Git operations without calling a model or opening a network connection. `llm-data-mcp` is a stdio adapter that locates and invokes that CLI for environments that need MCP.
 
-Most commands are read-only. The writers are `yaml set` and `yaml multiset` for the target YAML file, `setup` for project-local agent files, `template --output` for a rendered file and `multigrep --output-dir` for keyword result files.
+Most commands are read-only. The writers are `yaml set` and `yaml multiset` for the target YAML file, `setup` for project-local agent files, `template --output` for a rendered file and `multigrep --output-dir` for keyword result files. Those two write only to a new path or a regular file, and never through a symlink: a FIFO, device, directory or symlink at the target is refused and nothing is written.
 
 The repository was extracted from [llm-tools](https://github.com/samestrin/llm-tools) so installing these data commands does not pull in unrelated storage and parsing dependencies.
 

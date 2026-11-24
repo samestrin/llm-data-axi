@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -475,7 +477,7 @@ func setValuePreservingComments(filePath string, dotPath string, value interface
 
 	// Check if path contains negative indices - if so, we need to resolve them first
 	// since the yaml library doesn't support negative indices
-	if strings.Contains(dotPath, "-") {
+	if hasNegativeIndex(dotPath) {
 		// Read current data to resolve negative indices
 		data, mapErr := readYAMLAsMap(filePath)
 		if mapErr != nil {
@@ -582,43 +584,149 @@ func insertKeyPreservingComments(filePath string, file *ast.File, dotPath string
 }
 
 // mergeKeyIntoAST adds a key that does not yet exist to an already-parsed
-// document, without writing anything. Returns false when the path is not a
-// plain map key whose parent already exists.
+// document, without writing anything. The deepest part of the path that
+// exists must be a mapping (or an empty document); the levels below it are
+// created as nested maps, appended after the keys already there. Returns false
+// when the path cannot be built that way, such as an element inside an array
+// or a key below a scalar, leaving those to the caller's map fallback.
+//
+// Only a key whose parent existed used to be merged; a missing parent, an
+// escaped dot or a file holding only a comment went to the fallback, which
+// re-encoded the whole file, dropping every comment and sorting the keys.
 func mergeKeyIntoAST(file *ast.File, dotPath string, value interface{}) bool {
-	parentPath, key := "", dotPath
-	if idx := strings.LastIndex(dotPath, "."); idx >= 0 {
-		parentPath, key = dotPath[:idx], dotPath[idx+1:]
-	}
-
-	// An array element is not a plain map key.
-	if key == "" || strings.ContainsAny(key, "[]") {
+	segs, ok := splitKeySegments(dotPath)
+	if !ok || len(segs) == 0 {
 		return false
 	}
-
-	// A new top-level key merges into the document root.
-	yamlPath := "$"
-	if parentPath != "" {
-		yamlPath = convertDotPathToYAMLPath(parentPath)
-	}
-
-	path, err := yaml.PathString(yamlPath)
-	if err != nil {
+	full := keySegmentPath(segs)
+	if full == nil {
 		return false
 	}
+	if _, err := full.FilterFile(file); err == nil {
+		return false // not a new key
+	}
 
-	// The parent has to exist already; creating intermediate levels is left to
-	// the caller's fallback.
-	if _, filterErr := path.FilterFile(file); filterErr != nil {
-		return false
+	// The deepest existing level; 0 is the document root.
+	depth := len(segs) - 1
+	for ; depth > 0; depth-- {
+		prefix := keySegmentPath(segs[:depth])
+		if prefix == nil {
+			return false
+		}
+		if _, err := prefix.FilterFile(file); err == nil {
+			break
+		}
+	}
+	rest := segs[depth:]
+	for _, seg := range rest {
+		if seg.isIndex {
+			return false
+		}
+	}
+	nested := value
+	for i := len(rest) - 1; i >= 1; i-- {
+		nested = map[string]interface{}{rest[i].name: nested}
 	}
 
 	// Marshalling a single-entry map quotes the key and the value correctly.
-	fragment, err := yaml.Marshal(map[string]interface{}{key: value})
+	fragment, err := yaml.Marshal(map[string]interface{}{rest[0].name: nested})
 	if err != nil {
 		return false
 	}
 
-	return path.MergeFromReader(file, strings.NewReader(string(fragment))) == nil
+	// An empty document, or one holding only comments, has no mapping to
+	// merge into: append the fragment to its text, after the comments.
+	if depth == 0 && len(file.Docs) == 1 {
+		if _, isComment := file.Docs[0].Body.(*ast.CommentGroupNode); isComment || file.Docs[0].Body == nil {
+			text := file.String()
+			if text != "" && !strings.HasSuffix(text, "\n") {
+				text += "\n"
+			}
+			parsed, parseErr := parser.ParseBytes([]byte(text+string(fragment)), parser.ParseComments)
+			if parseErr != nil {
+				return false
+			}
+			*file = *parsed
+			return true
+		}
+	}
+
+	return keySegmentPath(segs[:depth]).MergeFromReader(file, strings.NewReader(string(fragment))) == nil
+}
+
+// keySegment is one level of a key path: a map key, or an index from [n].
+type keySegment struct {
+	name    string
+	index   int
+	isIndex bool
+}
+
+// splitKeySegments splits a key path the way set reads it: dots separate map
+// keys, "\." is a literal dot, and [n] is an array index. Unlike parseDotPath
+// it keeps "items[0]" and "items.0" apart. Returns false for an index that is
+// not a whole number.
+func splitKeySegments(dotPath string) ([]keySegment, bool) {
+	var segs []keySegment
+	var current strings.Builder
+	flush := func() {
+		if current.Len() > 0 {
+			segs = append(segs, keySegment{name: current.String()})
+			current.Reset()
+		}
+	}
+	for i := 0; i < len(dotPath); i++ {
+		switch ch := dotPath[i]; {
+		case ch == '\\' && i+1 < len(dotPath) && dotPath[i+1] == '.':
+			current.WriteByte('.')
+			i++
+		case ch == '.':
+			flush()
+		case ch == '[':
+			flush()
+			end := strings.IndexByte(dotPath[i:], ']')
+			if end < 0 {
+				return nil, false
+			}
+			idx, err := strconv.Atoi(strings.TrimSpace(dotPath[i+1 : i+end]))
+			if err != nil {
+				return nil, false
+			}
+			segs = append(segs, keySegment{index: idx, isIndex: true})
+			i += end
+		default:
+			current.WriteByte(ch)
+		}
+	}
+	flush()
+	return segs, true
+}
+
+// keySegmentPath builds the YAML path for segs; nil for a negative index,
+// which has to be resolved against the data first. The builder quotes a key
+// holding a dot, which a path string would read as two levels.
+func keySegmentPath(segs []keySegment) *yaml.Path {
+	b := (&yaml.PathBuilder{}).Root()
+	for _, seg := range segs {
+		if !seg.isIndex {
+			b = b.Child(seg.name)
+			continue
+		}
+		if seg.index < 0 {
+			return nil
+		}
+		b = b.Index(uint(seg.index))
+	}
+	return b.Build()
+}
+
+// negativeIndex matches a negative array index, [-1] or .-1, in a key path.
+var negativeIndex = regexp.MustCompile(`(^|[.\[])-\d+($|[.\]\[])`)
+
+// hasNegativeIndex reports whether key needs resolving against the data. Any
+// "-" used to count, so a hyphenated key such as my-key skipped the syntax
+// tree in multiset and the whole file was re-encoded without its comments.
+func hasNegativeIndex(key string) bool {
+	return negativeIndex.MatchString(key)
 }
 
 // setValuesPreservingComments applies several keys to a file in one pass,
@@ -644,11 +752,19 @@ func setValuesPreservingComments(filePath string, keys []string, values []interf
 		return false, nil
 	}
 
+	var data map[string]interface{}
 	for i, key := range keys {
-		// A path containing a negative index needs resolving against the data,
-		// which the map path already handles.
-		if strings.Contains(key, "-") {
-			return false, nil
+		// A negative index is resolved against the data first; the syntax
+		// tree only takes positive ones.
+		if hasNegativeIndex(key) {
+			if data == nil {
+				if data, err = readYAMLAsMap(filePath); err != nil {
+					return false, nil
+				}
+			}
+			if key, err = resolveNegativeIndices(data, key); err != nil {
+				return false, nil
+			}
 		}
 
 		yamlPath, pathErr := yaml.PathString(convertDotPathToYAMLPath(key))
