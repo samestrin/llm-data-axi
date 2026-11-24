@@ -281,12 +281,12 @@ func TestBuildTemplateArgs(t *testing.T) {
 		{
 			name: "basic",
 			args: map[string]interface{}{"file": "template.txt"},
-			want: []string{"template", "--syntax", "brackets", "--json", "--min", "--", "template.txt"},
+			want: []string{"template", "--literal-vars", "--syntax", "brackets", "--json", "--min", "--", "template.txt"},
 		},
 		{
 			name: "with syntax",
 			args: map[string]interface{}{"file": "template.txt", "syntax": "braces"},
-			want: []string{"template", "--syntax", "braces", "--json", "--min", "--", "template.txt"},
+			want: []string{"template", "--literal-vars", "--syntax", "braces", "--json", "--min", "--", "template.txt"},
 		},
 	}
 

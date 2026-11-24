@@ -22,6 +22,7 @@ var (
 	templateStrip   bool
 	templateJSON    bool
 	templateMinimal bool
+	templateLiteral bool
 )
 
 // TemplateResult holds the template processing result
@@ -47,6 +48,11 @@ Example: {{name|Guest}} uses "Guest" if name is not defined.
 --var KEY=@PATH reads the value from the file at PATH, any file the process
 can read, and --env makes every environment variable a template variable.
 Both are opt-in; pass them only with templates and paths you trust.
+--literal-vars takes every --var value as given, so a leading @ is kept and
+no file is read; the MCP server always passes it.
+
+-o writes to a new path or a regular file. A FIFO, a device, a directory or
+a symlink there is a usage error (exit 2), and nothing is written.
 
 Examples:
   llm-data template greeting.txt --var name=Ada
@@ -62,6 +68,7 @@ Examples:
 	cmd.Flags().BoolVar(&templateStrict, "strict", false, "Error on undefined variables")
 	cmd.Flags().StringVar(&templateSyntax, "syntax", "braces", "Syntax: braces ({{var}}) or brackets ([[var]])")
 	cmd.Flags().StringVarP(&templateOutput, "output", "o", "", "Output file (default: stdout)")
+	cmd.Flags().BoolVar(&templateLiteral, "literal-vars", false, "Take --var values as given: a leading @ is not read as a file")
 	cmd.Flags().BoolVar(&templateStrip, "strip", false, "Strip whitespace from file values")
 	cmd.Flags().BoolVar(&templateJSON, "json", false, "Output as JSON")
 	cmd.Flags().BoolVar(&templateMinimal, "min", false, "Minimal --json or --plain output (no effect on TOON)")
@@ -79,6 +86,12 @@ func runTemplate(cmd *cobra.Command, args []string) error {
 
 	if err := requireRegularFile(args[0]); err != nil {
 		return err
+	}
+	// Refuse the output target before any work. os.WriteFile on a FIFO
+	// blocks for a reader that never comes, and on a symlink it writes the
+	// file the link points at.
+	if templateOutput != "" && !isWritableTarget(templateOutput) {
+		return &output.UsageError{Msg: fmt.Sprintf("-o %s: %s; name a new path or a regular file", notRegularReason, templateOutput)}
 	}
 	content, err := os.ReadFile(args[0])
 	if err != nil {
@@ -118,27 +131,31 @@ func runTemplate(cmd *cobra.Command, args []string) error {
 
 	// From command line (highest priority)
 	for _, v := range templateVars {
-		if idx := strings.Index(v, "="); idx != -1 {
-			key := v[:idx]
-			value := v[idx+1:]
-
-			// Check if value is a file reference (@path)
-			if strings.HasPrefix(value, "@") {
-				filePath := value[1:]
-				if err := requireRegularFile(filePath); err != nil {
-					return err
-				}
-				fileContent, err := os.ReadFile(filePath)
-				if err != nil {
-					return fmt.Errorf("failed to read file for variable %s: %w", key, err)
-				}
-				value = string(fileContent)
-				if templateStrip {
-					value = strings.TrimSpace(value)
-				}
-			}
-			variables[key] = value
+		// A --var with no "=" or no key sets nothing; it used to be dropped
+		// without a word while the template rendered with exit 0.
+		idx := strings.Index(v, "=")
+		if idx == -1 || strings.TrimSpace(v[:idx]) == "" {
+			return &output.UsageError{Msg: fmt.Sprintf("invalid value %q for --var: want KEY=VALUE with a non-empty KEY", v)}
 		}
+		key := v[:idx]
+		value := v[idx+1:]
+
+		// Check if value is a file reference (@path)
+		if !templateLiteral && strings.HasPrefix(value, "@") {
+			filePath := value[1:]
+			if err := requireRegularFile(filePath); err != nil {
+				return err
+			}
+			fileContent, err := os.ReadFile(filePath)
+			if err != nil {
+				return fmt.Errorf("failed to read file for variable %s: %w", key, err)
+			}
+			value = string(fileContent)
+			if templateStrip {
+				value = strings.TrimSpace(value)
+			}
+		}
+		variables[key] = value
 	}
 
 	// Undefined names under --strict, once each in order of appearance.

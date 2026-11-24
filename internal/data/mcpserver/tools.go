@@ -104,7 +104,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "template",
-			Description: "Variable substitution in template files. Supports [[var]] or {{var}} syntax.",
+			Description: "Variable substitution in template files. Supports [[var]] or {{var}} syntax, default [[var]] (the CLI defaults to {{var}}). Each vars value is substituted literal: a value starting with @ is not read as a file.",
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -112,12 +112,13 @@ func GetToolDefinitions() []ToolDefinition {
 								"type": "string"
 							},
 							"vars": {
-								"type": "object"
+								"type": "object",
+								"description": "Variable names to values. Values are substituted literal; a leading @ is not read as a file."
 							},
 							"syntax": {
 								"type": "string",
 								"enum": ["brackets", "braces"],
-								"description": "brackets or braces"
+								"description": "brackets ([[var]], the default here; the CLI defaults to {{var}}) or braces ({{var}})"
 							}
 						},
 						"required": ["file"]

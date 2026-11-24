@@ -42,6 +42,19 @@ func requireRegularFile(path string) error {
 	return nil
 }
 
+// isWritableTarget reports whether a command may write to path: it is a new
+// path or a regular file. The path is not followed: writing to a FIFO blocked
+// for a reader that never came, and writing through a symlink overwrote the
+// file it pointed at, a file the caller never named as an output. A path that
+// cannot be stat'ed passes, so the write that follows reports the reason.
+func isWritableTarget(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return true
+	}
+	return info.Mode().IsRegular()
+}
+
 // invalidFlagValue is a flag value the command cannot honour: an unknown
 // enum or a number out of range. It is a usage error, exit 2, as the README
 // promises; running anyway treated "bogus" as a default or printed an empty

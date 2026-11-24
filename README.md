@@ -178,7 +178,7 @@ llm-data yaml multiset --file config.yaml server.port 8080 server.host localhost
 | `LLM_DATA_MCP_AXI` | `true` | Requests TOON from the CLI; `false` selects `--json --min` |
 | `LLM_DATA_MCP_DEBUG` | disabled | Set to `true` to log each MCP command line and timeout to stderr |
 
-No API key or other secret is used. Two `template` options read data you name and put it in the output: `--var KEY=@PATH` reads any file the process can read, and `--env` makes every environment variable, secrets included, a template variable. Both are opt-in.
+No API key or other secret is used. Two `template` options read data you name and put it in the output: `--var KEY=@PATH` reads any file the process can read, and `--env` makes every environment variable, secrets included, a template variable. Both are opt-in on the CLI. The MCP `template` tool offers neither: it passes `--literal-vars`, so a `vars` value starting with `@` is substituted as given and no file is read.
 
 ## Output and exit codes
 
@@ -201,21 +201,21 @@ A bare `llm-data` prints the executable path, a description and the current repo
 
 Errors are written to stdout in the selected output format: TOON by default, JSON with `--json`, and `Error: ...` with `--plain`. A caller reads one stream whatever the format; stderr carries diagnostics only.
 
-`llm-data-mcp` exposes the commands over MCP stdio as 20 tools: every command except `setup`, with `yaml` as four tools (`yaml_get`, `yaml_set`, `yaml_multiget`, `yaml_multiset`). Start it with `llm-data-mcp`; it invokes the CLI rather than reimplementing command behavior. A tool call can request `"format": "axi"` or `"format": "json"` to override the server default for that call, except on `runtime`, where `format` selects the elapsed-time format. A command that exits non-zero comes back as an error result (`isError: true`) carrying the CLI's own error output.
+`llm-data-mcp` exposes the commands over MCP stdio as 20 tools: every command except `setup`, with `yaml` as four tools (`yaml_get`, `yaml_set`, `yaml_multiget`, `yaml_multiset`). Start it with `llm-data-mcp`; it invokes the CLI rather than reimplementing command behavior. A tool call can request `"format": "axi"` or `"format": "json"` to override the server default for that call, except on `runtime`, where `format` selects the elapsed-time format. A command that exits non-zero comes back as an error result (`isError: true`) carrying the CLI's own error output. The `template` tool defaults to `[[var]]` placeholders, where the CLI defaults to `{{var}}`; pass `"syntax": "braces"` for the CLI's form.
 
 ## Performance
 
 These are the committed measurements for `llm-data 2.0.2`, measured on the release candidate before the tag and copied from the [generated performance table](benchmarks/results-performance.md). The raw timings are in [results-performance.json](benchmarks/results-performance.json), and [benchmarks/main.go](benchmarks/main.go) contains the measurement and report generator.
 
-- **Date:** 2026-11-23
+- **Date:** 2026-11-24
 - **Machine:** Intel(R) Xeon(R) W-2295 CPU @ 3.00GHz, 36 threads, 141.2 GiB RAM, Debian GNU/Linux 13 (trixie), kernel 7.0.0-38-generic
 - **Method:** 3 warmup runs, then 20 timed runs per case. Each timing is the wall-clock time of one `llm-data` process, from start to exit; runs are sequential.
 
 | Case | Command | Input | Runs | Min (ms) | Median (ms) | Mean (ms) | Max (ms) |
 |---|---|---|---:|---:|---:|---:|---:|
-| cold start | `llm-data --version` | none | 20 | 1.79 | 1.87 | 1.89 | 2.16 |
-| typical command | `llm-data detect --path .` | this repository | 20 | 1.75 | 1.85 | 1.89 | 2.15 |
-| large input | `llm-data stats --path .` | 3,000 generated files | 20 | 15.73 | 16.00 | 16.33 | 19.99 |
+| cold start | `llm-data --version` | none | 20 | 1.59 | 1.70 | 1.71 | 1.88 |
+| typical command | `llm-data detect --path .` | this repository | 20 | 1.69 | 1.76 | 1.78 | 2.00 |
+| large input | `llm-data stats --path .` | 3,000 generated files | 20 | 14.20 | 14.81 | 14.82 | 15.43 |
 
 Regenerate both result files with `go run ./benchmarks -perf`, or regenerate only the table from the committed raw timings with `go run ./benchmarks -perf -from-json`. These measurements do not compare another tool. The separate [token benchmark](benchmarks/RESULTS.md) compares TOON and JSON output sizes.
 
@@ -223,7 +223,7 @@ Regenerate both result files with `go run ./benchmarks -perf`, or regenerate onl
 
 The release contains two binaries. `llm-data` runs deterministic file, project, data and Git operations without calling a model or opening a network connection. `llm-data-mcp` is a stdio adapter that locates and invokes that CLI for environments that need MCP.
 
-Most commands are read-only. The writers are `yaml set` and `yaml multiset` for the target YAML file, `setup` for project-local agent files, `template --output` for a rendered file and `multigrep --output-dir` for keyword result files.
+Most commands are read-only. The writers are `yaml set` and `yaml multiset` for the target YAML file, `setup` for project-local agent files, `template --output` for a rendered file and `multigrep --output-dir` for keyword result files. Those two write only to a new path or a regular file, and never through a symlink: a FIFO, device, directory or symlink at the target is refused and nothing is written.
 
 The repository was extracted from [llm-tools](https://github.com/samestrin/llm-tools) so installing these data commands does not pull in unrelated storage and parsing dependencies.
 
