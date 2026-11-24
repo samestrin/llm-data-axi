@@ -47,7 +47,7 @@ The tape sets the font to JetBrains Mono; install it first, because the fallback
 
 Re-render it when a command the demo shows, its output, or `docs/demo/example` changes. `docs/release-checklist.md` makes that part of each release.
 
-`yaml get` leaves an empty `config.yaml.lock` beside the file it reads — a known side effect of its file lock, recorded in the technical-debt list — so the tape removes that file in a hidden step after the last command. A render leaves the checkout clean.
+`yaml get` takes no lock and writes nothing since v2.0.2, so the tape needs no clean-up step: a render leaves the checkout clean.
 
 ## Check it without vhs
 

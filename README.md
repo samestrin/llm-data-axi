@@ -1,6 +1,6 @@
 # llm-data-axi
 
-llm-data is a single Go binary that gives an AI agent, or you, commands to inspect and transform files, projects and configuration, with [AXI](https://axi.md)-compliant output built for agents to parse.
+llm-data is a Go command-line tool, shipped with `llm-data-mcp`, an MCP adapter for it, that gives an AI agent, or you, commands to inspect and transform files, projects and configuration, with [AXI](https://axi.md)-compliant output built for agents to parse.
 
 <a href="https://github.com/samestrin/llm-data-axi/actions/workflows/test.yml"><img src="https://github.com/samestrin/llm-data-axi/actions/workflows/test.yml/badge.svg" alt="CI"></a> <a href="https://github.com/samestrin/llm-data-axi/releases/latest"><img src="https://img.shields.io/github/v/release/samestrin/llm-data-axi" alt="Latest release"></a> <a href="LICENSE"><img src="https://img.shields.io/github/license/samestrin/llm-data-axi" alt="License"></a>
 
@@ -31,10 +31,10 @@ The release asset names are `llm-data-<os>-<arch>` and `llm-data-mcp-<os>-<arch>
 
 For each selected platform, the installer downloads `SHA256SUMS.txt`, downloads both matching assets and verifies each SHA-256 checksum before installing either binary. A missing entry or mismatched checksum stops the installation.
 
-Pin the latest release, `v2.0.1`, or choose another installed location:
+Pin the latest release, `v2.0.2`, or choose another installed location:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v2.0.1 sh
+curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v2.0.2 sh
 curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_INSTALL_DIR="$HOME/bin" sh
 ```
 
@@ -52,7 +52,7 @@ go install github.com/samestrin/llm-data-axi/v2/cmd/llm-data-mcp@latest
 ```bash
 git clone https://github.com/samestrin/llm-data-axi.git
 cd llm-data-axi
-git checkout v2.0.1
+git checkout v2.0.2
 make build
 make install
 ```
@@ -83,12 +83,20 @@ Install the same Agent Skill without the hook:
 npx skills add samestrin/llm-data-axi --skill llm-data
 ```
 
+Without a terminal (a script, CI, or an agent's shell), `npx skills add` cannot ask which agent to install for; name it and skip the prompt:
+
+```bash
+npx skills add samestrin/llm-data-axi --skill llm-data --agent claude-code -y
+```
+
+The skill says how to install the binary with `go install` or run it once with `go run` when it is not installed.
+
 ## Quick start
 
 Run these commands in a Git project directory:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v2.0.1 sh
+curl -fsSL https://raw.githubusercontent.com/samestrin/llm-data-axi/main/install.sh | LLM_DATA_VERSION=v2.0.2 sh
 export PATH="$HOME/.local/bin:$PATH"
 llm-data detect --path . --axi
 llm-data git-changes --axi
@@ -138,7 +146,7 @@ llm-data discover-tests --path . --axi
 llm-data git-changes --include-untracked --axi
 llm-data git-context --max-commits 5 --include-diff --axi
 llm-data grep "func New" internal/ -n --axi
-llm-data highest --path .planning/plans/active --type dir --axi
+llm-data highest --path docs --type file --axi
 llm-data math "sqrt(16) + 2" --axi
 llm-data multiexists README.md docs --verbose --no-fail --axi
 llm-data multigrep --keywords "retry,backoff,timeout" --path . --axi
@@ -163,14 +171,14 @@ llm-data yaml multiset --file config.yaml server.port 8080 server.host localhost
 
 | Name | Default | Meaning |
 |---|---|---|
-| `LLM_DATA_VERSION` | latest release | Release tag fetched by `install.sh`, such as `v2.0.1` |
+| `LLM_DATA_VERSION` | latest release | Release tag fetched by `install.sh`, such as `v2.0.2` |
 | `LLM_DATA_INSTALL_DIR` | `$HOME/.local/bin` | Directory where `install.sh` places both binaries |
 | `LLM_DATA_BASE_URL` | release selected by `LLM_DATA_VERSION` | Alternative release-asset base URL; takes precedence over `LLM_DATA_VERSION` |
 | `LLM_DATA_BINARY` | automatic lookup | Explicit `llm-data` path for `llm-data-mcp`; otherwise lookup tries `PATH`, the server binary's directory and `/usr/local/bin/llm-data` |
 | `LLM_DATA_MCP_AXI` | `true` | Requests TOON from the CLI; `false` selects `--json --min` |
 | `LLM_DATA_MCP_DEBUG` | disabled | Set to `true` to log each MCP command line and timeout to stderr |
 
-No API key or other secret is used.
+No API key or other secret is used. Two `template` options read data you name and put it in the output: `--var KEY=@PATH` reads any file the process can read, and `--env` makes every environment variable, secrets included, a template variable. Both are opt-in.
 
 ## Output and exit codes
 
@@ -193,21 +201,21 @@ A bare `llm-data` prints the executable path, a description and the current repo
 
 Errors are written to stdout in the selected output format: TOON by default, JSON with `--json`, and `Error: ...` with `--plain`. A caller reads one stream whatever the format; stderr carries diagnostics only.
 
-`llm-data-mcp` exposes the same commands over MCP stdio. Start it with `llm-data-mcp`; it invokes the CLI rather than reimplementing command behavior. A tool call can request `"format": "axi"` or `"format": "json"` to override the server default for that call, except on `runtime`, where `format` selects the elapsed-time format. A command that exits non-zero comes back as an error result (`isError: true`) carrying the CLI's own error output.
+`llm-data-mcp` exposes the commands over MCP stdio as 20 tools: every command except `setup`, with `yaml` as four tools (`yaml_get`, `yaml_set`, `yaml_multiget`, `yaml_multiset`). Start it with `llm-data-mcp`; it invokes the CLI rather than reimplementing command behavior. A tool call can request `"format": "axi"` or `"format": "json"` to override the server default for that call, except on `runtime`, where `format` selects the elapsed-time format. A command that exits non-zero comes back as an error result (`isError: true`) carrying the CLI's own error output.
 
 ## Performance
 
-These are the committed measurements for `llm-data 2.0.1`, copied from the [generated performance table](benchmarks/results-performance.md). The raw timings are in [results-performance.json](benchmarks/results-performance.json), and [benchmarks/main.go](benchmarks/main.go) contains the measurement and report generator.
+These are the committed measurements for `llm-data 2.0.2`, measured on the release candidate before the tag and copied from the [generated performance table](benchmarks/results-performance.md). The raw timings are in [results-performance.json](benchmarks/results-performance.json), and [benchmarks/main.go](benchmarks/main.go) contains the measurement and report generator.
 
-- **Date:** 2026-11-20
+- **Date:** 2026-11-23
 - **Machine:** Intel(R) Xeon(R) W-2295 CPU @ 3.00GHz, 36 threads, 141.2 GiB RAM, Debian GNU/Linux 13 (trixie), kernel 7.0.0-38-generic
 - **Method:** 3 warmup runs, then 20 timed runs per case. Each timing is the wall-clock time of one `llm-data` process, from start to exit; runs are sequential.
 
 | Case | Command | Input | Runs | Min (ms) | Median (ms) | Mean (ms) | Max (ms) |
 |---|---|---|---:|---:|---:|---:|---:|
-| cold start | `llm-data --version` | none | 20 | 1.77 | 1.85 | 1.90 | 2.33 |
-| typical command | `llm-data detect --path .` | this repository | 20 | 1.82 | 1.87 | 1.89 | 2.04 |
-| large input | `llm-data stats --path .` | 3,000 generated files | 20 | 14.39 | 15.09 | 15.21 | 16.62 |
+| cold start | `llm-data --version` | none | 20 | 1.79 | 1.87 | 1.89 | 2.16 |
+| typical command | `llm-data detect --path .` | this repository | 20 | 1.75 | 1.85 | 1.89 | 2.15 |
+| large input | `llm-data stats --path .` | 3,000 generated files | 20 | 15.73 | 16.00 | 16.33 | 19.99 |
 
 Regenerate both result files with `go run ./benchmarks -perf`, or regenerate only the table from the committed raw timings with `go run ./benchmarks -perf -from-json`. These measurements do not compare another tool. The separate [token benchmark](benchmarks/RESULTS.md) compares TOON and JSON output sizes.
 
@@ -222,7 +230,7 @@ The repository was extracted from [llm-tools](https://github.com/samestrin/llm-t
 ## Limits
 
 - There is no session-end lifecycle-capture hook, because `llm-data` keeps no session state (no transcript, no record of files touched) and has nothing of its own to capture; the session-start half ships for Claude Code, Codex and OpenCode.
-- `help[]` next steps are scoped, not universal: the home view, an empty grep or multigrep and a truncated search line carry them; other commands do not.
+- `help[]` next steps are scoped, not universal: the home view, an empty grep or multigrep, a truncated search line, a `catfiles` run cut at `--max-size` and every exit-2 error carry them; other commands do not.
 - The release platform matrix is best effort. Another OS or architecture requires a source build.
 - Search and directory commands respect `.gitignore` and apply their documented size, entry or line limits unless a flag changes that behavior. Large generated or binary trees may need narrower paths or explicit filter flags.
 - `setup` does not remove agent configuration during uninstall. Remove its project-local hook and skill separately when they are no longer wanted.

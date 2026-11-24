@@ -106,6 +106,9 @@ Examples:
 }
 
 func runGitContext(cmd *cobra.Command, args []string) error {
+	if gitContextMaxCommits < 0 {
+		return invalidFlagValue("max-commits", gitContextMaxCommits, "0 or more")
+	}
 	// Use path from flag
 	repoPath := gitContextPath
 

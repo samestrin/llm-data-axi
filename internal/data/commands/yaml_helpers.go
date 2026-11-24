@@ -22,23 +22,90 @@ import (
 // We use -999 because -1, -2, etc. are valid negative indices for accessing array elements from the end.
 const invalidArrayIndex = -999
 
-// yamlFileLock acquires a file lock for concurrent safety
-func yamlFileLock(filePath string, exclusive bool) (*flock.Flock, error) {
-	lockFile := filePath + ".lock"
-	fl := flock.New(lockFile)
-
-	var err error
-	if exclusive {
-		err = fl.Lock()
-	} else {
-		err = fl.RLock()
+// yamlWriteLock serialises writers of filePath and returns the function that
+// releases the lock. Only writes lock: every write replaces the file by an
+// atomic rename, so a reader sees the old file or the new one and never a
+// torn one, and get, multiget and --dry-run used to leave a 0-byte
+// <file>.lock behind (even "..lock" for `yaml get --file .`) while the README
+// said only set and multiset write.
+//
+// The lock file is removed on release, while it is still held, so a finished
+// write leaves nothing behind. A waiter may then hold a lock on a file that is
+// no longer at the path, so after locking it checks that the path still names
+// the file it locked and starts over when it does not. Windows refuses to
+// remove a file another process has open; there the removal is best effort.
+func yamlWriteLock(filePath string) (func(), error) {
+	lockPath := resolveYAMLTarget(filePath) + ".lock"
+	for attempt := 0; attempt < 100; attempt++ {
+		fl := flock.New(lockPath)
+		if err := fl.Lock(); err != nil {
+			return nil, fmt.Errorf("failed to acquire lock: %w", err)
+		}
+		held, heldErr := fl.Stat()
+		onDisk, diskErr := os.Stat(lockPath)
+		if heldErr == nil && diskErr == nil && os.SameFile(held, onDisk) {
+			return func() {
+				_ = os.Remove(lockPath)
+				_ = fl.Unlock()
+			}, nil
+		}
+		_ = fl.Unlock()
 	}
+	return nil, fmt.Errorf("failed to acquire lock: %s kept being replaced", lockPath)
+}
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to acquire lock: %w", err)
+// resolveYAMLTarget returns the file a write to filePath must change. A
+// symlink is followed to its target: renaming the temp file over the link
+// replaced the link with a regular file and left the target unchanged, while
+// the run reported "set". A path that does not resolve is returned as is.
+func resolveYAMLTarget(filePath string) string {
+	if resolved, err := filepath.EvalSymlinks(filePath); err == nil {
+		return resolved
 	}
+	return filePath
+}
 
-	return fl, nil
+// validateKeyPath refuses a key that names no value. parseDotPath skips empty
+// segments, so "" and "a..b" used to be written as the document root or as
+// a.b, and set reported "status: set" with exit 0 having written nothing the
+// caller asked for. An escaped dot (\.) is part of a segment, and a segment
+// may follow a bracketed index directly ("items[0].name").
+func validateKeyPath(key string) error {
+	invalid := func(reason string) error {
+		return &output.UsageError{Msg: fmt.Sprintf("invalid key %q: %s", key, reason)}
+	}
+	if strings.TrimSpace(key) == "" {
+		return invalid("a key cannot be empty")
+	}
+	segmentEmpty := true
+	for i := 0; i < len(key); i++ {
+		switch ch := key[i]; {
+		case ch == '\\' && i+1 < len(key) && key[i+1] == '.':
+			segmentEmpty = false
+			i++
+		case ch == '.':
+			if segmentEmpty {
+				return invalid("empty segment; use one dot between names")
+			}
+			segmentEmpty = true
+		case ch == '[':
+			end := strings.IndexByte(key[i:], ']')
+			if end < 0 {
+				return invalid("unclosed [")
+			}
+			if strings.TrimSpace(key[i+1:i+end]) == "" {
+				return invalid("empty index []")
+			}
+			i += end
+			segmentEmpty = false
+		default:
+			segmentEmpty = false
+		}
+	}
+	if segmentEmpty {
+		return invalid("empty segment; a key cannot end with a dot")
+	}
+	return nil
 }
 
 // readYAMLAsMap reads a YAML file and returns it as a nested map
@@ -70,8 +137,12 @@ func writeYAMLFile(filePath string, data interface{}) error {
 	return writeYAMLFileRaw(filePath, content)
 }
 
-// writeYAMLFileRaw writes raw bytes to a YAML file atomically
+// writeYAMLFileRaw writes raw bytes to a YAML file atomically. A symlink is
+// followed, so the link stays a link and its target gets the content, and an
+// existing file keeps its mode: os.CreateTemp makes the temp file 0600, and
+// renaming it over a 0644 config used to leave the config 0600.
 func writeYAMLFileRaw(filePath string, content []byte) error {
+	filePath = resolveYAMLTarget(filePath)
 	// Write to temp file first
 	dir := filepath.Dir(filePath)
 	tmpFile, err := os.CreateTemp(dir, ".yaml-*.tmp")
@@ -89,6 +160,13 @@ func writeYAMLFileRaw(filePath string, content []byte) error {
 	if err := tmpFile.Close(); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	if info, err := os.Stat(filePath); err == nil {
+		if err := os.Chmod(tmpPath, info.Mode().Perm()); err != nil {
+			os.Remove(tmpPath)
+			return fmt.Errorf("failed to keep the file mode: %w", err)
+		}
 	}
 
 	// Atomic rename
@@ -433,7 +511,7 @@ func setValuePreservingComments(filePath string, dotPath string, value interface
 
 	// If path exists, use AST replacement to preserve comments
 	if pathExistsErr == nil {
-		err = path.ReplaceWithReader(file, strings.NewReader(strings.TrimSpace(string(valueBytes))))
+		err = replaceKeepingLineComment(file, path, strings.TrimSpace(string(valueBytes)))
 		if err != nil {
 			return fmt.Errorf("failed to replace value: %w", err)
 		}
@@ -458,6 +536,32 @@ func setValuePreservingComments(filePath string, dotPath string, value interface
 		return setErr
 	}
 	return writeYAMLFile(filePath, data)
+}
+
+// replaceKeepingLineComment replaces the value at path and puts back the
+// comment that was on the old value's line. ReplaceWithReader swaps the node,
+// and the comment belongs to the node, so `port: 1 # keep` came back as
+// `port: 2`. The comment is only put back on a scalar: on a block mapping or
+// sequence it would no longer sit on the edited line.
+func replaceKeepingLineComment(file *ast.File, path *yaml.Path, value string) error {
+	var comment *ast.CommentGroupNode
+	if old, err := path.FilterFile(file); err == nil && old != nil {
+		comment = old.GetComment()
+	}
+	if err := path.ReplaceWithReader(file, strings.NewReader(value)); err != nil {
+		return err
+	}
+	if comment == nil {
+		return nil
+	}
+	replaced, err := path.FilterFile(file)
+	if err != nil || replaced == nil {
+		return nil
+	}
+	if _, scalar := replaced.(ast.ScalarNode); !scalar {
+		return nil
+	}
+	return replaced.SetComment(comment)
 }
 
 // insertKeyPreservingComments adds a key that does not yet exist by merging it
@@ -558,7 +662,7 @@ func setValuesPreservingComments(filePath string, keys []string, values []interf
 			if marshalErr != nil {
 				return false, nil
 			}
-			if yamlPath.ReplaceWithReader(file, strings.NewReader(strings.TrimSpace(string(valueBytes)))) != nil {
+			if replaceKeepingLineComment(file, yamlPath, strings.TrimSpace(string(valueBytes))) != nil {
 				return false, nil
 			}
 			continue

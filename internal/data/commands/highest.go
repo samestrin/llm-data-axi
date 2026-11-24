@@ -107,6 +107,12 @@ func runHighest(cmd *cobra.Command, args []string) error {
 		searchPaths = []string{absPath}
 	}
 
+	switch highestType {
+	case "dir", "file", "both":
+	default:
+		return invalidFlagValue("type", highestType, "dir, file or both")
+	}
+
 	// Validate all paths exist and are directories
 	for _, searchPath := range searchPaths {
 		info, err := os.Stat(searchPath)

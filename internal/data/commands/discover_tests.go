@@ -38,16 +38,21 @@ func newDiscoverTestsCmd() *cobra.Command {
 		Short: "Discover test patterns and infrastructure",
 		Long: `Discover test patterns, runners, and infrastructure in a project.
 
-Output fields:
-  PATTERN: SEPARATED | COLOCATED | UNKNOWN
-  FRAMEWORK: wasp | nextjs | nuxt | angular | vue | remix
-  TEST_RUNNER: vitest | jest | mocha | pytest
-  CONFIG_FILE: path to test config file
-  SOURCE_DIR: source directory
-  TEST_DIR: test directory
-  E2E_DIR: e2e test directory
-  UNIT_TEST_COUNT: number of unit test files
-  E2E_TEST_COUNT: number of e2e test files`,
+Output fields (TOON and --json):
+  pattern: SEPARATED | COLOCATED | UNKNOWN
+  framework: wasp | nextjs | nuxt | angular | vue | remix
+  test_runner: vitest | jest | mocha | pytest
+  config_file: path to test config file
+  source_dir: source directory
+  test_dir: test directory
+  e2e_dir: e2e test directory
+  unit_test_count: number of unit test files
+  e2e_test_count: number of e2e test files
+  total_test_count: unit and e2e together
+
+Examples:
+  llm-data discover-tests
+  llm-data discover-tests --path ../web --json`,
 		Args: cobra.NoArgs,
 		RunE: runDiscoverTests,
 	}

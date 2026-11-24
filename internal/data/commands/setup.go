@@ -97,18 +97,32 @@ var (
 )
 
 // resolveHookCommand is the command every target's hook runs: the bare
-// `llm-data` when PATH finds it, otherwise this binary's absolute path,
-// shell-quoted when it needs to be. A hook nobody can run is an error, not a
-// success.
+// `llm-data` when PATH finds this very binary, otherwise this binary's
+// absolute path, shell-quoted when it needs to be. Any llm-data on PATH used
+// to be taken as this one, so a hook installed by one build ran another, an
+// old release or somebody else's binary. A hook nobody can run is an error,
+// not a success.
 func resolveHookCommand() (string, error) {
-	if _, err := setupLookPath(setupHookCommand); err == nil {
-		return setupHookCommand, nil
-	}
 	exe, err := setupExecutable()
 	if err != nil || exe == "" || !filepath.IsAbs(exe) {
-		return "", fmt.Errorf("llm-data is not on PATH and the path of this binary is unknown; add llm-data to PATH and run setup again")
+		return "", fmt.Errorf("the path of this llm-data binary is unknown, so setup can neither check that the llm-data on PATH is this binary nor write its absolute path; reinstall llm-data and run setup again")
+	}
+	if onPath, err := setupLookPath(setupHookCommand); err == nil && sameExecutable(onPath, exe) {
+		return setupHookCommand, nil
 	}
 	return shellQuote(exe), nil
+}
+
+// sameExecutable reports whether a and b name one file once symlinks are
+// resolved. A path that does not resolve is compared as written.
+func sameExecutable(a, b string) bool {
+	resolve := func(p string) string {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			return r
+		}
+		return filepath.Clean(p)
+	}
+	return resolve(a) == resolve(b)
 }
 
 // shellQuote single-quotes s when a shell would otherwise split or expand it.
@@ -214,6 +228,10 @@ Run ` + "`llm-data --help`" + ` for the full command list. Output is token-dense
 - ` + "`llm-data yaml get|set|multiget|multiset`" + ` reads and edits YAML in place.
 - ` + "`llm-data git-changes`" + `, ` + "`llm-data git-context`" + ` and ` + "`llm-data repo-root`" + ` describe the repository.
 - ` + "`llm-data detect`" + ` describes the project's stack and layout.
+
+Not installed? ` + "`go install github.com/samestrin/llm-data-axi/v2/cmd/llm-data@v2.0.2`" + `, or run one command without installing: ` + "`go run github.com/samestrin/llm-data-axi/v2/cmd/llm-data@v2.0.2 <command>`" + `.
+
+A failure prints ` + "`error: true`" + ` and a ` + "`message`" + `, often with a ` + "`help`" + ` list naming the next step (the same keys under ` + "`--json`" + `). On exit 1 the command ran and failed; on exit 2 the call itself was malformed (unknown flag, bad value, missing argument), so retrying it unchanged will not help. A result cut short says so with ` + "`truncated`" + ` and a ` + "`help`" + ` line; ` + "`grep`" + ` and ` + "`multigrep`" + ` return whole lines with ` + "`--full`" + `.
 `
 
 // SetupFile is one file setup manages and what happened to it.

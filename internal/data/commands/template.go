@@ -42,7 +42,16 @@ func newTemplateCmd() *cobra.Command {
 		Long: `Perform variable substitution in template files.
 
 Supports {{variable}} or [[variable]] syntax with optional defaults.
-Example: {{name|Guest}} uses "Guest" if name is not defined.`,
+Example: {{name|Guest}} uses "Guest" if name is not defined.
+
+--var KEY=@PATH reads the value from the file at PATH, any file the process
+can read, and --env makes every environment variable a template variable.
+Both are opt-in; pass them only with templates and paths you trust.
+
+Examples:
+  llm-data template greeting.txt --var name=Ada
+  llm-data template prompt.md --syntax brackets --var body=@notes.txt
+  llm-data template config.tmpl --data values.json --strict -o config.yaml`,
 		Args: cobra.ExactArgs(1),
 		RunE: runTemplate,
 	}
@@ -68,6 +77,9 @@ func runTemplate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("stdin not supported, use file path")
 	}
 
+	if err := requireRegularFile(args[0]); err != nil {
+		return err
+	}
 	content, err := os.ReadFile(args[0])
 	if err != nil {
 		return fmt.Errorf("failed to read template: %w", err)
@@ -79,6 +91,9 @@ func runTemplate(cmd *cobra.Command, args []string) error {
 
 	// From JSON file (lowest priority)
 	if templateData != "" {
+		if err := requireRegularFile(templateData); err != nil {
+			return err
+		}
 		data, err := os.ReadFile(templateData)
 		if err != nil {
 			return fmt.Errorf("failed to read data file: %w", err)
@@ -110,6 +125,9 @@ func runTemplate(cmd *cobra.Command, args []string) error {
 			// Check if value is a file reference (@path)
 			if strings.HasPrefix(value, "@") {
 				filePath := value[1:]
+				if err := requireRegularFile(filePath); err != nil {
+					return err
+				}
 				fileContent, err := os.ReadFile(filePath)
 				if err != nil {
 					return fmt.Errorf("failed to read file for variable %s: %w", key, err)

@@ -76,7 +76,10 @@ type GrepResult struct {
 	// BinarySkipped names each file passed over as binary: a skipped file
 	// must not look like a searched file with no match.
 	BinarySkipped []string `json:"binary_skipped,omitempty"`
-	Help          []string `json:"help,omitempty"`
+	// NonRegularSkipped names each FIFO, device or socket a walk passed
+	// over: opening a FIFO with no writer blocked grep forever.
+	NonRegularSkipped []string `json:"non_regular_skipped,omitempty"`
+	Help              []string `json:"help,omitempty"`
 }
 
 // grepFile is a file to search: path is opened, shown is printed.
@@ -87,10 +90,21 @@ type grepFile struct {
 // newGrepCmd creates the grep command
 func newGrepCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "grep [pattern] [paths...]",
+		Use:   "grep <pattern> <path>...",
 		Short: "Search for pattern in files",
 		Long: `Search for a pattern in files using regular expressions.
-Respects .gitignore patterns by default.`,
+The pattern and at least one path are required.
+
+Respects .gitignore patterns by default and skips .git; --no-gitignore
+searches both. Binary files are listed in binary_skipped, and FIFOs, devices
+and sockets found in a directory in non_regular_skipped. A matching line is
+cut at 200 bytes unless --full is passed.
+
+Examples:
+  llm-data grep TODO src
+  llm-data grep -i -n "func main" cmd internal
+  llm-data grep -l "deprecated" . --json
+  llm-data grep -- -v docs`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: runGrep,
 	}
@@ -123,6 +137,7 @@ func runGrep(cmd *cobra.Command, args []string) error {
 	// made `total: 0` a search that never happened.
 	var files []grepFile
 	var unreadable []pathFailure
+	var nonRegular []string
 	walkedDir := false
 	for _, pathStr := range paths {
 		absPath, err := filepath.Abs(pathStr)
@@ -160,6 +175,9 @@ func runGrep(cmd *cobra.Command, args []string) error {
 					unreadable = append(unreadable, pathFailure{Path: shownAt.show(path), Reason: failureReason(err)})
 					return nil
 				}
+				if skipGitDir(absPath, path, info, !grepNoGitignore) {
+					return filepath.SkipDir
+				}
 				if info.IsDir() {
 					return nil
 				}
@@ -177,9 +195,16 @@ func runGrep(cmd *cobra.Command, args []string) error {
 						return nil
 					}
 				}
+				if isSpecialFile(path, info) {
+					nonRegular = append(nonRegular, shownAt.show(path))
+					return nil
+				}
 				files = append(files, grepFile{path: path, shown: shownAt.show(path)})
 				return nil
 			})
+		} else if !info.Mode().IsRegular() {
+			// Named outright, a special file is a path that cannot be read.
+			unreadable = append(unreadable, pathFailure{Path: shownAt.shown, Reason: notRegularReason})
 		} else {
 			files = append(files, grepFile{path: absPath, shown: shownAt.shown})
 		}
@@ -187,7 +212,8 @@ func runGrep(cmd *cobra.Command, args []string) error {
 
 	// Search files
 	result := GrepResult{
-		Pattern: pattern,
+		Pattern:           pattern,
+		NonRegularSkipped: nonRegular,
 	}
 	matchedFiles := make(map[string]bool)
 	truncatedLines := false
@@ -372,6 +398,9 @@ func printGrepText(w io.Writer, data interface{}) {
 				break
 			}
 			fmt.Fprintf(w, "binary skipped: %s\n", f)
+		}
+		for _, f := range r.NonRegularSkipped {
+			fmt.Fprintf(w, "skipped (not a regular file): %s\n", f)
 		}
 	}()
 

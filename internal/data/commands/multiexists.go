@@ -35,22 +35,24 @@ type MultiexistsResult struct {
 // newMultiexistsCmd creates the multiexists command
 func newMultiexistsCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "multiexists [paths...]",
+		Use:   "multiexists <path>...",
 		Short: "Check if multiple files/directories exist",
 		Long: `Check if multiple files or directories exist.
 
-Output format:
-  ✓ path: EXISTS [type]
-  ✗ path: MISSING
-
-Summary:
-  ALL_EXIST: TRUE/FALSE
-  MISSING_COUNT: N
-  EXIST_COUNT: N
+Output fields (TOON and --json):
+  entries        each path with exists and, with --verbose, its type
+  all_exist      true when every path exists
+  exist_count    paths that exist
+  missing_count  paths that do not
 
 A missing path is an error (exit 1) that lists the missing paths as
 "missing", with exist_count and missing_count. With --no-fail it is a result
-instead: the full listing with all_exist false, exit 0.`,
+instead: the full listing with all_exist false, exit 0.
+
+Examples:
+  llm-data multiexists README.md go.mod
+  llm-data multiexists src tests docs --verbose
+  llm-data multiexists .env config.yaml --no-fail --json`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: runMultiexists,
 	}

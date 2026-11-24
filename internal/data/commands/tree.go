@@ -106,6 +106,12 @@ type treeBuilder struct {
 }
 
 func runTree(cmd *cobra.Command, args []string) error {
+	if treeDepth < 0 {
+		return invalidFlagValue("depth", treeDepth, "0 or more")
+	}
+	if treeMaxEntries < 0 {
+		return invalidFlagValue("max-entries", treeMaxEntries, "0 (unlimited) or more")
+	}
 	path, err := filepath.Abs(treePath)
 	if err != nil {
 		return fmt.Errorf("invalid path: %s", treePath)

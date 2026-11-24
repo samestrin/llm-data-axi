@@ -69,9 +69,9 @@ Output Formats:
   --min:   just the value, with --plain or --json. No effect on TOON.
 
 Examples:
-  yaml get --file config.yaml helper.llm
-  yaml get --file config.yaml helper.llm --plain --min
-  yaml get --file config.yaml missing.key --default "fallback"`,
+  llm-data yaml get --file config.yaml helper.llm
+  llm-data yaml get --file config.yaml helper.llm --plain --min
+  llm-data yaml get --file config.yaml missing.key --default "fallback"`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if file == "" {
@@ -80,14 +80,8 @@ Examples:
 
 			key := args[0]
 
-			// Acquire read lock
-			lock, err := yamlFileLock(file, false)
-			if err != nil {
-				return err
-			}
-			defer lock.Unlock()
-
-			// Read file
+			// No lock: a write replaces the file by rename, so this read
+			// sees the old file or the new one, never a torn one.
 			data, err := readYAMLAsMap(file)
 			if err != nil {
 				if os.IsNotExist(err) {
@@ -153,18 +147,20 @@ func newYamlSetCmd() *cobra.Command {
 		Long: `Store a value in the YAML config file at the specified key.
 
 Creates intermediate keys if they don't exist.
-Preserves comments where possible.
+Preserves comments where possible, including the comment on the edited line.
+A symlinked file is written through to its target, and the file keeps its mode.
+An empty key, or one with an empty segment such as a..b, is a usage error (exit 2).
 
 Use '-' as VALUE to read from stdin (for piping values or multi-line input).
 Use --dry-run to preview changes without writing to the file.
 Use --quiet to suppress success messages (errors still output).
 
 Examples:
-  yaml set --file config.yaml helper.llm claude
-  yaml set --file config.yaml helper.max_lines 2500
-  yaml set --file config.yaml new.nested.key value --create
-  echo "piped" | yaml set --file config.yaml key -
-  yaml set --file config.yaml key value --dry-run`,
+  llm-data yaml set --file config.yaml helper.llm claude
+  llm-data yaml set --file config.yaml helper.max_lines 2500
+  llm-data yaml set --file config.yaml new.nested.key value --create
+  echo "piped" | llm-data yaml set --file config.yaml key -
+  llm-data yaml set --file config.yaml key value --dry-run`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if file == "" {
@@ -173,6 +169,9 @@ Examples:
 
 			key := args[0]
 			value := args[1]
+			if err := validateKeyPath(key); err != nil {
+				return err
+			}
 
 			// Handle stdin input when value is "-"
 			if value == "-" {
@@ -206,13 +205,8 @@ Examples:
 			if dryRun {
 				var oldValue interface{}
 				if _, err := os.Stat(file); err == nil {
-					// Acquire read lock to prevent race condition with concurrent writes
-					lock, err := yamlFileLock(file, false) // false = read lock
-					if err != nil {
-						return fmt.Errorf("failed to acquire read lock for dry-run: %w", err)
-					}
+					// No lock: a dry run writes nothing, not even a lock file.
 					data, err := readYAMLAsMap(file)
-					lock.Unlock()
 					if err == nil {
 						oldValue, _ = getValueAtPath(data, key)
 					}
@@ -220,12 +214,11 @@ Examples:
 				return outputDryRunPreview(cmd, file, key, oldValue, typedValue, jsonOutput, minOutput)
 			}
 
-			// Acquire write lock
-			lock, err := yamlFileLock(file, true)
+			release, err := yamlWriteLock(file)
 			if err != nil {
 				return err
 			}
-			defer lock.Unlock()
+			defer release()
 
 			// Use comment-preserving set (uses AST manipulation)
 			if err := setValuePreservingComments(file, key, typedValue); err != nil {
@@ -301,10 +294,10 @@ Output Formats:
   --min:   values only, with --plain or --json. No effect on TOON.
 
 Examples:
-  yaml multiget --file config.yaml helper.llm project.type
-  yaml multiget --file config.yaml helper.llm missing.key --defaults '{"missing.key": "default"}'
-  yaml multiget --file config.yaml helper.llm project.type --plain --min
-  yaml multiget --file config.yaml --required-file keys.txt`,
+  llm-data yaml multiget --file config.yaml helper.llm project.type
+  llm-data yaml multiget --file config.yaml helper.llm missing.key --defaults '{"missing.key": "default"}'
+  llm-data yaml multiget --file config.yaml helper.llm project.type --plain --min
+  llm-data yaml multiget --file config.yaml --required-file keys.txt`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if file == "" {
@@ -341,14 +334,8 @@ Examples:
 				}
 			}
 
-			// Acquire read lock
-			lock, err := yamlFileLock(file, false)
-			if err != nil {
-				return err
-			}
-			defer lock.Unlock()
-
-			// Read file
+			// No lock: a write replaces the file by rename, so this read
+			// sees the old file or the new one, never a torn one.
 			data, err := readYAMLAsMap(file)
 			if err != nil {
 				if os.IsNotExist(err) {
@@ -431,15 +418,16 @@ func newYamlMultisetCmd() *cobra.Command {
 		Short: "Store multiple values atomically",
 		Long: `Store multiple key-value pairs in the YAML config file in a single atomic operation.
 
-All keys are validated before any writes occur.
+All keys are validated before any writes occur: an empty key, or one with an
+empty segment such as a..b, is a usage error (exit 2) and nothing is written.
 Arguments must be in KEY VALUE pairs.
 Use --dry-run to preview changes without writing to the file.
 Use --quiet to suppress success messages (errors still output).
 
 Examples:
-  yaml multiset --file config.yaml helper.llm claude helper.max_lines 2500
-  yaml multiset --file config.yaml --create new.key value1 other.key value2
-  yaml multiset --file config.yaml key1 val1 key2 val2 --dry-run`,
+  llm-data yaml multiset --file config.yaml helper.llm claude helper.max_lines 2500
+  llm-data yaml multiset --file config.yaml --create new.key value1 other.key value2
+  llm-data yaml multiset --file config.yaml key1 val1 key2 val2 --dry-run`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if file == "" {
@@ -457,6 +445,9 @@ Examples:
 				pairs[i/2] = struct{ key, value string }{
 					key:   args[i],
 					value: args[i+1],
+				}
+				if err := validateKeyPath(args[i]); err != nil {
+					return err
 				}
 			}
 
@@ -477,14 +468,9 @@ Examples:
 			if dryRun {
 				var data map[string]interface{}
 				if _, statErr := os.Stat(file); statErr == nil {
-					// Acquire read lock to prevent race condition with concurrent writes
-					lock, lockErr := yamlFileLock(file, false) // false = read lock
-					if lockErr != nil {
-						return fmt.Errorf("failed to acquire read lock for dry-run: %w", lockErr)
-					}
+					// No lock: a dry run writes nothing, not even a lock file.
 					var readErr error
 					data, readErr = readYAMLAsMap(file)
-					lock.Unlock()
 					if readErr != nil {
 						return fmt.Errorf("failed to read config file: %w", readErr)
 					}
@@ -509,9 +495,15 @@ Examples:
 				return outputMultiDryRunPreview(cmd, file, changes, jsonOutput, minOutput)
 			}
 
-			// Read file for actual update
+			release, err := yamlWriteLock(file)
+			if err != nil {
+				return err
+			}
+			defer release()
+
+			// Read the file under the lock, so another writer's change
+			// cannot land between this read and the write below.
 			var data map[string]interface{}
-			var err error
 			if _, statErr := os.Stat(file); statErr == nil {
 				data, err = readYAMLAsMap(file)
 				if err != nil {
@@ -520,13 +512,6 @@ Examples:
 			} else {
 				data = make(map[string]interface{})
 			}
-
-			// Acquire write lock
-			lock, err := yamlFileLock(file, true)
-			if err != nil {
-				return err
-			}
-			defer lock.Unlock()
 
 			// Type the values once; both paths below need them.
 			var keys []string

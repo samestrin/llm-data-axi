@@ -1,6 +1,6 @@
 # Release checklist
 
-Steps for cutting a release of `llm-data`. Run steps 1 to 3 from the repository root on the commit that will be tagged; step 4 publishes the release, and steps 5 and 6 follow its publication.
+Steps for cutting a release of `llm-data`. Run steps 1 to 4 from the repository root on the commit that will be tagged; step 5 publishes the release, and step 6 follows its publication.
 
 ## 1. Green before a tag
 
@@ -33,9 +33,29 @@ The tape's commands are replayed without `vhs` by `go test ./tests/demo`, so a c
 ## 3. CHANGELOG
 
 - [ ] `CHANGELOG.md` has an `[Unreleased]` section that lists every user-visible change since the last tag, in plain words, without ticket IDs.
-- [ ] That section is renamed to the version and today's date when the tag is pushed.
+- [ ] That section is renamed to the version and the release date before step 4, in the commit that will be tagged: the benchmark guards read the newest dated heading as the release.
 
-## 4. Tag and publish
+## 4. Benchmark the release candidate
+
+Measure the commit that will be tagged, before the tag, so the tag carries its own figures: a tag whose results, README and catalog entry still describe the previous release is the stale-docs failure v2.0.1 shipped with. Work in a clean checkout of that commit (a fresh `git worktree add` or clone): the token report refuses a checkout with uncommitted changes, because its commit would not name what was measured.
+
+```bash
+make build VERSION=v<version>
+build/llm-data --version
+go run ./benchmarks -perf -bin build/llm-data
+go run ./benchmarks -bin build/llm-data -o benchmarks/RESULTS.md
+```
+
+`VERSION=v<version>` stamps the candidate with the release version; an unstamped build reports `dev`, which the latest-release guard rejects.
+
+- [ ] `build/llm-data --version` prints the release version.
+- [ ] The regenerated `benchmarks/results-performance.*` files and the README Performance table are committed, and both result files name the release version, not `dev`.
+- [ ] `benchmarks/RESULTS.md` is regenerated from a clean checkout and names the binary version and the commit it measured, and the catalog entry's token figures (`docs/axi-catalog-entry.yaml`, description and observation) are re-quoted from its total row.
+- [ ] The README pins, the AXI audit's line cites and the catalog entry's observations are re-checked against the candidate.
+
+The commit that adds the results is the one to tag; the measured commit is its parent, and `RESULTS.md` names it, so the table can be reproduced by checking that commit out.
+
+## 5. Tag and publish
 
 ```bash
 git tag v<version>
@@ -48,7 +68,7 @@ The `release` workflow tests the tagged commit, builds `llm-data` and `llm-data-
 - [ ] The release page lists both binaries per platform plus `SHA256SUMS.txt`.
 - [ ] The binaries report the tagged version (`llm-data --version`).
 
-## 5. Check the install path
+## 6. Check the install path
 
 - [ ] On a machine without a checkout, the install one-liner installs the new version from the new release:
 
@@ -58,13 +78,4 @@ The `release` workflow tests the tagged commit, builds `llm-data` and `llm-data-
       ```
 
 - [ ] A checksum mismatch or a failed download still installs nothing (the installer's own tests cover this, but the published assets are what it reads).
-
-## 6. Re-run the performance benchmark
-
-From the repository root, re-run the performance script at each release against the published binary installed in step 5, so the committed measurements describe that release rather than an unstamped local build:
-
-```bash
-go run ./benchmarks -perf -bin "$(command -v llm-data)"
-```
-
-- [ ] The regenerated `benchmarks/results-performance.*` files and the README Performance table are committed, and both result files name the published release version, not `dev`.
+- [ ] After the tag, re-pin `reviewed_revision` in `docs/axi-catalog-entry.yaml` to `git rev-parse v<version>^{commit}`.

@@ -6,11 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-11-23
+
+### Security
+
+- **An MCP tool value can no longer act as a CLI option.** The server passed tool values such as a `yaml_multiset` key, a `grep` pattern or a `catfiles` path to the CLI as bare arguments, so a value spelled like an option was read as one: the pair `{"--file=h.yaml": "--create"}` wrote `h.yaml`, a file the caller never named. Every value built from tool input now follows a `--`, and the encoding flags go before it. A `grep` pattern such as `-v` can now be searched for over MCP.
+
+### Fixed
+
+- **`yaml set` and `yaml multiset` keep the file's mode and follow a symlink.** A write replaced a 0644 file with a 0600 one, and replaced a symlink with a regular file while its target kept the old value, still reporting `status: set`. The target is now written and keeps its mode.
+- **`yaml set` and `yaml multiset` refuse a key that names no value.** An empty key, `a..b`, a leading or trailing dot, an unclosed `[` or an empty `[]` printed `status: set` with exit 0 and wrote nothing or the wrong key. They are now a usage error (exit 2) and nothing is written.
+- **`yaml set` keeps the comment on the line it edits.** `port: 1 # keep` came back as `port: 2`; it is now `port: 2 # keep`.
+- **Reading YAML no longer creates files.** `yaml get`, `yaml multiget` and `--dry-run` left a 0-byte `<file>.lock` (and `..lock` for `yaml get --file .`). Reads and dry runs take no lock now, and on Linux and macOS a write removes its lock file when it finishes. On Windows the lock file is left behind: Windows will not remove a file another handle has open, and the lock is held while it is removed.
+- **No command hangs on a FIFO or a device.** `catfiles`, `template` and `count --mode lines` read `/dev/zero` without end, and `grep`, `catfiles`, `count -r` and `multigrep` blocked forever on a FIFO in a directory. A FIFO, device or socket named outright is an error (exit 1, `not a regular file`); one found in a directory is skipped and reported: `non_regular_skipped` in `grep` and `multigrep`, `skipped` in `count` and `catfiles`.
+- **`catfiles` reports what it left out on stdout.** A stop at `--max-size` and a skipped binary file went to stderr only, so stdout read as complete. The result now carries `truncated`, `not_read`, a `skipped` list of `{path, reason}` and a `help` line.
+- **Invalid flag values are usage errors (exit 2).** `count --mode bogus` exited 1, `highest --type bogus` ran as `both`, `tree --depth -1` printed an empty tree, `git-context --max-commits -3` returned every commit and `catfiles --max-size 0` printed no files, all but the first with exit 0. `count --style` and `tree --max-entries` are checked too.
+- **`multigrep` labels matches in a file with that file's path.** With `--path` naming a file, every match was labelled `.`.
+- **`multigrep --output-dir` writes each keyword to its own file.** `a b` and `a_b` both became `keyword_a_b.txt`, and the second overwrote the first. A keyword that is not a safe file name now gets a short hash in its file name, and `output_files` maps each keyword to its file.
+- **`setup` writes the bare `llm-data` into a hook only when PATH finds this binary.** Any `llm-data` on PATH was taken to be this one, so the hook could run another build. Otherwise the hook names this binary's absolute path.
+- **Usage errors say what to pass.** Every exit-2 error carries a `help` list with the missing flag and what it takes, the usage line and the command's `--help`; `--plain` prints it under the message. `count` without `--mode` is now a usage error. `git-changes` outside a repository names the directory instead of repeating git's "or any parent up to mount point".
+- **`grep` and `catfiles` skip `.git`.** A search of a repository matched git's own files and listed `.git/index` and every pack in `binary_skipped`. `--no-gitignore`, or naming `.git` itself, still searches it.
+- **Every command's `--help` has examples, and its field names match the output.** `count`, `detect`, `stats`, `catfiles`, `grep` and five more had none; `count --help` described `TOTAL: N` while TOON prints `count:`, and `detect`, `discover-tests` and `multiexists` listed upper-case fields the output does not have. `grep`, `catfiles` and `multiexists` show their required arguments as required.
+
 ### Changed
 
-- **The committed performance results are from the 2.0.1 release binary.** `benchmarks/results-performance.json` and `.md` were measured on 1.1.0; they are regenerated from the v2.0.1 release build, and the README Performance section quotes them. A test fails when the committed results name a version other than the latest release in this changelog. (epic 10)
-- **The release documentation stays on the latest release.** The checklist now requires re-running `go run ./benchmarks -perf` against the installed release binary and committing the regenerated results and README Performance table at each release. The README install, quick-start, source and configuration examples pin v2.0.1. Documentation only.
-- **The AXI catalog entry and audit are pinned to v2.0.1.** `docs/axi-catalog-entry.yaml` names the v2.0.1 release commit as `reviewed_revision`, and its observations were re-probed on a build of that tag: the `template --plain --min` fix is described as fixed, not as an open defect. `docs/axi-audit.md` was re-checked at the same tag, and its `root.go`, `grep.go`, `multigrep.go` and MCP handler line citations, which pointed a few lines off since v2.0.0, now point at the lines they name. Documentation only.
+- **The skill says how to install llm-data and what a failure looks like.** It names `go install` and `go run` lines for the release, the `error: true` / `message` shape, exit codes 1 and 2, and `truncated` and `--full`.
+- **`benchmarks/RESULTS.md` names the binary and the commit it was measured at.** The generator records the `llm-data --version` output and each repository's commit, and refuses to write the report from a checkout with uncommitted changes. The committed table is regenerated from a clean checkout.
+- **The committed performance results are from this release's binary.** `benchmarks/results-performance.json` and `.md` were measured on 1.1.0, then on the v2.0.1 release build after it was tagged; they are now measured on the 2.0.2 release candidate, built from the commit to be tagged and stamped with its version, so the tag carries its own figures. A test fails when the committed results name a version other than the latest release in this changelog.
+- **The release documentation is updated before the tag, not after.** v2.0.1's own README pinned v2.0.0 and its audit cites were off, because both were corrected only after tagging. The checklist now regenerates the token and performance results and re-checks the README, the audit and the catalog entry on the release candidate before the tag. The README install, quick-start, source and configuration examples pin v2.0.2. Documentation only.
+- **The README says what ships and what it reads.** It names both binaries, says the MCP server's 20 tools are every command but `setup`, gives the `npx skills add ... --agent claude-code -y` form for a session without a terminal, notes that `template --var KEY=@PATH` and `--env` read files and environment variables you name, and its `highest` example uses a path that exists. Documentation only.
+- **The AXI audit and catalog entry describe v2.0.2.** `docs/axi-audit.md` was re-probed on the release candidate and its line citations re-checked; it now names `grep`'s `unreadable` list under principle 6 and says the skill is a hand-written constant. The catalog entry's observations and token figures match. Its `reviewed_revision` still names v2.0.1 until v2.0.2 is tagged. Documentation only.
 
 ## [2.0.1] - 2026-11-19
 

@@ -135,7 +135,9 @@ func TestExecuteHandlerKeepsUserValuesSpelledLikeEncodingFlags(t *testing.T) {
 		if err != nil {
 			t.Fatalf("format=%q: ExecuteHandler: %v", format, err)
 		}
-		if !strings.HasPrefix(out, "grep --json --min ") {
+		// The values follow the "--" that ends option parsing, so the CLI
+		// reads them as the pattern and path, never as the encoding.
+		if !strings.HasSuffix(strings.TrimSpace(out), " -- --json --min") {
 			t.Errorf("format=%q: the pattern and path were not passed through: %q", format, out)
 		}
 

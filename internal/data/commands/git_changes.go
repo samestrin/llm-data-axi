@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -83,7 +84,16 @@ func runGitChanges(cmd *cobra.Command, args []string) error {
 	// not; any other failure, git missing or broken, keeps its own reason.
 	if _, err := runGitCtx(context.Background(), "", "rev-parse", "--git-dir"); err != nil {
 		if errors.Is(err, errNotARepository) {
-			return fmt.Errorf("not a git repository (or any parent up to mount point)")
+			// git's own wording ("or any parent up to mount point") names
+			// no directory; this names the one git-changes looked in.
+			cwd, _ := os.Getwd()
+			return &dataError{
+				msg: fmt.Sprintf("not a git repository: %s", cwd),
+				fields: map[string]any{"help": []string{
+					"Run git-changes from inside a git repository",
+					"Run `git init` to make this directory one",
+				}},
+			}
 		}
 		return err
 	}

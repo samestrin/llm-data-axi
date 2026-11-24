@@ -33,11 +33,16 @@ type CountCheckboxResult struct {
 	Unchecked int     `json:"unchecked"`
 	Partial   int     `json:"partial"`
 	Percent   float64 `json:"percent"`
+	// Skipped counts the FIFOs, devices and sockets a walk passed over:
+	// reading one blocked or never ended.
+	Skipped int `json:"skipped,omitempty"`
 }
 
-// CountLinesResult holds line count results
+// CountLinesResult holds line count results. Skipped is as in
+// CountCheckboxResult.
 type CountLinesResult struct {
-	Count int `json:"count"`
+	Count   int `json:"count"`
+	Skipped int `json:"skipped,omitempty"`
 }
 
 // CountFilesResult holds file count results
@@ -57,12 +62,15 @@ Modes (use --mode or legacy flags):
   --mode lines       or  --lines       - Count lines in files
   --mode files       or  --files       - Count files matching pattern
 
-Output format:
-  TOTAL: N
-  CHECKED: N (for checkboxes mode)
-  UNCHECKED: N (for checkboxes mode)
-  PARTIAL: N (for checkboxes mode)
-  PERCENT: N% (for checkboxes mode)`,
+Output fields (TOON and --json):
+  count      the total
+  checked, unchecked, partial, percent   checkboxes mode only
+  skipped    FIFOs, devices and sockets passed over, when there were any
+
+Examples:
+  llm-data count --mode checkboxes --path PLAN.md
+  llm-data count --mode lines --path src -r
+  llm-data count --mode files --path src --pattern "*.go" -r`,
 		RunE: runCount,
 	}
 	cmd.Flags().StringVar(&countPath, "path", "", "Path to count in (required)")
@@ -91,6 +99,9 @@ func runCount(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("path does not exist: %s", target)
 	}
+	if err := requireRegularFile(target); err != nil {
+		return err
+	}
 
 	// Handle legacy flags
 	mode := countMode
@@ -105,7 +116,20 @@ func runCount(cmd *cobra.Command, args []string) error {
 	}
 
 	if mode == "" {
-		return fmt.Errorf("must specify --mode or one of --checkboxes, --lines, --files")
+		return &usageHelpError{
+			err:  &output.UsageError{Msg: "missing --mode: pass --mode checkboxes, lines or files (or --checkboxes, --lines, --files)"},
+			help: []string{"Pass --mode checkboxes, lines or files"},
+		}
+	}
+	switch mode {
+	case "checkboxes", "lines", "files":
+	default:
+		return invalidFlagValue("mode", mode, "checkboxes, lines or files")
+	}
+	switch countStyle {
+	case "", "all", "list", "heading", "table":
+	default:
+		return invalidFlagValue("style", countStyle, "all, list, heading or table")
 	}
 
 	switch mode {
@@ -113,10 +137,8 @@ func runCount(cmd *cobra.Command, args []string) error {
 		return runCountCheckboxes(cmd, target, info)
 	case "lines":
 		return runCountLines(cmd, target, info)
-	case "files":
+	default: // "files"; the mode was validated above
 		return runCountFiles(cmd, target, info)
-	default:
-		return fmt.Errorf("unknown mode: %s (supported: checkboxes, lines, files)", mode)
 	}
 }
 
@@ -147,6 +169,7 @@ func runCountCheckboxes(cmd *cobra.Command, target string, info os.FileInfo) err
 	} else {
 		filesToCheck = []string{target}
 	}
+	filesToCheck, skipped := dropSpecialFiles(filesToCheck)
 
 	checked := 0
 	unchecked := 0
@@ -207,6 +230,7 @@ func runCountCheckboxes(cmd *cobra.Command, target string, info os.FileInfo) err
 		Unchecked: unchecked,
 		Partial:   partial,
 		Percent:   percent,
+		Skipped:   skipped,
 	}
 
 	formatter := output.New(countJSON, countMinimal, cmd.OutOrStdout())
@@ -217,7 +241,25 @@ func runCountCheckboxes(cmd *cobra.Command, target string, info os.FileInfo) err
 		fmt.Fprintf(w, "UNCHECKED: %d\n", r.Unchecked)
 		fmt.Fprintf(w, "PARTIAL: %d\n", r.Partial)
 		fmt.Fprintf(w, "PERCENT: %.0f%%\n", r.Percent)
+		if r.Skipped > 0 {
+			fmt.Fprintf(w, "SKIPPED: %d (not a regular file)\n", r.Skipped)
+		}
 	})
+}
+
+// dropSpecialFiles removes the FIFOs, devices and sockets from files and
+// returns how many it removed. A file that cannot be stat'ed stays, as before.
+func dropSpecialFiles(files []string) ([]string, int) {
+	kept := files[:0]
+	skipped := 0
+	for _, f := range files {
+		if info, err := os.Lstat(f); err == nil && isSpecialFile(f, info) {
+			skipped++
+			continue
+		}
+		kept = append(kept, f)
+	}
+	return kept, skipped
 }
 
 // stripFencedCodeBlocks removes content inside fenced code blocks (``` or ~~~)
@@ -266,6 +308,7 @@ func runCountLines(cmd *cobra.Command, target string, info os.FileInfo) error {
 	} else {
 		filesToCheck = []string{target}
 	}
+	filesToCheck, skipped := dropSpecialFiles(filesToCheck)
 
 	totalLines := 0
 	for _, filePath := range filesToCheck {
@@ -281,11 +324,14 @@ func runCountLines(cmd *cobra.Command, target string, info os.FileInfo) error {
 		totalLines += lines
 	}
 
-	result := CountLinesResult{Count: totalLines}
+	result := CountLinesResult{Count: totalLines, Skipped: skipped}
 	formatter := output.New(countJSON, countMinimal, cmd.OutOrStdout())
 	return formatter.Print(result, func(w io.Writer, data interface{}) {
 		r := data.(CountLinesResult)
 		fmt.Fprintf(w, "COUNT: %d\n", r.Count)
+		if r.Skipped > 0 {
+			fmt.Fprintf(w, "SKIPPED: %d (not a regular file)\n", r.Skipped)
+		}
 	})
 }
 
