@@ -16,7 +16,7 @@ import (
 // the source at reviewed_revision, so a claim the source contradicts sinks
 // the entry. These tests hold the claims a test can check to the code; the
 // one they cannot, that reviewed_revision is the commit the release tag
-// carries, is the Reviewer's `git rev-parse v2.0.1^{commit}` (the tag is not
+// carries, is the Reviewer's `git rev-parse v2.0.2^{commit}` (the tag is not
 // in a CI checkout).
 
 const catalogEntryFile = "docs/axi-catalog-entry.yaml"
