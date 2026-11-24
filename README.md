@@ -207,15 +207,15 @@ Errors are written to stdout in the selected output format: TOON by default, JSO
 
 These are the committed measurements for `llm-data 2.0.2`, measured on the release candidate before the tag and copied from the [generated performance table](benchmarks/results-performance.md). The raw timings are in [results-performance.json](benchmarks/results-performance.json), and [benchmarks/main.go](benchmarks/main.go) contains the measurement and report generator.
 
-- **Date:** 2026-11-23
+- **Date:** 2026-11-24
 - **Machine:** Intel(R) Xeon(R) W-2295 CPU @ 3.00GHz, 36 threads, 141.2 GiB RAM, Debian GNU/Linux 13 (trixie), kernel 7.0.0-38-generic
 - **Method:** 3 warmup runs, then 20 timed runs per case. Each timing is the wall-clock time of one `llm-data` process, from start to exit; runs are sequential.
 
 | Case | Command | Input | Runs | Min (ms) | Median (ms) | Mean (ms) | Max (ms) |
 |---|---|---|---:|---:|---:|---:|---:|
-| cold start | `llm-data --version` | none | 20 | 1.79 | 1.87 | 1.89 | 2.16 |
-| typical command | `llm-data detect --path .` | this repository | 20 | 1.75 | 1.85 | 1.89 | 2.15 |
-| large input | `llm-data stats --path .` | 3,000 generated files | 20 | 15.73 | 16.00 | 16.33 | 19.99 |
+| cold start | `llm-data --version` | none | 20 | 1.59 | 1.70 | 1.71 | 1.88 |
+| typical command | `llm-data detect --path .` | this repository | 20 | 1.69 | 1.76 | 1.78 | 2.00 |
+| large input | `llm-data stats --path .` | 3,000 generated files | 20 | 14.20 | 14.81 | 14.82 | 15.43 |
 
 Regenerate both result files with `go run ./benchmarks -perf`, or regenerate only the table from the committed raw timings with `go run ./benchmarks -perf -from-json`. These measurements do not compare another tool. The separate [token benchmark](benchmarks/RESULTS.md) compares TOON and JSON output sizes.
 
