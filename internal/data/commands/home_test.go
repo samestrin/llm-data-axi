@@ -257,6 +257,10 @@ esac`)
 
 // Defends the timeout message naming the call that ran out, so "no answer
 // within" is said of the call that actually had that long.
+//
+// The budget is 1s, not 200ms: the fake rev-parse is a shell script, and on a
+// loaded macOS runner starting it took longer than 200ms about one run in
+// five, so the timeout named rev-parse instead and the test failed.
 func TestHomeViewStatusTimeoutNamesTheCall(t *testing.T) {
 	fakeExecutable(t)
 	dir, err := filepath.EvalSymlinks(t.TempDir())
@@ -269,12 +273,12 @@ rev-parse) pwd ;;
 *) exec sleep 5 ;;
 esac`)
 	orig := homeGitTimeout
-	homeGitTimeout = 200 * time.Millisecond
+	homeGitTimeout = time.Second
 	t.Cleanup(func() { homeGitTimeout = orig })
 
 	out := runRootBoth(t, "--plain")
 
-	want := "repo: git unavailable: git status gave no answer within 200ms\n"
+	want := "repo: git unavailable: git status gave no answer within 1s\n"
 	if !strings.Contains(out, want) || !strings.Contains(out, "repo_root: "+dir+"\n") {
 		t.Errorf("want the root and %q:\n%s", want, out)
 	}
