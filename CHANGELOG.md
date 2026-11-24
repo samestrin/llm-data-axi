@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **The AXI catalog entry and audit are pinned to v2.0.2.** `docs/axi-catalog-entry.yaml` names the v2.0.2 release commit (`2e6ea2d`) as `reviewed_revision`, and its observations now state the pre-tag fixes: the MCP `template` tool's literal `vars`, the refused FIFO, device, directory or symlink write targets, the `--var` usage error and the comments a new `yaml` key keeps. `docs/axi-audit.md` names the tag, rows 1 and 6 cite those fixes, and every line cite was re-checked against the tag. Documentation only.
+
 ## [2.0.2] - 2026-11-23
 
 ### Security
