@@ -33,7 +33,7 @@
 - name: llm-data-axi
   url: https://github.com/samestrin/llm-data-axi
   author: samestrin
-  domain: Data and Project Analysis
+  domain: Project files / YAML
   description: "Inspects and transforms files, projects and YAML configuration with deterministic, network-free commands; across twelve command/repository pairs (24 runs) its default TOON output was 39.3% smaller than the same commands' JSON (183,846 vs 302,691 bytes)."
   admission:
     status: exception

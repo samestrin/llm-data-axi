@@ -77,7 +77,7 @@ func TestCatalogEntryHasTheCatalogFields(t *testing.T) {
 		"name":             {e.Name, "llm-data-axi"},
 		"url":              {e.URL, "https://github.com/samestrin/llm-data-axi"},
 		"author":           {e.Author, "samestrin"},
-		"domain":           {e.Domain, "Data and Project Analysis"},
+		"domain":           {e.Domain, "Project files / YAML"},
 		"admission.status": {e.Admission.Status, "exception"},
 	} {
 		if c[0] != c[1] {
