@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **The AXI catalog entry's domain is `Project files / YAML`.** `docs/axi-catalog-entry.yaml` now uses the domain the axi.md submission ([kunchenguid/axi#291](https://github.com/kunchenguid/axi/pull/291)) uses, in place of `Data and Project Analysis`; `reviewed_revision` is unchanged. Documentation only.
 - **The AXI catalog entry's usage-error observation is grammatically complete.** Restored the dropped `and` before the `yaml set` key error; the documented behavior and `reviewed_revision` are unchanged. Documentation only.
 - **The AXI catalog entry and audit are pinned to v2.0.2.** `docs/axi-catalog-entry.yaml` names the v2.0.2 release commit (`2e6ea2d`) as `reviewed_revision`, and its observations now state the pre-tag fixes: the MCP `template` tool's literal `vars`, the refused FIFO, device, directory or symlink write targets, the `--var` usage error and the comments a new `yaml` key keeps. `docs/axi-audit.md` names the tag, rows 1 and 6 cite those fixes, and every line cite was re-checked against the tag. Documentation only.
 
