@@ -508,11 +508,13 @@ func planCodexConfig(path string, raw []byte) (setupPlan, error) {
 	switch {
 	case header >= 0:
 		end := len(lines)
+		depth := 0
 		for j := header + 1; j < len(lines); j++ {
-			if tomlTableHeaderRE.MatchString(lines[j]) {
+			if depth == 0 && tomlTableHeaderRE.MatchString(lines[j]) {
 				end = j
 				break
 			}
+			depth = tomlBracketDepth(lines[j], depth)
 		}
 		eol := "\n"
 		if strings.HasSuffix(lines[header], "\r\n") {
@@ -564,6 +566,36 @@ func planCodexConfig(path string, raw []byte) (setupPlan, error) {
 		return setupPlan{}, fmt.Errorf("%s: cannot add [features] hooks = true without changing other keys; refusing to overwrite; add it by hand", path)
 	}
 	return setupPlan{content: []byte(out), changed: true}, nil
+}
+
+// tomlBracketDepth returns how many arrays and inline tables are still open
+// after line, given depth open before it, so a line inside a multi-line array
+// value, such as [1, 2], is not read as a table header. Brackets in a
+// one-line string or a comment do not count. A multi-line string is not
+// tracked; a bracket inside one can only make the line edit fail, and the
+// decode check in planCodexConfig refuses that.
+func tomlBracketDepth(line string, depth int) int {
+	var quote byte
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case quote == '"' && c == '\\':
+			i++
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == '#':
+			return depth
+		case c == '[' || c == '{':
+			depth++
+		case (c == ']' || c == '}') && depth > 0:
+			depth--
+		}
+	}
+	return depth
 }
 
 // setupProjectDir resolves path to an existing directory that is not the home
