@@ -100,8 +100,8 @@ var (
 // `llm-data` when PATH finds this very binary, otherwise this binary's
 // absolute path, shell-quoted when it needs to be. Any llm-data on PATH used
 // to be taken as this one, so a hook installed by one build ran another, an
-// old release or somebody else's binary. A hook nobody can run is an error,
-// not a success.
+// old release or somebody else's binary. A hook nobody can run, a path a later
+// run would not own (isSetupHookCommand) or a `go run` build is an error.
 func resolveHookCommand() (string, error) {
 	exe, err := setupExecutable()
 	if err != nil || exe == "" || !filepath.IsAbs(exe) {
@@ -110,7 +110,34 @@ func resolveHookCommand() (string, error) {
 	if onPath, err := setupLookPath(setupHookCommand); err == nil && sameExecutable(onPath, exe) {
 		return setupHookCommand, nil
 	}
+	if base := filepath.Base(exe); base != "llm-data" && base != "llm-data.exe" {
+		return "", fmt.Errorf("this binary is named %s, not llm-data, so a later setup would not recognise a hook at its path and would add a second one; rename it to llm-data, or put it on PATH as llm-data, and run setup again", base)
+	}
+	if isGoRunBuild(exe) {
+		return "", fmt.Errorf("this binary is a go run build at %s, which Go deletes when it exits, so the hook would run nothing; install llm-data (go install) and run setup with the installed binary", exe)
+	}
 	return shellQuote(exe), nil
+}
+
+// isGoRunBuild reports whether exe is under a go-build directory directly
+// beneath os.TempDir(), where `go run` builds and later deletes its binary.
+// Each side is compared both as written and with symlinks resolved, since
+// the temp dir is often a symlink (/var -> /private/var on macOS).
+func isGoRunBuild(exe string) bool {
+	resolve := func(p string) string {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			return r
+		}
+		return filepath.Clean(p)
+	}
+	tmp := os.TempDir()
+	for _, pair := range [][2]string{{tmp, exe}, {resolve(tmp), resolve(exe)}} {
+		rel, err := filepath.Rel(pair[0], pair[1])
+		if err == nil && strings.HasPrefix(rel, "go-build") {
+			return true
+		}
+	}
+	return false
 }
 
 // sameExecutable reports whether a and b name one file once symlinks are
@@ -275,7 +302,8 @@ kept. The OpenCode plugin is setup's own file and is rewritten whole; a file at 
 that setup did not write is refused.
 
 The hook (and the plugin) runs the bare llm-data when PATH finds it, otherwise this binary's
-absolute path. A hook setup wrote earlier that no longer matches, such as the
+absolute path; that path is refused unless the binary is named llm-data (or
+llm-data.exe) and is not a go run build. A hook setup wrote earlier that no longer matches, such as the
 old path after the binary moved, is repaired in place.
 
 Only files inside the project directory are written; the user-wide ~/.claude,

@@ -830,6 +830,24 @@ func TestSetupRefusesAFallbackHookItWouldNotOwn(t *testing.T) {
 	}
 }
 
+// Defends the go run check where the temp dir is a symlink, as /var is on
+// macOS: os.TempDir() names the link while the binary's path names the real
+// directory, so a comparison of the paths as written misses it.
+func TestSetupRefusesAGoRunBuildBehindASymlinkedTempDir(t *testing.T) {
+	project, _ := setupEnv(t)
+	real := evalTemp(t)
+	link := filepath.Join(evalTemp(t), "tmp")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("cannot create a symlink here: %v", err)
+	}
+	t.Setenv("TMPDIR", link)
+	stubBinary(t, false, filepath.Join(real, "go-build42", "b001", "exe", "llm-data"))
+	if _, err := runSetupCmd(t, "--path", project); err == nil || !strings.Contains(err.Error(), "go run") {
+		t.Fatalf("setup registered a go run build behind a symlinked temp dir: %v", err)
+	}
+	assertEmptyDir(t, project)
+}
+
 // Defends the other side of the refusal: a canonical name off PATH still
 // registers its absolute path, and a renamed binary that PATH's llm-data
 // resolves to still registers the bare name, which the fallback check must
