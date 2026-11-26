@@ -41,6 +41,9 @@ func fakeExecutable(t *testing.T) (home string) {
 		return filepath.Join(home, "go", "bin", "llm-data"), nil
 	}
 	t.Cleanup(func() { executablePath = orig })
+	// setup sees the same fake binary: the real one is the test binary under
+	// go-build, which setup refuses to register.
+	stubBinary(t, false, filepath.Join(home, "go", "bin", "llm-data"))
 	return home
 }
 
