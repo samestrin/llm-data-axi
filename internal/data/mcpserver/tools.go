@@ -7,6 +7,8 @@ import (
 // ToolPrefix is the prefix for all llm-data tools
 const ToolPrefix = "llm_data_"
 
+const relativePathBaseDescription = " Relative paths are resolved from the MCP server's working directory."
+
 // ToolDefinition defines a tool for the MCP SDK
 type ToolDefinition struct {
 	Name        string
@@ -19,7 +21,7 @@ func GetToolDefinitions() []ToolDefinition {
 	return []ToolDefinition{
 		{
 			Name:        ToolPrefix + "tree",
-			Description: "Display directory structure as a tree. Respects .gitignore. Use max_entries to limit output.",
+			Description: "Display directory structure as a tree. Respects .gitignore. Use max_entries to limit output." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -57,7 +59,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "grep",
-			Description: "Search for regex pattern in files. Supports case-insensitive search and line numbers.",
+			Description: "Search for regex pattern in files. Supports case-insensitive search and line numbers." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -85,7 +87,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "multiexists",
-			Description: "Check if multiple files or directories exist. Returns detailed status for each path.",
+			Description: "Check if multiple files or directories exist. Returns detailed status for each path." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -104,7 +106,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "template",
-			Description: "Variable substitution in template files. Supports [[var]] or {{var}} syntax, default [[var]] (the CLI defaults to {{var}}). Each vars value is substituted literal: a value starting with @ is not read as a file.",
+			Description: "Variable substitution in template files. Supports [[var]] or {{var}} syntax, default [[var]] (the CLI defaults to {{var}}). Each vars value is substituted literal: a value starting with @ is not read as a file." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -126,7 +128,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "discover_tests",
-			Description: "Discover test patterns, runners, and infrastructure in a project.",
+			Description: "Discover test patterns, runners, and infrastructure in a project." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -138,7 +140,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "multigrep",
-			Description: "Search multiple keywords in parallel. Prioritizes definitions over usages.",
+			Description: "Search multiple keywords in parallel. Prioritizes definitions over usages." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -174,7 +176,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "detect",
-			Description: "Detect project type and technology stack.",
+			Description: "Detect project type and technology stack." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -191,7 +193,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "count",
-			Description: "Count checkboxes, lines, or files. For checkboxes: returns TOTAL, CHECKED, UNCHECKED, COMPLETION%.",
+			Description: "Count checkboxes, lines, or files. For checkboxes: returns TOTAL, CHECKED, UNCHECKED, COMPLETION%." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -217,7 +219,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "git_context",
-			Description: "Gather git information for LLM context.",
+			Description: "Gather git information for LLM context." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -241,7 +243,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "repo_root",
-			Description: "Find git repository root for a path.",
+			Description: "Find git repository root for a path." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -256,7 +258,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "highest",
-			Description: "Find highest numbered directory or file. Returns HIGHEST, NAME, FULL_PATH, NEXT, COUNT.",
+			Description: "Find highest numbered directory or file. Returns HIGHEST, NAME, FULL_PATH, NEXT, COUNT." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -289,7 +291,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "git_changes",
-			Description: "Count and list git working tree changes with optional path filtering.",
+			Description: "Count and list git working tree changes with optional path filtering." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -310,7 +312,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "yaml_get",
-			Description: "Retrieve a value from YAML config by dot-notation key.",
+			Description: "Retrieve a value from YAML config by dot-notation key." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -331,7 +333,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "yaml_set",
-			Description: "Store a value in YAML config at dot-notation key.",
+			Description: "Store a value in YAML config at dot-notation key." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -363,7 +365,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "yaml_multiget",
-			Description: "Retrieve multiple YAML values in a single call.",
+			Description: "Retrieve multiple YAML values in a single call." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -391,7 +393,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "yaml_multiset",
-			Description: "Set multiple YAML key-value pairs atomically.",
+			Description: "Set multiple YAML key-value pairs atomically." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -420,7 +422,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "catfiles",
-			Description: "Concatenate multiple files with path headers. Respects .gitignore.",
+			Description: "Concatenate multiple files with path headers. Respects .gitignore." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -444,7 +446,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "math",
-			Description: "Evaluate mathematical expressions safely. Supports basic arithmetic, functions (sin, cos, sqrt, etc.), and variables.",
+			Description: "Evaluate mathematical expressions safely. Supports basic arithmetic, functions (sin, cos, sqrt, etc.), and variables." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -457,7 +459,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "stats",
-			Description: "Display directory statistics (file counts, size, extension breakdown).",
+			Description: "Display directory statistics (file counts, size, extension breakdown)." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -473,7 +475,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "runtime",
-			Description: "Calculate elapsed time between epoch timestamps.",
+			Description: "Calculate elapsed time between epoch timestamps." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
