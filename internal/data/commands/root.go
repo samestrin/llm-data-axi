@@ -83,6 +83,27 @@ var (
 	GlobalPlainOutput bool
 )
 
+// rootLong builds root help with the same command scope used by --absolute's
+// flag help and errors, so the three messages cannot name different commands.
+func rootLong(scope string) string {
+	return fmt.Sprintf(`llm-data provides deterministic commands for reading, searching and
+reshaping code, configuration files and documentation in LLM-assisted
+workflows.
+
+Designed for fast startup, single binary distribution, and AXI (TOON)
+output that costs fewer tokens than JSON.
+
+Output is TOON by default. --json prints JSON and --plain prints plain
+text; --axi is accepted and prints the same TOON as no flag. --plain cannot
+be combined with --json or --axi. --min shortens --json and --plain output
+and has no effect on TOON, which is already token-dense.
+
+%s print paths
+relative to the working directory; a path outside it stays absolute.
+--absolute prints them absolute, and any other command rejects it. repo-root
+always prints an absolute root.`, scope)
+}
+
 // NewRootCmd builds a fresh command tree. Execute builds one per invocation.
 //
 // The tree is rebuilt rather than shared because pflag leaves a bound variable
@@ -95,24 +116,9 @@ var (
 func NewRootCmd() *cobra.Command {
 	var showVersion bool
 	root := &cobra.Command{
-		Use:   "llm-data",
-		Short: "Generic data, file and project analysis tools for LLM workflows",
-		Long: `llm-data provides deterministic commands for reading, searching and
-reshaping code, configuration files and documentation in LLM-assisted
-workflows.
-
-Designed for fast startup, single binary distribution, and AXI (TOON)
-output that costs fewer tokens than JSON.
-
-Output is TOON by default. --json prints JSON and --plain prints plain
-text; --axi is accepted and prints the same TOON as no flag. --plain cannot
-be combined with --json or --axi. --min shortens --json and --plain output
-and has no effect on TOON, which is already token-dense.
-
-tree, stats, multigrep, grep, catfiles, highest and git-context print paths
-relative to the working directory; a path outside it stays absolute.
---absolute prints them absolute, and any other command rejects it. repo-root
-always prints an absolute root.`,
+		Use:     "llm-data",
+		Short:   "Generic data, file and project analysis tools for LLM workflows",
+		Long:    rootLong(absoluteScope),
 		Version: DisplayVersion(),
 		// No Args validator on purpose: with Args nil, cobra's legacyArgs rejects a
 		// stray word as "unknown command" before it looks at --help. cobra.NoArgs
