@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Errors for an unsupported `--absolute` flag name the full command path.** A command such as `yaml set` now reports `llm-data yaml set` instead of the bare subcommand, while the hidden moved-command stubs keep their own errors naming the cadence replacements.
+- **The `git-context` diff-cut marker says how much was omitted and how to retrieve it.** A diff cut at 50,000 bytes now ends with the complete diff's byte size and the instruction to rerun with `--full`, instead of only saying that it was too large.
+
 ### Changed
 
 - **Every MCP tool description states the relative-path base.** Relative paths resolve from the MCP server's working directory, matching how the server invokes the CLI (epic 17).
