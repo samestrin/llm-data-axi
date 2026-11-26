@@ -13,26 +13,32 @@ import (
 func TestHighestErrorUsesShownPath(t *testing.T) {
 	dir := realTempDir(t)
 	t.Chdir(dir)
-	missing := filepath.Join(dir, "missing")
+	if err := os.WriteFile("not-a-directory", []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-	for _, tc := range []struct {
-		name  string
-		flags []string
-		want  string
+	for _, ec := range []struct {
+		name, path, message string
 	}{
-		{name: "relative", want: "path does not exist: missing"},
-		{name: "absolute", flags: []string{"--absolute"}, want: "path does not exist: " + missing},
+		{name: "missing", path: "missing", message: "path does not exist: "},
+		{name: "not a directory", path: "not-a-directory", message: "path must be a directory: "},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			args := append([]string{"highest", "--path", "missing", "--plain"}, tc.flags...)
-			code, stdout, _ := runCLI(t, args...)
-			if code == 0 {
-				t.Fatalf("a missing path reported success: %s", stdout)
+		for _, absolute := range []bool{false, true} {
+			name, want, flags := ec.name+"/relative", ec.path, []string(nil)
+			if absolute {
+				name, want, flags = ec.name+"/absolute", filepath.Join(dir, ec.path), []string{"--absolute"}
 			}
-			if !strings.Contains(stdout, tc.want) {
-				t.Errorf("error must name %q; output: %s", tc.want, stdout)
-			}
-		})
+			t.Run(name, func(t *testing.T) {
+				args := append([]string{"highest", "--path", ec.path, "--plain"}, flags...)
+				code, stdout, _ := runCLI(t, args...)
+				if code == 0 {
+					t.Fatalf("an invalid path reported success: %s", stdout)
+				}
+				if want := ec.message + want; !strings.Contains(stdout, want) {
+					t.Errorf("error must name %q; output: %s", want, stdout)
+				}
+			})
+		}
 	}
 }
 

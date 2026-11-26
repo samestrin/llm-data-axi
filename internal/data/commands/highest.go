@@ -117,10 +117,10 @@ func runHighest(cmd *cobra.Command, args []string) error {
 	for _, searchPath := range searchPaths {
 		info, err := os.Stat(searchPath)
 		if err != nil {
-			return fmt.Errorf("path does not exist: %s", searchPath)
+			return fmt.Errorf("path does not exist: %s", showPaths(searchPath).shown)
 		}
 		if !info.IsDir() {
-			return fmt.Errorf("path must be a directory: %s", searchPath)
+			return fmt.Errorf("path must be a directory: %s", showPaths(searchPath).shown)
 		}
 	}
 
@@ -149,7 +149,7 @@ func runHighest(cmd *cobra.Command, args []string) error {
 		// Read directory entries
 		entries, err := os.ReadDir(searchPath)
 		if err != nil {
-			return fmt.Errorf("failed to read directory %s: %w", searchPath, err)
+			return fmt.Errorf("failed to read directory %s: %w", showPaths(searchPath).shown, err)
 		}
 
 		// Filter by type

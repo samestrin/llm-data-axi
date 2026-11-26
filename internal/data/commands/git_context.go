@@ -121,7 +121,7 @@ func runGitContext(cmd *cobra.Command, args []string) error {
 	// not; any other failure, git missing or broken, keeps its own reason.
 	if _, err := runGitCtx(context.Background(), absPath, "rev-parse", "--git-dir"); err != nil {
 		if errors.Is(err, errNotARepository) {
-			return fmt.Errorf("not a git repository: %s", absPath)
+			return fmt.Errorf("not a git repository: %s", showPaths(absPath).shown)
 		}
 		return fmt.Errorf("git-context: %w", err)
 	}

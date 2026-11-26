@@ -279,7 +279,7 @@ func runGrep(cmd *cobra.Command, args []string) error {
 			if errors.As(readErr, &pathErr) {
 				return readErr
 			}
-			return fmt.Errorf("read %s: %w", filePath, readErr)
+			return fmt.Errorf("read %s: %w", f.shown, readErr)
 		}
 	}
 
