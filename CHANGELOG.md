@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **Errors for an unsupported `--absolute` flag name the full command path.** A command such as `yaml set` now reports `llm-data yaml set` instead of the bare subcommand, while the hidden moved-command stubs keep their own errors naming the cadence replacements.
 - **The `git-context` diff-cut marker says how much was omitted and how to retrieve it.** A diff cut at 50,000 bytes now ends with the complete diff's byte size and the instruction to rerun with `--full`, instead of only saying that it was too large.
+- **`setup` refuses a fallback hook for a renamed executable or a `go run` build.** Unless `PATH` finds the same binary as `llm-data`, a fallback hook now requires the executable to be named `llm-data` (or `llm-data.exe`) and not live in Go's temporary build directory. The former path would not be recognised as setup's own hook on a later run, and the latter would be deleted when `go run` finished; both cases now fail instead of registering them successfully.
+- **`setup --target codex` preserves a `[features]` table containing multiline arrays.** A line such as `[1, 2]` inside an array value is no longer mistaken for a new TOML table header, so `hooks = true` is inserted in the existing `[features]` table without disturbing the array.
+- **The `setup` home-directory refusal names every protected user-wide directory.** Its message now lists `~/.claude`, `~/.codex` and `~/.config/opencode` rather than omitting OpenCode, and the ragged `setup --help` paragraphs are rewrapped for readability.
 
 ### Changed
 
