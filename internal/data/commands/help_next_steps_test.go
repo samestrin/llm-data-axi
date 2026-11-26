@@ -47,6 +47,20 @@ func jsonHelp(t *testing.T, out string) (help []string, present bool) {
 	return help, true
 }
 
+// hasHelpKey reports whether a text encoding carries a help key of its own:
+// TOON's `help[N]:` block or a `help:` field. Only a key at the start of a
+// line counts. Searching for the bare word "help" instead reads a checkout
+// path on the `repo_root:` line as a help block, which fails this suite from
+// any directory that happens to have "help" in its name.
+func hasHelpKey(out string) bool {
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "help:") || strings.HasPrefix(line, "help[") {
+			return true
+		}
+	}
+	return false
+}
+
 // assertAXIHelp checks a TOON payload carries a help block of exactly want.
 func assertAXIHelp(t *testing.T, out string, want []string) {
 	t.Helper()
@@ -80,11 +94,13 @@ func TestHomeViewCarriesHelp(t *testing.T) {
 
 // Defends the plain home view omitting help next steps: help is for the
 // structured encodings the task names, and TestRootNoArgsShowsHomeView pins the
-// text form.
+// text form. Asserted on the `help` key, not on the word: fakeExecutable leaves
+// the checkout path in `repo_root:`, so a checkout under a directory named
+// something-help-something used to read as a help block and fail here.
 func TestHomeViewPlainTextHasNoHelp(t *testing.T) {
 	fakeExecutable(t)
-	if out := runRootBoth(t, "--plain"); strings.Contains(out, "help") {
-		t.Errorf("plain home view printed help:\n%s", out)
+	if out := runRootBoth(t, "--plain"); hasHelpKey(out) {
+		t.Errorf("plain home view printed a help key:\n%s", out)
 	}
 }
 

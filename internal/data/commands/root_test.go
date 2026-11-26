@@ -183,17 +183,20 @@ func TestRootNoArgsFailsWhenExecutableUnresolved(t *testing.T) {
 
 // Defends the per-invocation tree against pflag's Changed bit: PersistentPreRun
 // reads Changed, so a bare run after an in-process --json run must print the
-// TOON default, not JSON, and a --plain run after --axi the plain view.
+// TOON default, not JSON, and a --plain run after --axi the plain view. Both
+// views are told apart by the `help` key, not by the word: `repo_root:` prints
+// the checkout path, so a checkout under a directory with "help" in its name
+// must not read as a help block.
 func TestFreshTreeIgnoresPreviousChangedFlags(t *testing.T) {
 	fakeExecutable(t)
 	runRootBoth(t, "--json", "--min")
 
-	if out := runRootBoth(t); strings.HasPrefix(strings.TrimSpace(out), "{") || !strings.Contains(out, "help[") {
+	if out := runRootBoth(t); strings.HasPrefix(strings.TrimSpace(out), "{") || !hasHelpKey(out) {
 		t.Errorf("bare run after --json is not the TOON view:\n%s", out)
 	}
 
 	runRootBoth(t, "--axi", "--min")
-	if out := runRootBoth(t, "--plain"); !strings.HasPrefix(out, "bin: ") || strings.Contains(out, "help") {
+	if out := runRootBoth(t, "--plain"); !strings.HasPrefix(out, "bin: ") || hasHelpKey(out) {
 		t.Errorf("--plain run after --axi is not the plain view:\n%s", out)
 	}
 }
