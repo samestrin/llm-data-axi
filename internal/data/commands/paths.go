@@ -13,6 +13,10 @@ import (
 // the working directory unless it is set.
 var GlobalAbsolutePaths bool
 
+// evalSymlinks is replaceable in tests so both resolution failures can be
+// exercised without depending on platform-specific filesystem permissions.
+var evalSymlinks = filepath.EvalSymlinks
+
 // absoluteCommands are the commands whose output --absolute changes. Every
 // other command refuses the flag (see checkAbsolute): accepted and ignored,
 // it would exit 0 with output it never touched.
@@ -81,11 +85,11 @@ func relativeToCwd(abs string) (string, bool) {
 	if rel, ok := output.RelativePathWithin(abs, cwd); ok {
 		return rel, true
 	}
-	realCwd, err := filepath.EvalSymlinks(cwd)
+	realCwd, err := evalSymlinks(cwd)
 	if err != nil {
 		return "", false
 	}
-	realAbs, err := filepath.EvalSymlinks(abs)
+	realAbs, err := evalSymlinks(abs)
 	if err != nil {
 		return "", false
 	}
