@@ -125,6 +125,25 @@ func TestRootHelpStillPrintsHelp(t *testing.T) {
 	}
 }
 
+// Defends the root help's command list against drifting from absoluteScope:
+// the helper must use the scope it is given, and the root must call it with
+// absoluteScope rather than keeping a second literal list of commands.
+func TestRootHelpAbsoluteScopeCannotDrift(t *testing.T) {
+	const changedScope = "alpha, beta and gamma"
+	got := rootLong(changedScope)
+	if !strings.Contains(got, changedScope) {
+		t.Fatalf("root help does not use its scope argument %q:\n%s", changedScope, got)
+	}
+	if strings.Contains(got, absoluteScope) {
+		t.Errorf("root help kept the old scope after it changed:\n%s", got)
+	}
+
+	root := NewRootCmd()
+	if want := rootLong(absoluteScope); root.Long != want {
+		t.Errorf("root help is not built from absoluteScope:\ngot:\n%s\nwant:\n%s", root.Long, want)
+	}
+}
+
 // Defends unknown subcommands: giving the root a Run makes cobra willing to
 // treat leftover words as its arguments, which would turn a typo into a
 // silent home view and exit 0. With --help as well, an Args validator on the
