@@ -179,7 +179,7 @@ func runGitContext(cmd *cobra.Command, args []string) error {
 		// rune boundary so a multi-byte character straddling byte 50,000 is
 		// dropped whole, not split into invalid UTF-8.
 		if !gitContextFull && len(ctx.Diff) > 50000 {
-			ctx.Diff = cutAtRuneStart(ctx.Diff, 50000) + "\n... (diff truncated, too large)"
+			ctx.Diff = cutAtRuneStart(ctx.Diff, 50000) + fmt.Sprintf("\n... (diff truncated, %d bytes; rerun with --full)", len(ctx.Diff))
 		}
 	}
 

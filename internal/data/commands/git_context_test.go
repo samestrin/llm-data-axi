@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -598,9 +599,9 @@ func TestGetGitRemotes(t *testing.T) {
 	}
 }
 
-// TestGitContextFullDiffDefendsAXIPrinciple3 defends the --full escape hatch
-// for the 50,000-byte diff cut: without it a large diff was silently chopped
-// with a hint but no way to page or fetch the rest.
+// TestGitContextFullDiffDefendsAXIPrinciple3 defends the 50,000-byte diff cut:
+// its marker must name the complete byte size and the --full escape hatch, so
+// a caller knows how much was omitted and how to retrieve it.
 func TestGitContextFullDiffDefendsAXIPrinciple3(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
@@ -650,6 +651,11 @@ func TestGitContextFullDiffDefendsAXIPrinciple3(t *testing.T) {
 	full := run("--full")
 	if len(full.Diff) <= 50_500 {
 		t.Errorf("--full still returned a cut diff: %d bytes", len(full.Diff))
+	}
+
+	wantMarker := fmt.Sprintf("... (diff truncated, %d bytes; rerun with --full)", len(full.Diff))
+	if !strings.HasSuffix(truncated.Diff, wantMarker) {
+		t.Errorf("cut diff marker does not name its full size and --full:\n got: %.200s\nwant suffix: %s", truncated.Diff, wantMarker)
 	}
 }
 
