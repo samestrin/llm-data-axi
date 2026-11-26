@@ -183,6 +183,21 @@ func TestSetupCodexMergesConfig(t *testing.T) {
 			in:   "[features]\r\nhooks = false\r\n",
 			want: "[features]\r\nhooks = true\r\n",
 		},
+		// A line inside an array value that starts with [ is not a table
+		// header; reading it as one ended [features] early, so setup added a
+		// second hooks key and refused a config it can edit.
+		{
+			name: "hooks off after an array of arrays",
+			in:   "[features]\nmatrix = [\n  [1, 2],\n  [3, 4],\n]\nhooks = false\n[tui]\nx = 1\n",
+			want: "[features]\nmatrix = [\n  [1, 2],\n  [3, 4],\n]\nhooks = true\n[tui]\nx = 1\n",
+		},
+		// Brackets in a string, after an escaped quote, or in a comment do
+		// not open an array; counting them would hide [tui] and flip its key.
+		{
+			name: "header after an array of arrays still ends features",
+			in:   "[features]\nmatrix = [\n  [\"\\\"[\", '[', 1], # [x\n]\n[tui]\nhooks = false\n",
+			want: "[features]\nhooks = true\nmatrix = [\n  [\"\\\"[\", '[', 1], # [x\n]\n[tui]\nhooks = false\n",
+		},
 		{
 			name: "already on",
 			in:   "# keep me\n[features]\n  hooks   =   true\n",
