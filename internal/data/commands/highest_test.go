@@ -8,6 +8,40 @@ import (
 	"testing"
 )
 
+// TestHighestErrorUsesShownPath defends the error-path counterpart of
+// highest's relative successful paths and --absolute override.
+func TestHighestErrorUsesShownPath(t *testing.T) {
+	dir := realTempDir(t)
+	t.Chdir(dir)
+	if err := os.WriteFile("not-a-directory", []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, ec := range []struct {
+		name, path, message string
+	}{
+		{name: "missing", path: "missing", message: "path does not exist: "},
+		{name: "not a directory", path: "not-a-directory", message: "path must be a directory: "},
+	} {
+		for _, absolute := range []bool{false, true} {
+			name, want, flags := ec.name+"/relative", ec.path, []string(nil)
+			if absolute {
+				name, want, flags = ec.name+"/absolute", filepath.Join(dir, ec.path), []string{"--absolute"}
+			}
+			t.Run(name, func(t *testing.T) {
+				args := append([]string{"highest", "--path", ec.path, "--plain"}, flags...)
+				code, stdout, _ := runCLI(t, args...)
+				if code == 0 {
+					t.Fatalf("an invalid path reported success: %s", stdout)
+				}
+				if want := ec.message + want; !strings.Contains(stdout, want) {
+					t.Errorf("error must name %q; output: %s", want, stdout)
+				}
+			})
+		}
+	}
+}
+
 func TestHighestCommand_Plans(t *testing.T) {
 	// Create temp directory with plan-like structure
 	tmpDir := t.TempDir()

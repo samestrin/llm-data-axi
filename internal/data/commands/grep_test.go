@@ -662,6 +662,45 @@ func TestGrepSkipsDirectorySymlinksInTree(t *testing.T) {
 	}
 }
 
+// TestGrepReadErrorUsesShownPath defends the read error's path against the
+// successful output/--absolute split: callers must see the same spelling in
+// both places, rather than an absolute path only when something goes wrong.
+func TestGrepReadErrorUsesShownPath(t *testing.T) {
+	dir := realTempDir(t)
+	t.Chdir(dir)
+	file := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(file, []byte("needle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := grepOpen
+	t.Cleanup(func() { grepOpen = orig })
+	grepOpen = func(string) (io.ReadCloser, error) {
+		return io.NopCloser(io.MultiReader(
+			strings.NewReader("needle\n"), iotest.ErrReader(errors.New("boom")))), nil
+	}
+
+	for _, tc := range []struct {
+		name  string
+		flags []string
+		want  string
+	}{
+		{name: "relative", want: "read a.txt: boom"},
+		{name: "absolute", flags: []string{"--absolute"}, want: "read " + file + ": boom"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := append([]string{"grep", "needle", "a.txt", "--plain"}, tc.flags...)
+			code, stdout, _ := runCLI(t, args...)
+			if code == 0 {
+				t.Fatalf("a failed read reported success: %s", stdout)
+			}
+			if !strings.Contains(stdout, tc.want) {
+				t.Errorf("error must name %q; output: %s", tc.want, stdout)
+			}
+		})
+	}
+}
+
 // TestGrepReadErrorFailsTheRun defends the read-error path in runGrep: a file
 // whose read fails part-way must fail the run and name the file once, not end
 // the scan quietly as if the file had no more matches.
