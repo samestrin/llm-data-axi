@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"encoding/json"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -106,6 +107,18 @@ func TestEveryToolHasAUsefulDescription(t *testing.T) {
 	for _, tool := range GetToolDefinitions() {
 		if len(tool.Description) < 10 {
 			t.Errorf("tool %s has a too-short description: %q", tool.Name, tool.Description)
+		}
+	}
+}
+
+// Defends the path resolution contract advertised to MCP clients: the server
+// runs the CLI without changing its working directory, so relative paths are
+// based there rather than in the client's workspace or the CLI binary's folder.
+func TestEveryToolDescriptionStatesRelativePathBase(t *testing.T) {
+	const want = "Relative paths are resolved from the MCP server's working directory."
+	for _, tool := range GetToolDefinitions() {
+		if !strings.Contains(tool.Description, want) {
+			t.Errorf("tool %s description does not state the relative-path base: %q", tool.Name, tool.Description)
 		}
 	}
 }
