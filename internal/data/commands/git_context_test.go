@@ -109,6 +109,37 @@ func TestGitContextWithChanges(t *testing.T) {
 	}
 }
 
+// TestGitContextErrorUsesShownPath defends the error-path counterpart of
+// git-context's relative repository paths and --absolute override.
+func TestGitContextErrorUsesShownPath(t *testing.T) {
+	dir := realTempDir(t)
+	t.Chdir(dir)
+	if err := os.Mkdir("not-repo", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	notRepo := filepath.Join(dir, "not-repo")
+
+	for _, tc := range []struct {
+		name  string
+		flags []string
+		want  string
+	}{
+		{name: "relative", want: "not a git repository: not-repo"},
+		{name: "absolute", flags: []string{"--absolute"}, want: "not a git repository: " + notRepo},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := append([]string{"git-context", "--path", "not-repo", "--plain"}, tc.flags...)
+			code, stdout, _ := runCLI(t, args...)
+			if code == 0 {
+				t.Fatalf("a non-repository reported success: %s", stdout)
+			}
+			if !strings.Contains(stdout, tc.want) {
+				t.Errorf("error must name %q; output: %s", tc.want, stdout)
+			}
+		})
+	}
+}
+
 func TestGitContextNotARepo(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
