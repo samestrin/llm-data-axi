@@ -132,7 +132,7 @@ always prints an absolute root.`,
 			if err := formatConflict(GlobalPlainOutput, jsonOn, GlobalAXIOutput); err != nil {
 				return err
 			}
-			if err := checkAbsolute(cmd.Name(), GlobalAbsolutePaths); err != nil {
+			if err := checkAbsolute(cmd, GlobalAbsolutePaths); err != nil {
 				return err
 			}
 			GlobalAXIOutput = GlobalAXIOutput || (!jsonOn && !GlobalPlainOutput)
