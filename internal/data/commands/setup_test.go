@@ -713,6 +713,8 @@ func TestSetupRepairLeavesForeignHooksAlone(t *testing.T) {
 	project, _ := setupEnv(t)
 	writeSettings(t, project, `{"hooks": {"SessionStart": [{"hooks": [
 		{"type": "command", "command": "llm-data grep TODO ."},
+		{"type": "command", "command": "bin/llm-data"},
+		{"type": "command", "command": "./llm-data"},
 		{"type": "command", "command": "/usr/bin/llm-data-mcp"},
 		{"type": "command", "command": "echo llm-data"}
 	]}]}}`)
@@ -721,7 +723,7 @@ func TestSetupRepairLeavesForeignHooksAlone(t *testing.T) {
 		t.Fatalf("setup: %v", err)
 	}
 	cmds := sessionStartCommands(t, readFile(t, settingsPath(project)))
-	want := []string{"llm-data grep TODO .", "/usr/bin/llm-data-mcp", "echo llm-data", "/opt/llm-data"}
+	want := []string{"llm-data grep TODO .", "bin/llm-data", "./llm-data", "/usr/bin/llm-data-mcp", "echo llm-data", "/opt/llm-data"}
 	if strings.Join(cmds, "\n") != strings.Join(want, "\n") {
 		t.Errorf("SessionStart commands = %q, want %q", cmds, want)
 	}
@@ -781,6 +783,20 @@ func TestSetupQuotesAPathWithSpaces(t *testing.T) {
 	if cmds := sessionStartCommands(t, readFile(t, settingsPath(project))); len(cmds) != 1 || cmds[0] != "/opt/llm-data" {
 		t.Errorf("quoted stale path was not repaired: %v", cmds)
 	}
+}
+
+// Defends against registering a relative executable as a hook: the session's
+// working directory is not necessarily setup's, so the command may point at
+// nothing. Setup must fail and write nothing rather than report success.
+func TestSetupFailsWhenExecutablePathIsRelative(t *testing.T) {
+	project, _ := setupEnv(t)
+	stubBinary(t, false, "bin/llm-data")
+
+	_, err := runSetupCmd(t, "--path", project)
+	if err == nil {
+		t.Fatal("setup succeeded with a relative executable path")
+	}
+	assertEmptyDir(t, project)
 }
 
 // Defends against registering a hook nobody can run: off PATH and with no
