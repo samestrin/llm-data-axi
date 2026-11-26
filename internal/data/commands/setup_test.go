@@ -799,6 +799,64 @@ func TestSetupFailsWhenExecutablePathIsRelative(t *testing.T) {
 	assertEmptyDir(t, project)
 }
 
+// Defends the fallback registration against a binary setup would not
+// recognise as its own, and against a `go run` build Go deletes on exit.
+// Off PATH, setup writes this binary's absolute path as the hook; a later run
+// only owns paths ending in llm-data or llm-data.exe, so a renamed binary
+// added a second hook beside the first, and a go-build path registered a
+// hook that pointed at nothing once the run ended. Both must fail and write
+// nothing.
+func TestSetupRefusesAFallbackHookItWouldNotOwn(t *testing.T) {
+	goBuild := filepath.Join(os.TempDir(), "go-build123456789", "b001", "exe", "llm-data")
+	for _, c := range []struct{ exe, why string }{
+		{"/opt/tools/llm-data-v2", "llm-data-v2"},
+		{"/opt/tools/ld", "ld"},
+		{goBuild, "go run"},
+	} {
+		t.Run(c.exe, func(t *testing.T) {
+			for _, args := range [][]string{nil, {"--dry-run"}, {"--target", "claude,codex,opencode"}} {
+				project, _ := setupEnv(t)
+				stubBinary(t, false, c.exe)
+				out, err := runSetupCmd(t, append([]string{"--path", project}, args...)...)
+				if err == nil {
+					t.Fatalf("setup %v succeeded registering %s:\n%s", args, c.exe, out)
+				}
+				if !strings.Contains(err.Error(), c.why) {
+					t.Errorf("error does not say why (want %q): %v", c.why, err)
+				}
+				assertEmptyDir(t, project)
+			}
+		})
+	}
+}
+
+// Defends the other side of the refusal: a canonical name off PATH still
+// registers its absolute path, and a renamed binary that PATH's llm-data
+// resolves to still registers the bare name, which the fallback check must
+// not reach.
+func TestSetupStillRegistersACanonicalOrOnPathBinary(t *testing.T) {
+	for _, c := range []struct {
+		onPath    bool
+		exe, want string
+	}{
+		{false, "/opt/tools/llm-data", "/opt/tools/llm-data"},
+		{false, "/opt/tools/llm-data.exe", "/opt/tools/llm-data.exe"},
+		{false, filepath.Join(os.TempDir(), "tools", "llm-data"), filepath.Join(os.TempDir(), "tools", "llm-data")},
+		{true, "/opt/tools/llm-data-v2", setupHookCommand},
+	} {
+		t.Run(c.exe, func(t *testing.T) {
+			project, _ := setupEnv(t)
+			stubBinary(t, c.onPath, c.exe)
+			if _, err := runSetupCmd(t, "--path", project); err != nil {
+				t.Fatalf("setup: %v", err)
+			}
+			if cmds := sessionStartCommands(t, readFile(t, settingsPath(project))); len(cmds) != 1 || cmds[0] != shellQuote(c.want) {
+				t.Errorf("SessionStart commands = %v, want [%s]", cmds, shellQuote(c.want))
+			}
+		})
+	}
+}
+
 // Defends against registering a hook nobody can run: off PATH and with no
 // known path of its own, setup must fail and write nothing.
 func TestSetupFailsWhenTheHookCommandCannotBeResolved(t *testing.T) {
