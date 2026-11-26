@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -312,6 +313,100 @@ func TestAbsoluteRejectedWhereItHasNoEffect(t *testing.T) {
 			t.Errorf("%v: error must name the commands --absolute affects: %s", args, out)
 		}
 	}
+}
+
+// Defends the command named by an --absolute usage error: a nested command
+// must not collapse to its leaf, and a moved command's cadence replacement
+// must win over an irrelevant flag error.
+func TestAbsoluteErrorNamesFullCommandAndMovedReplacement(t *testing.T) {
+	t.Run("nested command", func(t *testing.T) {
+		code, out, _ := runCLI(t, "yaml", "get", "--absolute", "--json", "key")
+		if code != 2 {
+			t.Fatalf("exit %d, want 2: %s", code, out)
+		}
+		var doc struct {
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal([]byte(out), &doc); err != nil {
+			t.Fatalf("not JSON: %v\n%s", err, out)
+		}
+		want := "--absolute has no effect on llm-data yaml get; it affects " + absoluteScope + " only"
+		if doc.Message != want {
+			t.Errorf("message %q, want %q", doc.Message, want)
+		}
+	})
+
+	t.Run("moved command", func(t *testing.T) {
+		code, out, _ := runCLI(t, "diff-smell", "--absolute", "--json")
+		if code != 2 {
+			t.Fatalf("exit %d, want 2: %s", code, out)
+		}
+		var doc struct {
+			Message string `json:"message"`
+			MovedTo string `json:"moved_to"`
+		}
+		if err := json.Unmarshal([]byte(out), &doc); err != nil {
+			t.Fatalf("not JSON: %v\n%s", err, out)
+		}
+		want := movedMessage("diff-smell", "cadence diff smell")
+		if doc.Message != want || doc.MovedTo != "cadence diff smell" {
+			t.Errorf("got message %q and moved_to %q, want %q and %q", doc.Message, doc.MovedTo, want, "cadence diff smell")
+		}
+	})
+}
+
+// Defends show's boundary guard directly: even if a future caller supplies a
+// path outside the root, the original absolute path must survive instead of a
+// misleading relative path.
+func TestShownPathsShowLeavesOutsidePathAbsolute(t *testing.T) {
+	root := realTempDir(t)
+	outside := filepath.Join(realTempDir(t), "outside.txt")
+	s := shownPaths{root: root, shown: "project"}
+	if got := s.show(outside); got != outside {
+		t.Errorf("show(%q) = %q, want the original path", outside, got)
+	}
+}
+
+// Defends relativeToCwd's fallback: an unavailable working directory or an
+// unresolvable path must make the caller keep the absolute path, never invent
+// a relative one.
+func TestRelativeToCwdErrors(t *testing.T) {
+	t.Run("working directory missing", func(t *testing.T) {
+		cwd := realTempDir(t)
+		t.Chdir(cwd)
+		if err := os.Remove(cwd); err != nil {
+			t.Fatal(err)
+		}
+		if rel, ok := relativeToCwd(filepath.Join(cwd, "path")); ok || rel != "" {
+			t.Errorf("relativeToCwd with a deleted working directory = %q, %v, want empty, false", rel, ok)
+		}
+	})
+
+	t.Run("working directory does not resolve", func(t *testing.T) {
+		cwd := realTempDir(t)
+		t.Chdir(cwd)
+		original := evalSymlinks
+		t.Cleanup(func() { evalSymlinks = original })
+		evalSymlinks = func(path string) (string, error) {
+			if path != cwd {
+				t.Fatalf("EvalSymlinks called for %q before the working directory %q", path, cwd)
+			}
+			return "", errors.New("unresolvable working directory")
+		}
+		outside := filepath.Join(realTempDir(t), "path")
+		if rel, ok := relativeToCwd(outside); ok || rel != "" {
+			t.Errorf("relativeToCwd with an unresolvable working directory = %q, %v, want empty, false", rel, ok)
+		}
+	})
+
+	t.Run("path does not resolve", func(t *testing.T) {
+		cwd := realTempDir(t)
+		t.Chdir(cwd)
+		missing := filepath.Join(realTempDir(t), "missing")
+		if rel, ok := relativeToCwd(missing); ok || rel != "" {
+			t.Errorf("relativeToCwd with an unresolvable path = %q, %v, want empty, false", rel, ok)
+		}
+	})
 }
 
 // Defends the help naming the flag's scope and the outside-the-directory

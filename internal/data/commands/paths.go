@@ -7,11 +7,16 @@ import (
 	"slices"
 
 	"github.com/samestrin/llm-data-axi/v2/pkg/output"
+	"github.com/spf13/cobra"
 )
 
 // GlobalAbsolutePaths is bound to --absolute. Paths are printed relative to
 // the working directory unless it is set.
 var GlobalAbsolutePaths bool
+
+// evalSymlinks is replaceable in tests so both resolution failures can be
+// exercised without depending on platform-specific filesystem permissions.
+var evalSymlinks = filepath.EvalSymlinks
 
 // absoluteCommands are the commands whose output --absolute changes. Every
 // other command refuses the flag (see checkAbsolute): accepted and ignored,
@@ -26,13 +31,14 @@ const absoluteScope = "tree, stats, multigrep, grep, catfiles, highest and git-c
 const absoluteHelp = "Print absolute paths (affects " + absoluteScope + " only; other commands reject it). " +
 	"By default paths are relative to the working directory; a path outside the working directory is always absolute"
 
-// checkAbsolute rejects --absolute on a command it does not affect.
-func checkAbsolute(name string, on bool) error {
-	if !on || slices.Contains(absoluteCommands, name) {
+// checkAbsolute rejects --absolute on a command it does not affect. Hidden
+// moved-command stubs still run their own error, which names the replacement.
+func checkAbsolute(cmd *cobra.Command, on bool) error {
+	if !on || cmd.Hidden || slices.Contains(absoluteCommands, cmd.Name()) {
 		return nil
 	}
 	return &output.UsageError{Msg: fmt.Sprintf(
-		"--absolute has no effect on %s; it affects %s only", name, absoluteScope)}
+		"--absolute has no effect on %s; it affects %s only", cmd.CommandPath(), absoluteScope)}
 }
 
 // shownPaths prints the paths of one listing rooted at an absolute path:
@@ -81,11 +87,11 @@ func relativeToCwd(abs string) (string, bool) {
 	if rel, ok := output.RelativePathWithin(abs, cwd); ok {
 		return rel, true
 	}
-	realCwd, err := filepath.EvalSymlinks(cwd)
+	realCwd, err := evalSymlinks(cwd)
 	if err != nil {
 		return "", false
 	}
-	realAbs, err := filepath.EvalSymlinks(abs)
+	realAbs, err := evalSymlinks(abs)
 	if err != nil {
 		return "", false
 	}
