@@ -290,25 +290,27 @@ func newSetupCmd() *cobra.Command {
 		Short: "Register llm-data with Claude Code, Codex or OpenCode in this project",
 		Long: `Register llm-data with each --target agent in this project.
 
-  claude  (the default) a SessionStart hook in .claude/settings.json and an
-          Agent Skill at .claude/skills/llm-data/SKILL.md
-  codex   a SessionStart hook in .codex/hooks.json and [features] hooks = true
-          in .codex/config.toml, without which Codex ignores hooks.json
-  opencode  a plugin at .opencode/plugins/llm-data.js that adds the home view
-          to OpenCode's system context (it adds no tool)
+  claude    (the default) a SessionStart hook in .claude/settings.json and
+            an Agent Skill at .claude/skills/llm-data/SKILL.md
+  codex     a SessionStart hook in .codex/hooks.json and [features]
+            hooks = true in .codex/config.toml, without which Codex ignores
+            hooks.json
+  opencode  a plugin at .opencode/plugins/llm-data.js that adds the home
+            view to OpenCode's system context (it adds no tool)
 
 The settings files are merged: other keys, hooks, comments and tables are
-kept. The OpenCode plugin is setup's own file and is rewritten whole; a file at its path
-that setup did not write is refused.
+kept. The OpenCode plugin is setup's own file and is rewritten whole; a
+file at its path that setup did not write is refused.
 
-The hook (and the plugin) runs the bare llm-data when PATH finds it, otherwise this binary's
-absolute path; that path is refused unless the binary is named llm-data (or
-llm-data.exe) and is not a go run build. A hook setup wrote earlier that no longer matches, such as the
-old path after the binary moved, is repaired in place.
+The hook (and the plugin) runs the bare llm-data when PATH finds it,
+otherwise this binary's absolute path; that path is refused unless the
+binary is named llm-data (or llm-data.exe) and is not a go run build. A
+hook setup wrote earlier that no longer matches, such as the old path
+after the binary moved, is repaired in place.
 
-Only files inside the project directory are written; the user-wide ~/.claude,
-~/.codex and ~/.config/opencode are never touched, and running setup in the
-home directory itself is refused.
+Only files inside the project directory are written; the user-wide
+~/.claude, ~/.codex and ~/.config/opencode are never touched, and running
+setup in the home directory itself is refused.
 Safe to run again: a second run changes no bytes and says so. Never prompts.
 
 Examples:
@@ -470,10 +472,10 @@ func planOpenCode(dir, hook string) ([]setupPlan, error) {
 	if existing != nil && !bytes.HasPrefix(existing, []byte(openCodePluginMarker)) {
 		return nil, fmt.Errorf("%s was not written by setup; refusing to overwrite it; move it aside and run setup again", filepath.Join(dir, rel))
 	}
-	command, err := json.Marshal(shellUnquote(hook))
-	if err != nil {
-		return nil, err
-	}
+	// json.Marshal of a string cannot fail, so its error is ignored rather
+	// than checked: a branch that can never run is a branch no test can
+	// cover, and it was the one uncovered line left in this function.
+	command, _ := json.Marshal(shellUnquote(hook))
 	want := []byte(fmt.Sprintf(openCodePluginTemplate, command))
 	return []setupPlan{{rel: rel, content: want, changed: !bytes.Equal(existing, want)}}, nil
 }
@@ -599,8 +601,8 @@ func tomlBracketDepth(line string, depth int) int {
 }
 
 // setupProjectDir resolves path to an existing directory that is not the home
-// directory. In the home directory, .claude/settings.json and .codex are the
-// user-wide settings, which are out of scope.
+// directory. In the home directory, .claude, .codex and .config/opencode are
+// the user-wide settings, which are out of scope.
 func setupProjectDir(path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -615,7 +617,8 @@ func setupProjectDir(path string) (string, error) {
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		if h, err := filepath.EvalSymlinks(home); err == nil && h == dir {
-			return "", fmt.Errorf("%s is the home directory; setup writes project settings only, never ~/.claude or ~/.codex", abs)
+			return "", fmt.Errorf("%s is the home directory; setup writes project settings only, "+
+				"never ~/.claude, ~/.codex or ~/.config/opencode", abs)
 		}
 	}
 	return dir, nil

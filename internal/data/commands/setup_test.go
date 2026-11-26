@@ -351,6 +351,11 @@ func TestSetupDryRunLeavesExistingSettingsAlone(t *testing.T) {
 // Defends "~/.claude is out of scope": run in the home directory itself, the
 // project's .claude/settings.json IS the user-wide one. setup must refuse and
 // write nothing, rather than install a hook into every session on the machine.
+//
+// The error also names every directory setup refuses to touch, not just the two
+// it used to: a user running setup in $HOME is running it somewhere all three
+// live, and a message naming only ~/.claude and ~/.codex left the OpenCode one
+// unmentioned in the one place a user would read it.
 func TestSetupRefusesTheHomeDirectory(t *testing.T) {
 	_, home := setupEnv(t)
 
@@ -360,6 +365,11 @@ func TestSetupRefusesTheHomeDirectory(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "home directory") {
 		t.Errorf("error does not say why: %v", err)
+	}
+	for _, dir := range []string{"~/.claude", "~/.codex", "~/.config/opencode"} {
+		if !strings.Contains(err.Error(), dir) {
+			t.Errorf("error does not name %s, the user-wide directory setup never writes: %v", dir, err)
+		}
 	}
 	// setupEnv's cleanup asserts home is still empty.
 }
