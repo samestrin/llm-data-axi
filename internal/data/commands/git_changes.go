@@ -55,7 +55,9 @@ Output modes:
                 count number; with --json, count only. No effect on TOON.
 
 Filtering options:
-  --path:             Filter to files matching this path prefix
+  --path:             Filter to files matching this path prefix, relative to
+                      the repository root. A path that is neither on disk nor
+                      known to git is an error, not an empty result.
   --include-untracked: Include untracked files (default: true)
   --staged-only:      Only show staged changes
 
@@ -110,6 +112,18 @@ func runGitChanges(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("Error executing git status: %w", err)
 	}
 
+	// An empty result for a path that names nothing is a typo, not a clean
+	// tree: reporting `count: 0` made the two indistinguishable.
+	if result.Count == 0 && pathFilter != "" {
+		known, err := gitChangesPathKnown(context.Background(), pathFilter)
+		if err != nil {
+			return err
+		}
+		if !known {
+			return fmt.Errorf("path not found: %s", gitChangesPath)
+		}
+	}
+
 	// Output based on flags
 	return outputGitChanges(cmd, result)
 }
@@ -123,6 +137,27 @@ func gitChangesIn(ctx context.Context, dir, pathFilter string, includeUntracked,
 		return GitChangesResult{}, err
 	}
 	return parseGitStatus(out, pathFilter, includeUntracked, stagedOnly), nil
+}
+
+// gitChangesPathKnown reports whether pathFilter names something on disk or in
+// the index, resolved against the repository root as the filter is. Disk alone
+// is not enough: a tracked file deleted from the working tree is a real path,
+// and `--staged-only --path` on it must report count 0, not refuse it. A
+// staged deletion is in neither place, but it always passes the filters, so
+// the result is never empty and this is never asked.
+func gitChangesPathKnown(ctx context.Context, pathFilter string) (bool, error) {
+	root, err := repoRootOf(ctx, "")
+	if err != nil {
+		return false, err
+	}
+	if _, err := os.Lstat(filepath.Join(root, pathFilter)); err == nil {
+		return true, nil
+	}
+	tracked, err := runGitCtx(ctx, root, "--literal-pathspecs", "ls-files", "--", pathFilter)
+	if err != nil {
+		return false, err
+	}
+	return tracked != "", nil
 }
 
 // normalizePathFilter normalizes the path filter for matching
