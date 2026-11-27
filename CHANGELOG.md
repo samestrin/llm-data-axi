@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **`grep` states empty result lists on a zero-match run.** TOON and JSON now print `matches: []` and `files: []` instead of omitting those fields, so a run with no matches cannot read as missing output.
+- **`tree` states an empty `entries` list for an empty directory.** TOON and JSON now print `entries: []` instead of omitting the result; plain output is unchanged.
+- **`git-changes --path` rejects a filter that names no path.** A path that is neither on disk nor known to git now exits 1 with `path not found: <path>` instead of reporting zero changes. Deleted tracked files remain valid filters, and an unchanged existing path still reports `count: 0`.
+- **`detect` and `discover-tests` reject a file passed as `--path`.** Both now exit 1 with `path is not a directory: <path>` in every output format instead of reporting a false success; missing-path errors and directory behavior are unchanged.
 - **Errors from `grep`, `highest` and `git-context` name the shown path.** Read and directory errors now print the same relative path as the command output, or the absolute path with `--absolute`, instead of always printing the absolute path.
 - **Errors for an unsupported `--absolute` flag name the full command path.** A command such as `yaml set` now reports `llm-data yaml set` instead of the bare subcommand, while the hidden moved-command stubs keep their own errors naming the cadence replacements.
 - **The `git-context` diff-cut marker says how much was omitted and how to retrieve it.** A diff cut at 50,000 bytes now ends with the complete diff's byte size and the instruction to rerun with `--full`, instead of only saying that it was too large.
