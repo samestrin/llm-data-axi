@@ -228,8 +228,8 @@ func TestJSONQueryOutputModes(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"users[0].name"}, "path: users[0].name\nvalue: ada\n"},
-		{[]string{"users[0].name", "--min"}, "path: users[0].name\nvalue: ada\n"},
+		{[]string{"users[0].name"}, "path: \"users[0].name\"\nvalue: ada\n"},
+		{[]string{"users[0].name", "--min"}, "path: \"users[0].name\"\nvalue: ada\n"},
 		{[]string{"users[0].name", "--plain"}, "ada\n"},
 		{[]string{"users[0].name", "--plain", "--min"}, "ada\n"},
 		{[]string{"users[0]", "--plain"}, `{"age":36,"name":"ada"}` + "\n"},
