@@ -227,21 +227,94 @@ func TestPlainConflictsWithStructuredFormats(t *testing.T) {
 	}
 }
 
+// Defends the rule that --axi is accepted only when it does something: both
+// `detect --axi --json` and `detect --axi=false` printed TOON with exit 0. The
+// first asked for two encodings and got one; the second asked for no TOON and
+// got TOON. Each is now a usage error naming the conflict, reported in the
+// run's own format: TOON by default, JSON under --json, text under --plain.
+// An omitted --axi, and --axi alone, still select TOON.
+func TestAXIConflictsAreUsageErrors(t *testing.T) {
+	fakeExecutable(t)
+	chdirTo(t, modeFixture(t))
+	for _, c := range []struct {
+		args   []string
+		names  []string
+		format string
+	}{
+		{[]string{"detect", "--axi", "--json"}, []string{"--axi", "--json"}, "toon"},
+		{[]string{"detect", "--json", "--axi"}, []string{"--axi", "--json"}, "toon"},
+		{[]string{"--axi", "detect", "--json"}, []string{"--axi", "--json"}, "toon"},
+		{[]string{"detect", "--axi=false"}, []string{"--axi=false"}, "toon"},
+		{[]string{"detect", "--axi=false", "--json"}, []string{"--axi=false"}, "json"},
+		{[]string{"detect", "--json", "--axi=false"}, []string{"--axi=false"}, "json"},
+		{[]string{"detect", "--axi=false", "--plain"}, []string{"--axi=false"}, "plain"},
+		{[]string{"--axi=false", "detect", "--plain"}, []string{"--axi=false"}, "plain"},
+	} {
+		code, stdout, stderr := runCLI(t, c.args...)
+		if code != 2 {
+			t.Errorf("%v: exit %d, want 2 (usage)", c.args, code)
+		}
+		if stderr != "" {
+			t.Errorf("%v: stderr must be empty, got %q", c.args, stderr)
+		}
+		for _, name := range c.names {
+			if !strings.Contains(stdout, name) {
+				t.Errorf("%v: stdout must name %s, got %q", c.args, name, stdout)
+			}
+		}
+		switch c.format {
+		case "json":
+			var e struct {
+				Error   bool   `json:"error"`
+				Message string `json:"message"`
+			}
+			if err := json.Unmarshal([]byte(stdout), &e); err != nil || !e.Error || !strings.Contains(e.Message, c.names[0]) {
+				t.Errorf("%v: want a JSON error naming %s, got %q", c.args, c.names[0], stdout)
+			}
+		case "plain":
+			if !strings.HasPrefix(stdout, "Error: ") {
+				t.Errorf("%v: want a plain-text error, got %q", c.args, stdout)
+			}
+		default:
+			if !strings.HasPrefix(stdout, "error: true\n") {
+				t.Errorf("%v: want a TOON error, got %q", c.args, stdout)
+			}
+		}
+		if strings.Contains(stdout, "stack") || strings.Contains(stdout, "STACK") {
+			t.Errorf("%v: detect ran despite the conflict:\n%s", c.args, stdout)
+		}
+	}
+	for _, args := range [][]string{{"detect"}, {"detect", "--axi"}, {"detect", "--axi=true"}} {
+		code, stdout, _ := runCLI(t, args...)
+		if code != 0 || !strings.Contains(stdout, "stack: go\n") {
+			t.Errorf("%v: want TOON detect output with exit 0, got exit %d:\n%s", args, code, stdout)
+		}
+	}
+}
+
 // Defends ExitCodeFor classifying the conflict as a usage error by type, not
 // by the wording of its message.
 func TestFormatConflictIsAUsageError(t *testing.T) {
-	err := formatConflict(true, true, false)
+	err := formatConflict(true, true, false, false)
 	if err == nil {
 		t.Fatal("--plain with --json was accepted")
 	}
 	if got := output.ExitCodeFor(err); got != 2 {
 		t.Errorf("ExitCodeFor = %d, want 2", got)
 	}
-	if err := formatConflict(true, false, true); err == nil || !strings.Contains(err.Error(), "--axi") {
+	if err := formatConflict(true, false, true, false); err == nil || !strings.Contains(err.Error(), "--axi") {
 		t.Errorf("--plain with --axi: got %v", err)
 	}
-	for _, ok := range [][3]bool{{true, false, false}, {false, true, false}, {false, false, true}, {false, true, true}, {false, false, false}} {
-		if err := formatConflict(ok[0], ok[1], ok[2]); err != nil {
+	// --axi with --json was accepted until epic 17 (owner decision Q4), so it
+	// moved from the accepted list below to here.
+	if err := formatConflict(false, true, true, false); output.ExitCodeFor(err) != 2 {
+		t.Errorf("--axi with --json: got %v, want a usage error", err)
+	}
+	if err := formatConflict(false, false, false, true); output.ExitCodeFor(err) != 2 {
+		t.Errorf("--axi=false: got %v, want a usage error", err)
+	}
+	for _, ok := range [][3]bool{{true, false, false}, {false, true, false}, {false, false, true}, {false, false, false}} {
+		if err := formatConflict(ok[0], ok[1], ok[2], false); err != nil {
 			t.Errorf("formatConflict%v = %v, want nil", ok, err)
 		}
 	}

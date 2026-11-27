@@ -185,7 +185,7 @@ No API key or other secret is used. Two `template` options read data you name an
 | Flag | Output |
 |---|---|
 | none | Token-dense TOON, the default |
-| `--axi` | TOON, the same as no flag (accepted alias) |
+| `--axi` | TOON, the same as no flag (accepted alias); cannot be combined with `--json`, and `--axi=false` is rejected (usage error, exit 2) |
 | `--json` | JSON |
 | `--plain` | Human-readable text; cannot be combined with `--json` or `--axi` (usage error, exit 2) |
 | `--min` | Shorter `--json` or `--plain` output; no effect on TOON |

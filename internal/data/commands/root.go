@@ -94,9 +94,9 @@ Designed for fast startup, single binary distribution, and AXI (TOON)
 output that costs fewer tokens than JSON.
 
 Output is TOON by default. --json prints JSON and --plain prints plain
-text; --axi is accepted and prints the same TOON as no flag. --plain cannot
-be combined with --json or --axi. --min shortens --json and --plain output
-and has no effect on TOON, which is already token-dense.
+text; --axi is accepted and prints the same TOON as no flag. The three
+cannot be combined, and --axi=false is rejected. --min shortens --json and
+--plain output and has no effect on TOON, which is already token-dense.
 
 %s print paths
 relative to the working directory; a path outside it stays absolute.
@@ -135,7 +135,7 @@ func NewRootCmd() *cobra.Command {
 				GlobalMinOutput = true
 			}
 			jsonOn := flagOn(cmd, "json")
-			if err := formatConflict(GlobalPlainOutput, jsonOn, GlobalAXIOutput); err != nil {
+			if err := formatConflict(GlobalPlainOutput, jsonOn, GlobalAXIOutput, flagOff(cmd, "axi")); err != nil {
 				return err
 			}
 			if err := checkAbsolute(cmd, GlobalAbsolutePaths); err != nil {
@@ -462,26 +462,42 @@ func flagOn(cmd *cobra.Command, name string) bool {
 	return f != nil && f.Changed && f.Value.String() == "true"
 }
 
-// formatConflict rejects --plain with --json or --axi. Each asks for an
-// encoding the other rules out, and printing either would hand one request
-// output it did not ask for, with exit 0.
-func formatConflict(plain, jsonOn, axi bool) error {
-	if !plain {
-		return nil
+// flagOff reports whether cmd's flag name was given and set false, which an
+// omitted flag never is.
+func flagOff(cmd *cobra.Command, name string) bool {
+	f := cmd.Flag(name)
+	return f != nil && f.Changed && f.Value.String() == "false"
+}
+
+// formatConflict rejects --plain with --json or --axi, --axi with --json, and
+// an explicit --axi=false. Each pair asks for two encodings and no output can
+// be both; --axi=false asks for no TOON without naming what to print instead,
+// and TOON is what it would get. Printing anything would hand the request
+// output it did not ask for, with exit 0. An omitted --axi is the default.
+func formatConflict(plain, jsonOn, axi, axiOff bool) error {
+	if axiOff {
+		return &output.UsageError{Msg: "--axi=false is not an output format: TOON is the default and --axi only selects it; omit --axi for TOON, or pass --json or --plain"}
 	}
+	var flag string
 	var others []string
-	if jsonOn {
-		others = append(others, "--json")
-	}
-	if axi {
-		others = append(others, "--axi")
+	switch {
+	case plain:
+		flag = "--plain"
+		if jsonOn {
+			others = append(others, "--json")
+		}
+		if axi {
+			others = append(others, "--axi")
+		}
+	case axi && jsonOn:
+		flag, others = "--axi", []string{"--json"}
 	}
 	if len(others) == 0 {
 		return nil
 	}
 	return &output.UsageError{Msg: fmt.Sprintf(
-		"conflicting output flags: --plain cannot be combined with %s; pass one of --plain, --json or --axi (TOON is the default)",
-		strings.Join(others, " or "))}
+		"conflicting output flags: %s cannot be combined with %s; pass one of --plain, --json or --axi (TOON is the default)",
+		flag, strings.Join(others, " or "))}
 }
 
 // outputMode reads --axi, --json, --plain and --min from args for the error
