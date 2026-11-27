@@ -377,3 +377,49 @@ func TestTreeEmptyDirectory(t *testing.T) {
 		t.Error("expected some output for empty directory")
 	}
 }
+
+// Defends epic 18 T2: tree on an empty directory dropped entries (omitempty
+// on TreeResult.Entries), so a caller could not tell an empty directory from
+// a result that never reported its list. VISION.md: a command that returns a
+// list always returns the key, even when the list is empty. The sibling
+// total test lives in ac5_review_test.go and must stay green.
+func TestTreeEmptyDirStatesEmptyEntries(t *testing.T) {
+	dir := t.TempDir()
+
+	// --json: entries present as an empty list, not null and not absent.
+	code, stdout, _ := runCLI(t, "tree", "--path", dir, "--json")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, stdout)
+	}
+	doc := decodeOne(t, stdout)
+	if entries, ok := doc["entries"].([]any); !ok || len(entries) != 0 {
+		t.Errorf("entries = %v (present %v), want an empty list", doc["entries"], ok)
+	}
+	if v, ok := doc["total"]; !ok || v != float64(0) {
+		t.Errorf("total = %v (present %v), want 0", v, ok)
+	}
+
+	// TOON (the default): the empty list is stated as entries[0]:.
+	code, toon, _ := runCLI(t, "tree", "--path", dir)
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, toon)
+	}
+	if !strings.Contains(toon, "entries[0]:") {
+		t.Errorf("TOON lacks entries[0]:\n%s", toon)
+	}
+
+	// --plain is unchanged: the root line only, no list and no count. The
+	// shown root comes from the result itself so the test never compares a
+	// raw t.TempDir path with a cwd-relative one.
+	root, _ := doc["root"].(string)
+	if root == "" {
+		t.Fatalf("json result has no root: %v", doc)
+	}
+	code, plain, _ := runCLI(t, "tree", "--path", dir, "--plain")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, plain)
+	}
+	if plain != root+"/\n" {
+		t.Errorf("--plain = %q, want %q (unchanged root line)", plain, root+"/\n")
+	}
+}

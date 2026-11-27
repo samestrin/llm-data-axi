@@ -52,9 +52,11 @@ type TreeEntry struct {
 
 // TreeResult represents the complete tree output
 type TreeResult struct {
-	Root      string       `json:"root,omitempty"`
-	Depth     int          `json:"depth,omitempty"`
-	Entries   []*TreeEntry `json:"entries,omitempty"`
+	Root  string `json:"root,omitempty"`
+	Depth int    `json:"depth,omitempty"`
+	// no omitempty: an empty directory states entries [] rather than dropping
+	// the key, so a caller can tell zero entries from a field never reported.
+	Entries   []*TreeEntry `json:"entries"`
 	Total     int          `json:"total"`
 	Truncated bool         `json:"truncated,omitempty"`
 	Message   string       `json:"message,omitempty"`
@@ -148,6 +150,11 @@ func runTree(cmd *cobra.Command, args []string) error {
 
 	// Build tree structure
 	entries := builder.buildTreeEntries(path, 0, treeDepth)
+	if entries == nil {
+		// State the empty list, not null: a nil slice marshals to null in
+		// JSON and TOON even without omitempty.
+		entries = []*TreeEntry{}
+	}
 
 	result := TreeResult{
 		Root:      builder.paths.shown,
