@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **The skill names every command except `setup`.** `skills/llm-data/SKILL.md` now covers `discover-tests`, `stats`, `multiexists`, `highest`, `math`, `runtime` and `template`, so an agent reading the skill sees all 18 commands; `setup` stays out because it is the installer that writes the skill. A new drift test fails when a command is neither named in the skill nor given a stated reason, and the committed skill and the copy `setup` writes remain byte-identical. Documentation only.
 - **The root help derives its relative-path command list from `absoluteScope`.** `--help`, the `--absolute` flag help and unsupported-flag errors now share one command list, so a future change cannot leave the root help naming different commands.
 - **`--axi` with `--json`, and an explicit `--axi=false`, are usage errors.** Both used to print TOON with exit 0: `detect --axi --json` asked for two encodings and got one, and `detect --axi=false` asked for no TOON and got TOON. Each now exits 2 with an error naming the conflict, in TOON, `--json` or `--plain` as the run asked, the same way `--plain` conflicts already did. Omitting `--axi`, or passing it alone, still selects TOON (epic 17).
 - **Every MCP tool description states the relative-path base.** Relative paths resolve from the MCP server's working directory, matching how the server invokes the CLI (epic 17).
