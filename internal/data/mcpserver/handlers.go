@@ -252,9 +252,7 @@ func ExecuteHandler(toolName string, args map[string]interface{}) (string, error
 	}
 
 	// Ask for a machine-parseable, token-optimized encoding. Exactly one form
-	// is sent. Sending both would in fact work — Formatter checks AXI first, so
-	// --axi wins over --json — but relying on that makes the encoding depend on
-	// a precedence rule rather than on what was asked for.
+	// is sent: the CLI rejects --axi with --json as a usage error.
 	if axi {
 		cmdArgs = withEncoding(cmdArgs, []string{"--axi"})
 	} else {

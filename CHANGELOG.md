@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **`--axi` with `--json`, and an explicit `--axi=false`, are usage errors.** Both used to print TOON with exit 0: `detect --axi --json` asked for two encodings and got one, and `detect --axi=false` asked for no TOON and got TOON. Each now exits 2 with an error naming the conflict, in TOON, `--json` or `--plain` as the run asked, the same way `--plain` conflicts already did. Omitting `--axi`, or passing it alone, still selects TOON (epic 17).
 - **Every MCP tool description states the relative-path base.** Relative paths resolve from the MCP server's working directory, matching how the server invokes the CLI (epic 17).
 - **The AXI catalog entry's domain is `Project files / YAML`.** `docs/axi-catalog-entry.yaml` now uses the domain the axi.md submission ([kunchenguid/axi#291](https://github.com/kunchenguid/axi/pull/291)) uses, in place of `Data and Project Analysis`; `reviewed_revision` is unchanged. Documentation only.
 - **The AXI catalog entry's usage-error observation is grammatically complete.** Restored the dropped `and` before the `yaml set` key error; the documented behavior and `reviewed_revision` are unchanged. Documentation only.
