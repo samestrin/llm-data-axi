@@ -234,3 +234,69 @@ func TestDiscoverTestsWithCypressE2E(t *testing.T) {
 		t.Errorf("output %q should contain E2E_DIR: cypress/", output)
 	}
 }
+
+// TestDiscoverTestsPathIsFile defends epic 18 T4: discover-tests --path <file>
+// used to exit 0 and report pattern "UNKNOWN", indistinguishable from a real
+// directory with no tests. It must fail with tree's and stats' wording, exit
+// 1, an error document on stdout and empty stderr, in every output format; a
+// directory path must keep succeeding.
+func TestDiscoverTestsPathIsFile(t *testing.T) {
+	dir := realTempDir(t)
+	file := filepath.Join(dir, "x.txt")
+	if err := os.WriteFile(file, []byte("not a project"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, f := range errorFormats {
+		t.Run(f.name, func(t *testing.T) {
+			args := append([]string{"discover-tests", "--path", file}, f.flags...)
+			code, stdout, stderr := runCLI(t, args...)
+			if code != 1 {
+				t.Errorf("exit %d, want 1 (stdout %q)", code, stdout)
+			}
+			if stderr != "" {
+				t.Errorf("stderr must be empty, got %q", stderr)
+			}
+			msg, ok := f.message(stdout)
+			if !ok {
+				t.Fatalf("stdout is not a %s error: %q", f.name, stdout)
+			}
+			if want := "path is not a directory: " + file; !strings.Contains(msg, want) {
+				t.Errorf("error must say %q, got %q", want, msg)
+			}
+		})
+	}
+
+	// A missing path keeps its own wording, distinct from the file case.
+	for _, f := range errorFormats {
+		t.Run("missing/"+f.name, func(t *testing.T) {
+			missing := filepath.Join(dir, "missing")
+			args := append([]string{"discover-tests", "--path", missing}, f.flags...)
+			code, stdout, stderr := runCLI(t, args...)
+			if code != 1 || stderr != "" {
+				t.Errorf("exit %d stderr %q, want 1 and empty (stdout %q)", code, stderr, stdout)
+			}
+			msg, ok := f.message(stdout)
+			if !ok {
+				t.Fatalf("stdout is not a %s error: %q", f.name, stdout)
+			}
+			if want := "path does not exist: " + missing; !strings.Contains(msg, want) {
+				t.Errorf("error must say %q, got %q", want, msg)
+			}
+		})
+	}
+
+	// A directory path is unchanged: still exit 0 with a result, no error.
+	for _, f := range errorFormats {
+		t.Run("dir/"+f.name, func(t *testing.T) {
+			args := append([]string{"discover-tests", "--path", dir}, f.flags...)
+			code, stdout, stderr := runCLI(t, args...)
+			if code != 0 || stderr != "" {
+				t.Errorf("exit %d stderr %q, want 0 and empty (stdout %q)", code, stderr, stdout)
+			}
+			if stdout == "" || strings.Contains(stdout, "path is not a directory") {
+				t.Errorf("directory must still produce a result, got %q", stdout)
+			}
+		})
+	}
+}
