@@ -392,6 +392,118 @@ func TestGrepExplicitZeroTotal(t *testing.T) {
 	}
 }
 
+// TestGrepStatesEmptyList defends VISION.md's "A command that returns a list
+// always returns the key, even when the list is empty": a zero-match grep
+// dropped matches (and files under -l) through omitempty, so "searched, found
+// nothing" and "field not reported" read the same in TOON and --json. The key
+// must carry an empty list, not null: a nil slice marshals to null, which is
+// still not a list.
+func TestGrepStatesEmptyList(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(file, []byte("foo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// checkEmptyLists asserts both list keys are present as empty lists. A
+	// missing key and a null both unmarshal to a nil slice; only [] gives a
+	// non-nil slice of length zero.
+	checkEmptyLists := func(t *testing.T, stdout string) {
+		t.Helper()
+		var res struct {
+			Matches []GrepMatch `json:"matches"`
+			Files   []string    `json:"files"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &res); err != nil {
+			t.Fatalf("parse: %v\n%s", err, stdout)
+		}
+		if res.Matches == nil || len(res.Matches) != 0 {
+			t.Errorf("matches is absent or null, want an empty list:\n%s", stdout)
+		}
+		if res.Files == nil || len(res.Files) != 0 {
+			t.Errorf("files is absent or null, want an empty list:\n%s", stdout)
+		}
+	}
+
+	t.Run("json zero matches", func(t *testing.T) {
+		stdout, _, code := runGrepCLI(t, "grep", "zzq", file, "--json")
+		if code != 0 {
+			t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+		}
+		checkEmptyLists(t, stdout)
+	})
+
+	t.Run("toon zero matches", func(t *testing.T) {
+		stdout, _, code := runGrepCLI(t, "grep", "zzq", file, "--axi")
+		if code != 0 {
+			t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+		}
+		// TOON spells an empty list as key[0]: — the header with a zero row
+		// count. A dropped key has no header; a nil slice prints null.
+		for _, want := range []string{"matches[0]:", "files[0]:"} {
+			if !strings.Contains(stdout, want) {
+				t.Errorf("TOON lacks the empty list %q:\n%s", want, stdout)
+			}
+		}
+	})
+
+	t.Run("json -l zero matches", func(t *testing.T) {
+		stdout, _, code := runGrepCLI(t, "grep", "zzq", file, "-l", "--json")
+		if code != 0 {
+			t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+		}
+		checkEmptyLists(t, stdout)
+	})
+
+	t.Run("toon -l zero matches", func(t *testing.T) {
+		stdout, _, code := runGrepCLI(t, "grep", "zzq", file, "-l", "--axi")
+		if code != 0 {
+			t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+		}
+		if !strings.Contains(stdout, "files[0]:") {
+			t.Errorf("TOON -l lacks the empty files list:\n%s", stdout)
+		}
+	})
+
+	// The non-zero side must not move: one match still carries its file and
+	// text, and -l still names the one file with a match.
+	t.Run("one match unchanged", func(t *testing.T) {
+		hit := filepath.Join(dir, "hit.txt")
+		if err := os.WriteFile(hit, []byte("needle\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		stdout, _, code := runGrepCLI(t, "grep", "needle", hit, "--json")
+		if code != 0 {
+			t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+		}
+		var res struct {
+			Matches      []GrepMatch `json:"matches"`
+			TotalMatches int         `json:"total_matches"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &res); err != nil {
+			t.Fatalf("parse: %v\n%s", err, stdout)
+		}
+		if len(res.Matches) != 1 || res.Matches[0].Text != "needle" || res.TotalMatches != 1 {
+			t.Errorf("one-match run changed: %+v\n%s", res, stdout)
+		}
+
+		stdout, _, code = runGrepCLI(t, "grep", "needle", hit, "-l", "--json")
+		if code != 0 {
+			t.Fatalf("exit %d; stdout:\n%s", code, stdout)
+		}
+		var lres struct {
+			Files        []string `json:"files"`
+			TotalMatches int      `json:"total_matches"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &lres); err != nil {
+			t.Fatalf("parse: %v\n%s", err, stdout)
+		}
+		if len(lres.Files) != 1 || lres.TotalMatches != 1 {
+			t.Errorf("-l one-match run changed: %+v\n%s", lres, stdout)
+		}
+	})
+}
+
 // TestGrepCountsMatches defends the non-zero side of principle 4: the total
 // must be the number of matching lines (or files, with -l), not a field that
 // only appears when it is non-zero.
