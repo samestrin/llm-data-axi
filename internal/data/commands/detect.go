@@ -71,8 +71,12 @@ func runDetect(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid path: %w", err)
 	}
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	info, err := os.Stat(path)
+	if err != nil {
 		return fmt.Errorf("path does not exist: %s", path)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("path is not a directory: %s", path)
 	}
 
 	formatter := output.New(detectJSON, detectMinimal, cmd.OutOrStdout())
