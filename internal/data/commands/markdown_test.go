@@ -98,6 +98,27 @@ func TestMarkdownHeadersUnclosedFenceRunsToTheEnd(t *testing.T) {
 	}
 }
 
+// Defends against a line of inline code opening a fence: ```x``` has a
+// backtick in its info string, so it is not a fence (CommonMark), and
+// treating it as one hid every header after it.
+func TestMarkdownHeadersInlineBackticksAreNotAFence(t *testing.T) {
+	path := writeMarkdown(t, "doc.md", "```inline```\n# After\n")
+	r := headersJSON(t, path)
+	if !headersEqual(r.Headers, []MarkdownHeader{{Level: 1, Title: "After", Line: 2}}) {
+		t.Fatalf("headers = %+v, want After on line 2", r.Headers)
+	}
+}
+
+// Defends the empty state on a zero-byte file: headers [] and total 0, not
+// a null list.
+func TestMarkdownHeadersZeroByteFile(t *testing.T) {
+	code, stdout, _ := runMarkdownCLI(t, "markdown", "headers", "--json", writeMarkdown(t, "empty.md", ""))
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(stdout), &doc); err != nil || code != 0 || !jsonEmpty(doc, "headers") {
+		t.Fatalf("exit %d, want headers [] : %q", code, stdout)
+	}
+}
+
 // Defends against reading YAML comments as headers: a plan file's leading
 // frontmatter block holds `# comment` lines, which are YAML, not headers.
 func TestMarkdownHeadersSkipsLeadingFrontmatter(t *testing.T) {
