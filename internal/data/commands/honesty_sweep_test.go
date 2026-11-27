@@ -517,6 +517,85 @@ func TestHonestySweepTableMissingCommandIsReported(t *testing.T) {
 	}
 }
 
+// Defends the bad-path half of the sweep itself (epic 18 T6): a command
+// that swallows a path error and exits 0 must be reported by
+// badPathProblems in every format, whether it prints a success-shaped
+// document or a real error document with the wrong exit code. If a helper
+// is loosened to accept either fake, this test goes red, so a green sweep
+// cannot quietly mean a blind sweep.
+func TestHonestySweepBadPathHelperRejectsSwallowedError(t *testing.T) {
+	// Success-shaped stdout per format, as an empty run really prints it.
+	success := map[string]string{
+		"default": "files[0]:\nfile_count: 0\n",
+		"json":    "{\"files\":[],\"file_count\":0}\n",
+		"plain":   "FILES: 0\n",
+	}
+	// Real error documents per format: paired with exit 0, only the
+	// exit-code check can catch the swallow, so each check is defended
+	// on its own.
+	errDoc := map[string]string{
+		"default": "error: true\nmessage: \"no such path\"\n",
+		"json":    "{\"error\":true,\"message\":\"no such path\"}\n",
+		"plain":   "Error: no such path\n",
+	}
+	for _, f := range sweepFormats(t) {
+		t.Run(f.name, func(t *testing.T) {
+			problems := badPathProblems(f, 0, success[f.name], "")
+			if !slices.ContainsFunc(problems, func(p string) bool { return strings.Contains(p, "exit 0, want 1") }) {
+				t.Errorf("swallowed error (exit 0, %q): problems = %q, must name the exit code", success[f.name], problems)
+			}
+			if !slices.ContainsFunc(problems, func(p string) bool { return strings.Contains(p, "error document") }) {
+				t.Errorf("swallowed error (exit 0, %q): problems = %q, must name the missing error document", success[f.name], problems)
+			}
+			problems = badPathProblems(f, 0, errDoc[f.name], "")
+			if len(problems) != 1 || !strings.Contains(problems[0], "exit 0, want 1") {
+				t.Errorf("error document with exit 0 (%q): problems = %q, want exactly the exit-code problem", errDoc[f.name], problems)
+			}
+			// Known-good control: an honest error run draws no problems,
+			// so this test cannot pass by flagging everything.
+			if problems := badPathProblems(f, 1, errDoc[f.name], ""); len(problems) != 0 {
+				t.Errorf("honest error run flagged: %q", problems)
+			}
+		})
+	}
+}
+
+// Defends the empty-result half of the sweep (epic 18 T6): a run that
+// drops an empty list key, or the --plain count line, must be reported by
+// emptyResultProblems. Each fake keeps one key and drops another so the
+// per-key check is what fires, not a wholesale "stdout is empty". If a
+// helper is loosened to accept an omitted key, this test goes red.
+func TestHonestySweepEmptyResultHelperRejectsOmittedKey(t *testing.T) {
+	keys := []string{"files", "file_count"}
+	const plainCount = "FILES: 0"
+	omitted := map[string]string{
+		"default": "file_count: 0\n",
+		"json":    "{\"file_count\":0}\n",
+		"plain":   "done\n",
+	}
+	honest := map[string]string{
+		"default": "files[0]:\nfile_count: 0\n",
+		"json":    "{\"files\":[],\"file_count\":0}\n",
+		"plain":   "FILES: 0\n",
+	}
+	for _, f := range sweepFormats(t) {
+		t.Run(f.name, func(t *testing.T) {
+			problems := emptyResultProblems(f, keys, plainCount, 0, omitted[f.name], "")
+			want := "files"
+			if f.name == "plain" {
+				want = plainCount
+			}
+			if !slices.ContainsFunc(problems, func(p string) bool { return strings.Contains(p, want) }) {
+				t.Errorf("omitted key (%q): problems = %q, must name %q", omitted[f.name], problems, want)
+			}
+			// Known-good control: an honest empty run draws no problems.
+			if problems := emptyResultProblems(f, keys, plainCount, 0, honest[f.name], ""); len(problems) != 0 {
+				t.Errorf("honest empty run flagged: %q", problems)
+			}
+		})
+	}
+}
+
 // Defends the derivation: the sweep must see every visible command, including
 // the yaml subcommands, and none of the hidden moved stubs.
 func TestHonestySweepCoversTheTree(t *testing.T) {
