@@ -254,7 +254,9 @@ Run ` + "`llm-data --help`" + ` for the full command list. Output is token-dense
 - ` + "`llm-data tree`" + `, ` + "`llm-data count`" + ` and ` + "`llm-data catfiles`" + ` list, count and read files.
 - ` + "`llm-data yaml get|set|multiget|multiset`" + ` reads and edits YAML in place.
 - ` + "`llm-data git-changes`" + `, ` + "`llm-data git-context`" + ` and ` + "`llm-data repo-root`" + ` describe the repository.
-- ` + "`llm-data detect`" + ` describes the project's stack and layout.
+- ` + "`llm-data detect`" + ` and ` + "`llm-data discover-tests`" + ` describe the project's stack, layout and test setup.
+- ` + "`llm-data stats`" + `, ` + "`llm-data multiexists`" + ` and ` + "`llm-data highest`" + ` summarize a directory, check paths exist and find the highest-numbered entry.
+- ` + "`llm-data math`" + `, ` + "`llm-data runtime`" + ` and ` + "`llm-data template`" + ` evaluate arithmetic, format elapsed time and fill in template variables.
 
 Not installed? ` + "`go install github.com/samestrin/llm-data-axi/v2/cmd/llm-data@v2.0.2`" + `, or run one command without installing: ` + "`go run github.com/samestrin/llm-data-axi/v2/cmd/llm-data@v2.0.2 <command>`" + `.
 
