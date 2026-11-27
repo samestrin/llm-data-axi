@@ -64,14 +64,16 @@ type GrepMatch struct {
 	FullLength int    `json:"full_length,omitempty"`
 }
 
-// GrepResult represents the complete grep result. TotalMatches has no
-// omitempty on purpose (AXI principles 4 and 5): a zero must be stated, not
-// indistinguishable from an absent field. With -l it counts files with
+// GrepResult represents the complete grep result. TotalMatches, Matches and
+// Files have no omitempty on purpose (AXI principles 4 and 5): a zero must be
+// stated, not indistinguishable from an absent field. The lists are also
+// initialised non-nil where the result is built, because a nil slice marshals
+// to null, which is still not a list. With -l TotalMatches counts files with
 // matches, otherwise matching lines.
 type GrepResult struct {
 	Pattern      string      `json:"pattern,omitempty"`
-	Matches      []GrepMatch `json:"matches,omitempty"`
-	Files        []string    `json:"files,omitempty"`
+	Matches      []GrepMatch `json:"matches"`
+	Files        []string    `json:"files"`
 	TotalMatches int         `json:"total_matches"`
 	// BinarySkipped names each file passed over as binary: a skipped file
 	// must not look like a searched file with no match.
@@ -213,6 +215,8 @@ func runGrep(cmd *cobra.Command, args []string) error {
 	// Search files
 	result := GrepResult{
 		Pattern:           pattern,
+		Matches:           []GrepMatch{},
+		Files:             []string{},
 		NonRegularSkipped: nonRegular,
 	}
 	matchedFiles := make(map[string]bool)
