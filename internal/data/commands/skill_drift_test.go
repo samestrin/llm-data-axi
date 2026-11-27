@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -148,22 +149,34 @@ func TestReadmeUsageNamesEveryCommand(t *testing.T) {
 	if len(named) == 0 {
 		t.Fatal("found no command rows in the README `## Usage` table; the parser is broken")
 	}
+	for _, problem := range readmeUsageDrift(named, NewRootCmd()) {
+		t.Error(problem)
+	}
+}
+
+// readmeUsageDrift reports each way the README `## Usage` table and the
+// visible command tree disagree, in both directions. It is a pure comparison
+// so epic 19 T3 can feed it a list with one command removed and watch it
+// fail; TestReadmeUsageNamesEveryCommand feeds it the committed table.
+func readmeUsageDrift(named map[string]bool, root *cobra.Command) []string {
+	var problems []string
 	visible := map[string]bool{}
-	for _, cmd := range NewRootCmd().Commands() {
+	for _, cmd := range root.Commands() {
 		if cmd.Hidden {
 			continue // moved stubs fail naming cadence; they are not commands
 		}
 		name := cmd.Name()
 		visible[name] = true
 		if !named[name] {
-			t.Errorf("command %s has no row in the README `## Usage` table; add one", name)
+			problems = append(problems, "command "+name+" has no row in the README `## Usage` table; add one")
 		}
 	}
 	for name := range named {
 		if !visible[name] {
-			t.Errorf("README `## Usage` names %q, which is not a visible command in the root tree; remove or fix the row", name)
+			problems = append(problems, "README `## Usage` names "+name+", which is not a visible command in the root tree; remove or fix the row")
 		}
 	}
+	return problems
 }
 
 // Defends the README extractor both ways: it must read the real table rows
@@ -247,15 +260,72 @@ func TestMCPToolsMatchCommandTree(t *testing.T) {
 		}
 		got[tool.Name] = true
 	}
+	for _, problem := range mcpToolDrift(want, got) {
+		t.Error(problem)
+	}
+}
+
+// mcpToolDrift reports each way the tool set derived from the command tree
+// and the registered tools disagree, in both directions. It is pure so epic
+// 19 T3 can drop one tool and watch it fail; TestMCPToolsMatchCommandTree
+// feeds it the real registration.
+func mcpToolDrift(want, got map[string]bool) []string {
+	var problems []string
 	for name := range want {
 		if !got[name] {
-			t.Errorf("the command tree expects tool %s; GetToolDefinitions does not register it", name)
+			problems = append(problems, "the command tree expects tool "+name+"; GetToolDefinitions does not register it")
 		}
 	}
 	for name := range got {
 		if !want[name] {
-			t.Errorf("tool %s has no visible command behind it in the root tree; remove it or add the command", name)
+			problems = append(problems, "tool "+name+" has no visible command behind it in the root tree; remove it or add the command")
 		}
+	}
+	return problems
+}
+
+// Defends epic 19 T3: both drift guards must go red when one command is
+// removed from their list, or a green run could mean a blind guard. The
+// epic plan's probes are run here against a copy of the committed data with
+// one entry removed, so the proof is repeatable in CI instead of living only
+// in a PR comment. The unmutated lists are a known-good control: they must
+// draw no problems, so this test cannot pass by flagging everything.
+func TestDriftGuardsFailWhenOneCommandIsRemoved(t *testing.T) {
+	restoreOutputMode(t)
+	root := NewRootCmd()
+
+	raw, err := os.ReadFile(filepath.Join(repoRootDir, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	named := readmeUsageCommands(string(raw))
+	if len(named) == 0 {
+		t.Fatal("found no command rows in the README `## Usage` table; the parser is broken")
+	}
+	if problems := readmeUsageDrift(named, root); len(problems) != 0 {
+		t.Fatalf("known-good README flagged before the probe: %q", problems)
+	}
+	delete(named, "stats")
+	problems := readmeUsageDrift(named, root)
+	if !slices.ContainsFunc(problems, func(p string) bool { return strings.Contains(p, "command stats has no row") }) {
+		t.Errorf("README with the `stats` row removed drew %q, want a missing-row problem", problems)
+	}
+
+	want := expectedMCPToolNames(root)
+	if len(want) == 0 {
+		t.Fatal("derived no expected tools from the command tree; the mapping is broken")
+	}
+	got := map[string]bool{}
+	for _, tool := range mcpserver.GetToolDefinitions() {
+		got[tool.Name] = true
+	}
+	if problems := mcpToolDrift(want, got); len(problems) != 0 {
+		t.Fatalf("known-good MCP tool list flagged before the probe: %q", problems)
+	}
+	delete(got, mcpserver.ToolPrefix+"stats")
+	problems = mcpToolDrift(want, got)
+	if !slices.ContainsFunc(problems, func(p string) bool { return strings.Contains(p, "expects tool "+mcpserver.ToolPrefix+"stats") }) {
+		t.Errorf("tool list with `%sstats` removed drew %q, want a missing-tool problem", mcpserver.ToolPrefix, problems)
 	}
 }
 
