@@ -61,7 +61,8 @@ func headersJSON(t *testing.T, args ...string) MarkdownHeadersResult {
 
 // Defends against the llm-support regex over raw text: a shell comment in a
 // fenced code block was listed as a header. Both fence characters are
-// covered, and a ~~~ inside a ``` fence must not close it.
+// covered, a ~~~ inside a ``` fence must not close it, and neither must a
+// ```go line in its body: a closing fence has nothing after its run.
 func TestMarkdownHeadersSkipsFencedCode(t *testing.T) {
 	path := writeMarkdown(t, "doc.md", strings.Join([]string{
 		"# Real",
@@ -76,14 +77,20 @@ func TestMarkdownHeadersSkipsFencedCode(t *testing.T) {
 		"```",
 		"~~~~",
 		"### Third",
+		"```",
+		"```go",
+		"# not a header either",
+		"```",
+		"#### Fourth",
 	}, "\n")+"\n")
 	r := headersJSON(t, path)
 	want := []MarkdownHeader{
 		{Level: 1, Title: "Real", Line: 1},
 		{Level: 2, Title: "Second", Line: 7},
 		{Level: 3, Title: "Third", Line: 12},
+		{Level: 4, Title: "Fourth", Line: 17},
 	}
-	if !headersEqual(r.Headers, want) || r.Total != 3 {
+	if !headersEqual(r.Headers, want) || r.Total != 4 {
 		t.Fatalf("headers = %+v total %d, want %+v", r.Headers, r.Total, want)
 	}
 }
@@ -106,6 +113,16 @@ func TestMarkdownHeadersInlineBackticksAreNotAFence(t *testing.T) {
 	r := headersJSON(t, path)
 	if !headersEqual(r.Headers, []MarkdownHeader{{Level: 1, Title: "After", Line: 2}}) {
 		t.Fatalf("headers = %+v, want After on line 2", r.Headers)
+	}
+}
+
+// Defends against a UTF-8 byte order mark hiding the first header: editors
+// on Windows write one, and "\ufeff# Top" does not start with #.
+func TestMarkdownHeadersByteOrderMark(t *testing.T) {
+	r := headersJSON(t, writeMarkdown(t, "bom.md", "\ufeff# Top\n## Sub\n"))
+	want := []MarkdownHeader{{Level: 1, Title: "Top", Line: 1}, {Level: 2, Title: "Sub", Line: 2}}
+	if !headersEqual(r.Headers, want) {
+		t.Fatalf("headers = %+v, want %+v", r.Headers, want)
 	}
 }
 
@@ -163,6 +180,7 @@ func TestMarkdownHeadersFollowsATXRules(t *testing.T) {
 		"## Ends with C#",
 		"\t# tab is code",
 		"###",
+		"## ###",
 	}, "\r\n")+"\r\n")
 	r := headersJSON(t, path)
 	want := []MarkdownHeader{
@@ -170,6 +188,7 @@ func TestMarkdownHeadersFollowsATXRules(t *testing.T) {
 		{Level: 1, Title: "Title with # inside", Line: 5},
 		{Level: 2, Title: "Ends with C#", Line: 6},
 		{Level: 3, Title: "", Line: 8},
+		{Level: 2, Title: "", Line: 9},
 	}
 	if !headersEqual(r.Headers, want) {
 		t.Fatalf("headers = %+v, want %+v", r.Headers, want)
