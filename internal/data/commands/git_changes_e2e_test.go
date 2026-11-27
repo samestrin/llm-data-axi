@@ -286,3 +286,75 @@ func TestGitChangesRefusesOutsideARepository(t *testing.T) {
 		t.Error("git-changes succeeded outside a git repository")
 	}
 }
+
+// Defends epic 18 T3: a --path that names nothing, neither on disk nor in
+// git, is an error and not a clean result. It used to report `count: 0` and
+// exit 0, the same answer as a real path with no changes, so a typo in the
+// filter read as "nothing changed here".
+func TestGitChangesRejectsAPathThatIsNowhere(t *testing.T) {
+	gitChangesRepo(t)
+	for _, f := range errorFormats {
+		t.Run(f.name, func(t *testing.T) {
+			args := append([]string{"git-changes", "--path", "NOPE"}, f.flags...)
+			code, stdout, stderr := runCLI(t, args...)
+			if code != 1 {
+				t.Errorf("exit %d, want 1 (stdout %q)", code, stdout)
+			}
+			if stderr != "" {
+				t.Errorf("stderr must be empty, got %q", stderr)
+			}
+			msg, ok := f.message(stdout)
+			if !ok {
+				t.Fatalf("stdout is not a %s error: %q", f.name, stdout)
+			}
+			if !strings.Contains(msg, "path not found: NOPE") {
+				t.Errorf("message = %q, want it to name path not found: NOPE", msg)
+			}
+		})
+	}
+}
+
+// Defends the other side of the T3 check: a directory that exists but holds
+// no changes is a real answer, `count: 0`, not an error.
+func TestGitChangesQuietPathOnDiskIsAnEmptyResult(t *testing.T) {
+	root := gitChangesRepo(t)
+	if err := os.Mkdir(filepath.Join(root, "quiet"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, flags := range [][]string{nil, {"--json"}, {"--plain"}} {
+		args := append([]string{"git-changes", "--path", "quiet"}, flags...)
+		code, stdout, stderr := runCLI(t, args...)
+		if code != 0 || stderr != "" {
+			t.Errorf("%v: exit %d, stderr %q, want 0 and empty", flags, code, stderr)
+		}
+		if !strings.Contains(stdout, "count: 0") && !strings.Contains(stdout, `"count": 0`) &&
+			!strings.Contains(stdout, "COUNT: 0") {
+			t.Errorf("%v: want a zero count, got %q", flags, stdout)
+		}
+	}
+}
+
+// Defends the reason T3 asks git as well as the disk: a tracked file deleted
+// from the working tree, or staged for deletion, is gone from disk but is
+// still a change under the prefix. A disk-only check would refuse the very
+// path whose deletion the caller is asking about.
+func TestGitChangesListsADeletedTrackedFile(t *testing.T) {
+	root := gitChangesRepo(t)
+	if err := os.RemoveAll(filepath.Join(root, "sub")); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"sub", "sub/nested.txt"} {
+		got := decodeGitChanges(t, runGitChangesCmd(t, "--json", "--path", p))
+		if got.Count != 1 || len(got.Files) != 1 || got.Files[0] != "sub/nested.txt" {
+			t.Errorf("--path %s after deleting sub = %+v, want sub/nested.txt", p, got)
+		}
+	}
+
+	// Staged: `git rm` takes it out of the index too, so only the status
+	// itself still knows the path.
+	gitAt(t, root, "2026-01-01T00:00:00Z", "rm", "-q", "--cached", "sub/nested.txt")
+	got := decodeGitChanges(t, runGitChangesCmd(t, "--json", "--path", "sub"))
+	if got.Count != 1 || got.Files[0] != "sub/nested.txt" {
+		t.Errorf("--path sub after git rm = %+v, want sub/nested.txt", got)
+	}
+}
