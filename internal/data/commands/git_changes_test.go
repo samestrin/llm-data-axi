@@ -342,11 +342,14 @@ func TestGitChangesWithRealRepo(t *testing.T) {
 		}
 	})
 
+	// The filter names a path every checkout has. It named .planning/, which
+	// this repository ignores and CI never has, and so passed only because a
+	// path that was nowhere reported count 0; that is now an error.
 	t.Run("path filter execution", func(t *testing.T) {
 		var stdout bytes.Buffer
 		cmd := newGitChangesCmd()
 		cmd.SetOut(&stdout)
-		cmd.SetArgs([]string{"--path", ".planning/", "--json"})
+		cmd.SetArgs([]string{"--path", "internal/", "--json"})
 
 		err := cmd.Execute()
 		if err != nil {

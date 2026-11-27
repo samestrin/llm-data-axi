@@ -286,3 +286,123 @@ func TestGitChangesRefusesOutsideARepository(t *testing.T) {
 		t.Error("git-changes succeeded outside a git repository")
 	}
 }
+
+// Defends epic 18 T3: a --path that names nothing, neither on disk nor in
+// git, is an error and not a clean result. It used to report `count: 0` and
+// exit 0, the same answer as a real path with no changes, so a typo in the
+// filter read as "nothing changed here".
+func TestGitChangesRejectsAPathThatIsNowhere(t *testing.T) {
+	gitChangesRepo(t)
+	for _, f := range errorFormats {
+		t.Run(f.name, func(t *testing.T) {
+			args := append([]string{"git-changes", "--path", "NOPE"}, f.flags...)
+			code, stdout, stderr := runCLI(t, args...)
+			if code != 1 {
+				t.Errorf("exit %d, want 1 (stdout %q)", code, stdout)
+			}
+			if stderr != "" {
+				t.Errorf("stderr must be empty, got %q", stderr)
+			}
+			msg, ok := f.message(stdout)
+			if !ok {
+				t.Fatalf("stdout is not a %s error: %q", f.name, stdout)
+			}
+			if !strings.Contains(msg, "path not found: NOPE") {
+				t.Errorf("message = %q, want it to name path not found: NOPE", msg)
+			}
+		})
+	}
+}
+
+// Defends the other side of the T3 check: a directory that exists but holds
+// no changes is a real answer, `count: 0`, not an error.
+func TestGitChangesQuietPathOnDiskIsAnEmptyResult(t *testing.T) {
+	root := gitChangesRepo(t)
+	if err := os.Mkdir(filepath.Join(root, "quiet"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, flags := range [][]string{nil, {"--json"}, {"--plain"}} {
+		args := append([]string{"git-changes", "--path", "quiet"}, flags...)
+		code, stdout, stderr := runCLI(t, args...)
+		if code != 0 || stderr != "" {
+			t.Errorf("%v: exit %d, stderr %q, want 0 and empty", flags, code, stderr)
+		}
+		if !strings.Contains(stdout, "count: 0") && !strings.Contains(stdout, `"count": 0`) &&
+			!strings.Contains(stdout, "COUNT: 0") {
+			t.Errorf("%v: want a zero count, got %q", flags, stdout)
+		}
+	}
+}
+
+// Defends T3's "a deleted tracked file under the prefix still lists": once
+// it is gone from disk, unstaged or staged with `git rm`, the path filter
+// still reports it.
+func TestGitChangesListsADeletedTrackedFile(t *testing.T) {
+	root := gitChangesRepo(t)
+	if err := os.RemoveAll(filepath.Join(root, "sub")); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"sub", "sub/nested.txt"} {
+		got := decodeGitChanges(t, runGitChangesCmd(t, "--json", "--path", p))
+		if got.Count != 1 || len(got.Files) != 1 || got.Files[0] != "sub/nested.txt" {
+			t.Errorf("--path %s after deleting sub = %+v, want sub/nested.txt", p, got)
+		}
+	}
+
+	gitAt(t, root, "2026-01-01T00:00:00Z", "rm", "-q", "--cached", "sub/nested.txt")
+	got := decodeGitChanges(t, runGitChangesCmd(t, "--json", "--path", "sub"))
+	if got.Count != 1 || len(got.Files) != 1 || got.Files[0] != "sub/nested.txt" {
+		t.Errorf("--path sub after git rm = %+v, want sub/nested.txt", got)
+	}
+}
+
+// Defends the reason T3 asks git as well as the disk. A tracked directory
+// deleted from the working tree but not staged has no staged changes, so
+// `--staged-only --path sub` is a real path with an empty answer. A disk-only
+// check refused it as not found.
+func TestGitChangesDeletedTrackedPathWithNoMatchIsAnEmptyResult(t *testing.T) {
+	root := gitChangesRepo(t)
+	if err := os.RemoveAll(filepath.Join(root, "sub")); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, _ := runCLI(t, "git-changes", "--staged-only", "--path", "sub", "--json")
+	if code != 0 {
+		t.Fatalf("exit %d, want 0: %s", code, stdout)
+	}
+	if got := decodeGitChanges(t, stdout); got.Count != 0 {
+		t.Errorf("--staged-only --path sub = %+v, want count 0", got)
+	}
+}
+
+// Defends resolving --path against the repository root. The filter matches
+// porcelain paths, which are root-relative wherever git-changes runs, so the
+// existence check must be too: checked against the working directory, `--path
+// sub` run from inside sub/ was refused although it filters correctly.
+func TestGitChangesChecksThePathFromTheRepositoryRoot(t *testing.T) {
+	root := gitChangesRepo(t)
+	if err := os.Chdir(filepath.Join(root, "sub")); err != nil {
+		t.Fatal(err)
+	}
+	got := decodeGitChanges(t, runGitChangesCmd(t, "--json", "--path", "sub"))
+	if got.Count != 1 || len(got.Files) != 1 || got.Files[0] != "sub/nested.txt" {
+		t.Errorf("--path sub from sub/ = %+v, want sub/nested.txt", got)
+	}
+	got = decodeGitChanges(t, runGitChangesCmd(t, "--json", "--staged-only", "--path", "sub"))
+	if got.Count != 0 {
+		t.Errorf("--staged-only --path sub from sub/ = %+v, want count 0", got)
+	}
+}
+
+// Defends the check's own failure path: when git cannot answer whether the
+// path is known (an absolute path outside the repository makes ls-files fail),
+// the run fails instead of treating the path as known and reporting `count: 0`.
+func TestGitChangesFailsWhenGitCannotCheckThePath(t *testing.T) {
+	gitChangesRepo(t)
+	code, stdout, stderr := runCLI(t, "git-changes", "--path", "/no/such/llm-data", "--json")
+	if code != 1 || stderr != "" {
+		t.Errorf("exit %d, stderr %q, want 1 and empty", code, stderr)
+	}
+	if msg, ok := jsonErrorMessage(stdout); !ok || msg == "" {
+		t.Errorf("stdout is not a JSON error: %q", stdout)
+	}
+}
