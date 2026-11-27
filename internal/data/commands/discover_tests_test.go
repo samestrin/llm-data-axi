@@ -267,6 +267,25 @@ func TestDiscoverTestsPathIsFile(t *testing.T) {
 		})
 	}
 
+	// A missing path keeps its own wording, distinct from the file case.
+	for _, f := range errorFormats {
+		t.Run("missing/"+f.name, func(t *testing.T) {
+			missing := filepath.Join(dir, "missing")
+			args := append([]string{"discover-tests", "--path", missing}, f.flags...)
+			code, stdout, stderr := runCLI(t, args...)
+			if code != 1 || stderr != "" {
+				t.Errorf("exit %d stderr %q, want 1 and empty (stdout %q)", code, stderr, stdout)
+			}
+			msg, ok := f.message(stdout)
+			if !ok {
+				t.Fatalf("stdout is not a %s error: %q", f.name, stdout)
+			}
+			if want := "path does not exist: " + missing; !strings.Contains(msg, want) {
+				t.Errorf("error must say %q, got %q", want, msg)
+			}
+		})
+	}
+
 	// A directory path is unchanged: still exit 0 with a result, no error.
 	for _, f := range errorFormats {
 		t.Run("dir/"+f.name, func(t *testing.T) {
