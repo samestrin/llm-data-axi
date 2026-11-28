@@ -518,28 +518,32 @@ func planCodexConfig(path string, raw []byte) (setupPlan, error) {
 	var out string
 	switch {
 	case header >= 0:
-		end := len(lines)
-		depth := 0
+		key := -1
+		depth, multiline := 0, ""
 		for j := header + 1; j < len(lines); j++ {
-			if depth == 0 && tomlTableHeaderRE.MatchString(lines[j]) {
-				end = j
-				break
+			if depth == 0 && multiline == "" {
+				if tomlTableHeaderRE.MatchString(lines[j]) {
+					break
+				}
+				if key < 0 && tomlHooksKeyRE.MatchString(lines[j]) {
+					key = j
+				}
 			}
-			depth = tomlBracketDepth(lines[j], depth)
+			depth, multiline = tomlBracketDepth(lines[j], depth, multiline)
 		}
 		eol := "\n"
 		if strings.HasSuffix(lines[header], "\r\n") {
 			eol = "\r\n"
 		}
-		if j := slices.IndexFunc(lines[header+1:end], tomlHooksKeyRE.MatchString); j >= 0 {
-			line := lines[header+1+j]
+		if key >= 0 {
+			line := lines[key]
 			body := strings.TrimRight(line, "\r\n")
 			if m := tomlHooksBoolRE.FindStringSubmatch(body); m != nil {
 				body = m[1] + "true" + m[2]
 			} else {
 				body = "hooks = true"
 			}
-			lines[header+1+j] = body + line[len(strings.TrimRight(line, "\r\n")):]
+			lines[key] = body + line[len(strings.TrimRight(line, "\r\n")):]
 		} else {
 			if !strings.HasSuffix(lines[header], "\n") {
 				lines[header] += eol
@@ -581,32 +585,44 @@ func planCodexConfig(path string, raw []byte) (setupPlan, error) {
 
 // tomlBracketDepth returns how many arrays and inline tables are still open
 // after line, given depth open before it, so a line inside a multi-line array
-// value, such as [1, 2], is not read as a table header. Brackets in a
-// one-line string or a comment do not count. A multi-line string is not
-// tracked; a bracket inside one can only make the line edit fail, and the
-// decode check in planCodexConfig refuses that.
-func tomlBracketDepth(line string, depth int) int {
+// value, such as [1, 2], is not read as a table header. multiline is the
+// delimiter, three double or three single quotes, of a multi-line string
+// still open before line, or "" when none is; the one still open after line
+// is returned with depth, so a bracket, a header or a hooks key inside the
+// string counts for nothing.
+// Brackets in a one-line string or a comment do not count either.
+func tomlBracketDepth(line string, depth int, multiline string) (int, string) {
 	var quote byte
 	for i := 0; i < len(line); i++ {
 		c := line[i]
 		switch {
+		case multiline == `"""` && c == '\\':
+			i++
+		case multiline != "":
+			if strings.HasPrefix(line[i:], multiline) {
+				i += 2
+				multiline = ""
+			}
 		case quote == '"' && c == '\\':
 			i++
 		case quote != 0:
 			if c == quote {
 				quote = 0
 			}
+		case strings.HasPrefix(line[i:], `"""`) || strings.HasPrefix(line[i:], "'''"):
+			multiline = line[i : i+3]
+			i += 2
 		case c == '"' || c == '\'':
 			quote = c
 		case c == '#':
-			return depth
+			return depth, multiline
 		case c == '[' || c == '{':
 			depth++
 		case (c == ']' || c == '}') && depth > 0:
 			depth--
 		}
 	}
-	return depth
+	return depth, multiline
 }
 
 // setupProjectDir resolves path to an existing directory that is not the home
