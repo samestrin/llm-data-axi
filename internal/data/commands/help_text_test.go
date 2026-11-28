@@ -3,6 +3,7 @@ package commands
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 )
@@ -40,6 +41,42 @@ func TestCommandHelpStatesTheTOONDefault(t *testing.T) {
 				t.Errorf("%s help does not name --plain, the way to get text output", name)
 			}
 		})
+	}
+}
+
+// TestSetupHelpLinesFitWrapWidth defends epic 21 T3: setup's Long help is
+// hand-wrapped at 76 columns so it reads cleanly in an 80-column terminal
+// with cobra's indent. Nothing enforced that wrap, so an edit could widen
+// a paragraph and the terminal would hard-wrap it mid-word. Every line of
+// setup's Long and Example must fit 76 columns. Only setup is guarded:
+// other commands (detect.go has 93-95 column lines) are not wrapped at
+// that width and are out of scope.
+func TestSetupHelpLinesFitWrapWidth(t *testing.T) {
+	const wrapWidth = 76
+	root := NewRootCmd()
+	cmd, _, err := root.Find([]string{"setup"})
+	if err != nil {
+		t.Fatalf("Find(setup): %v", err)
+	}
+	// Guard the guard: if Find ever returns a stub with empty help, the
+	// width loop below would pass without checking anything.
+	if !strings.Contains(cmd.Long, "Examples:") {
+		t.Fatal("setup Long has no Examples: block; the width check is not looking at the real help text")
+	}
+	checked := 0
+	for _, field := range []struct{ name, text string }{
+		{"Long", cmd.Long},
+		{"Example", cmd.Example},
+	} {
+		for i, line := range strings.Split(field.text, "\n") {
+			checked++
+			if w := utf8.RuneCountInString(line); w > wrapWidth {
+				t.Errorf("setup %s line %d is %d columns wide, over the %d-column wrap: %q", field.name, i+1, w, wrapWidth, line)
+			}
+		}
+	}
+	if checked < 20 {
+		t.Fatalf("checked only %d help lines; setup's Long alone is longer than that", checked)
 	}
 }
 
