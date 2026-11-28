@@ -29,6 +29,9 @@ type DiscoverTestsResult struct {
 	UnitTestCount  int    `json:"unit_test_count"`
 	E2eTestCount   int    `json:"e2e_test_count"`
 	TotalTestCount int    `json:"total_test_count"`
+	// Help carries the next steps when no tests were found, so a zero result
+	// is not a dead end (epic 22). Absent when tests were found.
+	Help []string `json:"help,omitempty"`
 }
 
 // newDiscoverTestsCmd creates the discover-tests command
@@ -218,6 +221,11 @@ func runDiscoverTests(cmd *cobra.Command, args []string) error {
 		E2eTestCount:   result["e2e_test_count"].(int),
 		TotalTestCount: result["total_test_count"].(int),
 	}
+	discoverResult.Help = emptyHelp(discoverResult.TotalTestCount == 0,
+		"Check --path points at the project root",
+		"Test files are counted when their names contain .test., .spec., _test. or _spec.",
+		"Run `llm-data tree --path <dir>` to see the project layout",
+	)
 
 	formatter := output.New(discoverTestsJSON, discoverTestsMinimal, cmd.OutOrStdout())
 	return formatter.Print(discoverResult, printDiscoverTestsText)
