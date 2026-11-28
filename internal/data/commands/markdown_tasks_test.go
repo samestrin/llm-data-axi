@@ -248,7 +248,7 @@ func TestMarkdownTasksOutputModes(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("TOON: exit %d: %q", code, stdout)
 	}
-	for _, want := range []string{"tasks[2]{line,done,text}:", "1,true,ship it", "4,false,write tests", "total: 2", "completed: 1", "incomplete: 1", "percent: 50"} {
+	for _, want := range []string{"tasks[2]{done,line,text}:", "true,1,ship it", "false,4,write tests", "total: 2", "completed: 1", "incomplete: 1", "percent: 50"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("TOON missing %q:\n%s", want, stdout)
 		}
