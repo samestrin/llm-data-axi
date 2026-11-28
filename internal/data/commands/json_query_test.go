@@ -188,6 +188,23 @@ func TestJSONQueryArgCountIsUsage(t *testing.T) {
 	}
 }
 
+// Defends AC1: json query prints no path, so --absolute accepted and ignored
+// would exit 0 with output it never touched. It is a usage error, exit 2,
+// naming the command, and the value is not printed.
+func TestJSONQueryRejectsAbsolute(t *testing.T) {
+	f := writeJSONFixture(t, jsonQueryUsers)
+	out, code := runJSONQuery(t, "query", f, "users[0].name", "--absolute", "--json")
+	if code != 2 {
+		t.Fatalf("--absolute: exit %d, want 2\n%s", code, out)
+	}
+	if !strings.Contains(out, "--absolute has no effect on llm-data json query") {
+		t.Errorf("error does not name the command: %s", out)
+	}
+	if strings.Contains(out, "ada") {
+		t.Errorf("the value was printed despite the usage error: %s", out)
+	}
+}
+
 // Defends the parent: an unknown subcommand is an error, not help and exit 0.
 func TestJSONParentRejectsUnknownSubcommand(t *testing.T) {
 	out, code := runJSONQuery(t, "parse")
