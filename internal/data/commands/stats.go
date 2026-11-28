@@ -62,16 +62,29 @@ type StatsResult struct {
 	Directories int             `json:"directories"`
 	TotalSize   string          `json:"total_size"`
 	Extensions  []ExtensionInfo `json:"by_extension"`
+	Help        []string        `json:"help,omitempty"`
 }
 
 // statsMinResult is StatsResult under --min, with abbreviated keys. It states
 // its zeros too.
 type statsMinResult struct {
-	P   string          `json:"p"`
-	F   int             `json:"f"`
-	D   int             `json:"d"`
-	S   string          `json:"s"`
-	Ext []ExtensionInfo `json:"ext"`
+	P    string          `json:"p"`
+	F    int             `json:"f"`
+	D    int             `json:"d"`
+	S    string          `json:"s"`
+	Ext  []ExtensionInfo `json:"ext"`
+	Help []string        `json:"help,omitempty"`
+}
+
+// statsEmptyHelp is the next step a count of nothing offers. It leaves out
+// --no-gitignore when the caller already passed it, but always keeps one
+// unconditional step so an empty result never has nothing to say.
+func statsEmptyHelp() []string {
+	var help []string
+	if !statsNoGitignore {
+		help = append(help, "Add --no-gitignore to include ignored and hidden files")
+	}
+	return append(help, "Run `llm-data stats --path <parent>` to check the parent directory")
 }
 
 func runStats(cmd *cobra.Command, args []string) error {
@@ -169,6 +182,7 @@ func runStats(cmd *cobra.Command, args []string) error {
 		Directories: totalDirs,
 		TotalSize:   utils.FormatSize(totalSize),
 		Extensions:  extensions,
+		Help:        emptyHelp(totalFiles == 0 && totalDirs == 0, statsEmptyHelp()...),
 	}
 
 	var data interface{} = result
@@ -177,7 +191,7 @@ func runStats(cmd *cobra.Command, args []string) error {
 		for i, e := range exts {
 			minExts[i] = ExtensionInfo{Ext: e.ext, C: e.count, S: utils.FormatSize(e.size)}
 		}
-		data = statsMinResult{P: result.Path, F: totalFiles, D: totalDirs, S: result.TotalSize, Ext: minExts}
+		data = statsMinResult{P: result.Path, F: totalFiles, D: totalDirs, S: result.TotalSize, Ext: minExts, Help: result.Help}
 	}
 
 	formatter := output.New(statsJSON, statsMinimal, cmd.OutOrStdout())

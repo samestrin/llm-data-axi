@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -421,5 +422,169 @@ func TestTreeEmptyDirStatesEmptyEntries(t *testing.T) {
 	}
 	if plain != root+"/\n" {
 		t.Errorf("--plain = %q, want %q (unchanged root line)", plain, root+"/\n")
+	}
+}
+
+// The expected next steps are spelled out here rather than read from the
+// production variables, so a change to what an agent is told to do next is a
+// deliberate edit in two places and not a silent one in one.
+const (
+	helpTreeGitignore  = "Add --no-gitignore to include ignored and hidden files"
+	helpTreeExcludes   = "Add --no-default-excludes to include node_modules and other default-excluded directories"
+	helpTreeExclude    = "Drop --exclude to include names your patterns filter out"
+	helpTreeParent     = "Run `llm-data tree --path <parent>` to check the parent directory"
+	helpTreeMaxEntries = "More entries: rerun with a larger --max-entries, or --max-entries 0 for no limit"
+)
+
+// treeHelpFixture is a directory that reads as empty under the default
+// filters: either truly empty, or holding only a hidden file.
+func treeHelpFixture(t *testing.T, hiddenOnly bool) string {
+	t.Helper()
+	dir := t.TempDir()
+	if hiddenOnly {
+		if err := os.WriteFile(filepath.Join(dir, ".hidden"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// Defends epic 22 T4: tree on an empty directory carried a bare entries[0]
+// and left an agent to guess why nothing showed. The empty result must state
+// the exact next steps in TOON and --json (and --json --min), and --plain
+// must stay help-free. Fails when the emptyHelp call is removed.
+func TestTreeEmptyDirCarriesNextSteps(t *testing.T) {
+	want := []string{helpTreeGitignore, helpTreeExcludes, helpTreeParent}
+	for _, hiddenOnly := range []bool{false, true} {
+		dir := treeHelpFixture(t, hiddenOnly)
+		for _, min := range []bool{false, true} {
+			args := []string{"tree", "--path", dir, "--json"}
+			if min {
+				args = append(args, "--min")
+			}
+			code, stdout, _ := runCLI(t, args...)
+			if code != 0 {
+				t.Fatalf("exit %d\n%s", code, stdout)
+			}
+			help, ok := jsonHelp(t, stdout)
+			if !ok || !reflect.DeepEqual(help, want) {
+				t.Errorf("--json (min %v, hiddenOnly %v) help = %q (present %v), want %q", min, hiddenOnly, help, ok, want)
+			}
+		}
+		code, toon, _ := runCLI(t, "tree", "--path", dir)
+		if code != 0 {
+			t.Fatalf("exit %d\n%s", code, toon)
+		}
+		assertAXIHelp(t, toon, want)
+
+		code, plain, _ := runCLI(t, "tree", "--path", dir, "--plain")
+		if code != 0 {
+			t.Fatalf("exit %d\n%s", code, plain)
+		}
+		if hasHelpKey(plain) {
+			t.Errorf("--plain carried a help key:\n%s", plain)
+		}
+	}
+}
+
+// Defends the grep precedent on tree: a filter flag the caller already
+// passed is not offered again, --exclude is named only when it was used, and
+// one unconditional step remains so an empty result never has nothing to
+// say (emptyHelp panics on zero steps).
+func TestTreeEmptyHelpDropsFlagsAlreadyPassed(t *testing.T) {
+	dir := t.TempDir()
+	for _, c := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"filters off", []string{"--no-gitignore", "--no-default-excludes"}, []string{helpTreeParent}},
+		{"exclude used", []string{"--exclude", "nothing-matches-this"}, []string{helpTreeGitignore, helpTreeExcludes, helpTreeExclude, helpTreeParent}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			args := append([]string{"tree", "--path", dir, "--json"}, c.args...)
+			code, stdout, _ := runCLI(t, args...)
+			if code != 0 {
+				t.Fatalf("exit %d\n%s", code, stdout)
+			}
+			help, ok := jsonHelp(t, stdout)
+			if !ok || !reflect.DeepEqual(help, c.want) {
+				t.Errorf("help = %q (present %v), want %q", help, ok, c.want)
+			}
+		})
+	}
+}
+
+// Defends the other half of epic 22's rule: a non-empty tree carries no help
+// key at all, not an empty list an agent pays tokens to read.
+func TestTreeNonEmptyCarriesNoHelp(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, min := range []bool{false, true} {
+		args := []string{"tree", "--path", dir, "--json"}
+		if min {
+			args = append(args, "--min")
+		}
+		code, stdout, _ := runCLI(t, args...)
+		if code != 0 {
+			t.Fatalf("exit %d\n%s", code, stdout)
+		}
+		if help, ok := jsonHelp(t, stdout); ok {
+			t.Errorf("--json (min %v) non-empty tree carried help %q", min, help)
+		}
+	}
+	code, toon, _ := runCLI(t, "tree", "--path", dir)
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, toon)
+	}
+	if hasHelpKey(toon) {
+		t.Errorf("TOON non-empty tree carried help:\n%s", toon)
+	}
+}
+
+// Defends epic 22 T4's cut half: a tree truncated at --max-entries said only
+// "use --max-entries to adjust" in a message; the structured result must
+// carry a help[] entry naming the flag and the unlimited value, in TOON and
+// --json (and --json --min). --plain keeps its truncation line, no help key.
+func TestTreeTruncatedCarriesMaxEntriesHint(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"a.txt", "b.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{helpTreeMaxEntries}
+	for _, min := range []bool{false, true} {
+		args := []string{"tree", "--path", dir, "--max-entries", "1", "--json"}
+		if min {
+			args = append(args, "--min")
+		}
+		code, stdout, _ := runCLI(t, args...)
+		if code != 0 {
+			t.Fatalf("exit %d\n%s", code, stdout)
+		}
+		doc := decodeOne(t, stdout)
+		if doc["truncated"] != true {
+			t.Fatalf("result is not truncated: %s", stdout)
+		}
+		help, ok := jsonHelp(t, stdout)
+		if !ok || !reflect.DeepEqual(help, want) {
+			t.Errorf("--json (min %v) truncated help = %q (present %v), want %q", min, help, ok, want)
+		}
+	}
+	code, toon, _ := runCLI(t, "tree", "--path", dir, "--max-entries", "1")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, toon)
+	}
+	assertAXIHelp(t, toon, want)
+
+	code, plain, _ := runCLI(t, "tree", "--path", dir, "--max-entries", "1", "--plain")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, plain)
+	}
+	if hasHelpKey(plain) || !strings.Contains(plain, "truncated") {
+		t.Errorf("--plain = %q, want the truncation line and no help key", plain)
 	}
 }
