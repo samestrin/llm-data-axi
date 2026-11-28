@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **`markdown` and `json query` are new commands, with five MCP tools.** `markdown headers`, `section`, `frontmatter` and `tasks` read one part of a markdown file with a fence-aware scanner, and `json query` reads one value from a JSON file by dot-notation path. The MCP server exposes `markdown_headers`, `markdown_section`, `markdown_frontmatter`, `markdown_tasks` and `json_query`, for 25 tools.
+
 ### Fixed
 
 - **`grep` states empty result lists on a zero-match run.** TOON and JSON now print `matches: []` and `files: []` instead of omitting those fields, so a run with no matches cannot read as missing output.

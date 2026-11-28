@@ -149,6 +149,11 @@ llm-data git-changes --include-untracked --axi
 llm-data git-context --max-commits 5 --include-diff --axi
 llm-data grep "func New" internal/ -n --axi
 llm-data highest --path docs --type file --axi
+llm-data json query package.json version --axi
+llm-data markdown headers README.md --level 2 --axi
+llm-data markdown section README.md Configuration --include-header --axi
+llm-data markdown frontmatter docs/page.md --axi
+llm-data markdown tasks TODO.md --summary --axi
 llm-data math "sqrt(16) + 2" --axi
 llm-data multiexists README.md docs --verbose --no-fail --axi
 llm-data multigrep --keywords "retry,backoff,timeout" --path . --axi
@@ -203,7 +208,7 @@ A bare `llm-data` prints the executable path, a description and the current repo
 
 Errors are written to stdout in the selected output format: TOON by default, JSON with `--json`, and `Error: ...` with `--plain`. A caller reads one stream whatever the format; stderr carries diagnostics only.
 
-`llm-data-mcp` exposes the commands over MCP stdio as 20 tools: every command except `setup`, with `yaml` as four tools (`yaml_get`, `yaml_set`, `yaml_multiget`, `yaml_multiset`). Start it with `llm-data-mcp`; it invokes the CLI rather than reimplementing command behavior. A tool call can request `"format": "axi"` or `"format": "json"` to override the server default for that call, except on `runtime`, where `format` selects the elapsed-time format. A command that exits non-zero comes back as an error result (`isError: true`) carrying the CLI's own error output. The `template` tool defaults to `[[var]]` placeholders, where the CLI defaults to `{{var}}`; pass `"syntax": "braces"` for the CLI's form.
+`llm-data-mcp` exposes the commands over MCP stdio as 25 tools: every command except `setup`, with `yaml` as four tools (`yaml_get`, `yaml_set`, `yaml_multiget`, `yaml_multiset`), `markdown` as four (`markdown_headers`, `markdown_section`, `markdown_frontmatter`, `markdown_tasks`) and `json` as one (`json_query`). Start it with `llm-data-mcp`; it invokes the CLI rather than reimplementing command behavior. A tool call can request `"format": "axi"` or `"format": "json"` to override the server default for that call, except on `runtime`, where `format` selects the elapsed-time format. A command that exits non-zero comes back as an error result (`isError: true`) carrying the CLI's own error output. The `template` tool defaults to `[[var]]` placeholders, where the CLI defaults to `{{var}}`; pass `"syntax": "braces"` for the CLI's form.
 
 ## Performance
 
