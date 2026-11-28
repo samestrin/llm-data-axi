@@ -60,6 +60,7 @@ type TreeResult struct {
 	Total     int          `json:"total"`
 	Truncated bool         `json:"truncated,omitempty"`
 	Message   string       `json:"message,omitempty"`
+	Help      []string     `json:"help,omitempty"`
 }
 
 // newTreeCmd creates the tree command
@@ -167,6 +168,11 @@ func runTree(cmd *cobra.Command, args []string) error {
 	if builder.truncated {
 		result.Message = fmt.Sprintf("Output truncated at %d entries (use --max-entries to adjust)", treeMaxEntries)
 	}
+	result.Help = emptyHelp(builder.entryCount == 0, treeEmptyHelp()...)
+	if builder.truncated {
+		// The caller cannot guess the flag exists; the hint is the next step.
+		result.Help = append(result.Help, treeMaxEntriesHint)
+	}
 
 	formatter := output.New(treeJSON, treeMinimal, cmd.OutOrStdout())
 	return formatter.Print(result, func(w io.Writer, data interface{}) {
@@ -176,6 +182,28 @@ func runTree(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(w, "\n... truncated at %d entries (use --max-entries to adjust)\n", r.Total)
 		}
 	})
+}
+
+// treeMaxEntriesHint is the next step offered when the entry limit cut the
+// tree. Plain text keeps its truncation line; this rides the help list.
+const treeMaxEntriesHint = "More entries: rerun with a larger --max-entries, or --max-entries 0 for no limit"
+
+// treeEmptyHelp is the next step a tree with no visible entries offers. It
+// leaves out a filter flag the caller already passed and names --exclude
+// only when it was used, but always keeps one unconditional step so an empty
+// result never has nothing to say.
+func treeEmptyHelp() []string {
+	var help []string
+	if !treeNoGitignore {
+		help = append(help, "Add --no-gitignore to include ignored and hidden files")
+	}
+	if !treeNoDefaultExcludes {
+		help = append(help, "Add --no-default-excludes to include node_modules and other default-excluded directories")
+	}
+	if len(treeExcludePatterns) > 0 {
+		help = append(help, "Drop --exclude to include names your patterns filter out")
+	}
+	return append(help, "Run `llm-data tree --path <parent>` to check the parent directory")
 }
 
 // buildTreeEntries builds a structured tree of entries
