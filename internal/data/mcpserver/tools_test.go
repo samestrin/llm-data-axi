@@ -116,11 +116,33 @@ func TestEveryToolHasAUsefulDescription(t *testing.T) {
 // Defends the path resolution contract advertised to MCP clients: the server
 // runs the CLI without changing its working directory, so relative paths are
 // based there rather than in the client's workspace or the CLI binary's folder.
+// A tool takes a path when its input schema has a `path`, `paths` or `file`
+// property. Every path-taking tool must state the base (epic 17); a tool with
+// no path input must NOT state it (epic 21 T4) — the sentence on `math` or
+// `runtime` advertises path handling those tools do not have.
 func TestEveryToolDescriptionStatesRelativePathBase(t *testing.T) {
 	const want = "Relative paths are resolved from the MCP server's working directory."
 	for _, tool := range GetToolDefinitions() {
-		if !strings.Contains(tool.Description, want) {
-			t.Errorf("tool %s description does not state the relative-path base: %q", tool.Name, tool.Description)
+		var schema struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		}
+		if err := json.Unmarshal(tool.InputSchema, &schema); err != nil {
+			t.Errorf("tool %s: failed to parse schema: %v", tool.Name, err)
+			continue
+		}
+		takesPath := false
+		for _, prop := range []string{"path", "paths", "file"} {
+			if _, ok := schema.Properties[prop]; ok {
+				takesPath = true
+				break
+			}
+		}
+		hasSentence := strings.Contains(tool.Description, want)
+		if takesPath && !hasSentence {
+			t.Errorf("tool %s takes a path but its description does not state the relative-path base: %q", tool.Name, tool.Description)
+		}
+		if !takesPath && hasSentence {
+			t.Errorf("tool %s takes no path input but its description states the relative-path base: %q", tool.Name, tool.Description)
 		}
 	}
 }
