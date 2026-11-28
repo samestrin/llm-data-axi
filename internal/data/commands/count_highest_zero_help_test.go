@@ -14,15 +14,17 @@ import (
 const (
 	helpCountCheckboxRec   = "Add -r to count checkboxes in subdirectories too"
 	helpCountCheckboxStyle = "Add --style all to count list, heading and table checkboxes"
-	helpCountCheckboxGrep  = "Run `llm-data grep '\\[' <path>` to see the checkbox lines in a file"
-	helpCountLinesRec      = "Add -r to count lines in subdirectories too"
-	helpCountLinesCat      = "Run `llm-data catfiles <path>` to check the files have content"
-	helpCountFilesPattern  = "Drop --pattern to count every file"
-	helpCountFilesRec      = "Add -r to count files in subdirectories too"
-	helpCountFilesTree     = "Run `llm-data tree --path <dir>` to see what the directory holds"
-	helpHighestPattern     = "Add --pattern <regex> to match a different numbering scheme"
-	helpHighestType        = "Add --type both to search files and directories"
-	helpHighestTree        = "Run `llm-data tree --path <dir>` to see what the directory holds"
+	// '[[]' is a literal-'[' regex with no backslash, so the hint reads the
+	// same in TOON (which escapes backslashes in quoted strings) as in JSON.
+	helpCountCheckboxGrep = "Run `llm-data grep '[[]' <path>` to see the checkbox lines in a file"
+	helpCountLinesRec     = "Add -r to count lines in subdirectories too"
+	helpCountLinesCat     = "Run `llm-data catfiles <path>` to check the files have content"
+	helpCountFilesPattern = "Drop --pattern to count every file"
+	helpCountFilesRec     = "Add -r to count files in subdirectories too"
+	helpCountFilesTree    = "Run `llm-data tree --path <dir>` to see what the directory holds"
+	helpHighestPattern    = "Add --pattern <regex> to match a different numbering scheme"
+	helpHighestType       = "Add --type both to search files and directories"
+	helpHighestTree       = "Run `llm-data tree --path <dir>` to see what the directory holds"
 )
 
 // runZeroOK runs the CLI in-process and fails on a non-zero exit: a zero
