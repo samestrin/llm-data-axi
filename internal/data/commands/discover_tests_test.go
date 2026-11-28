@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -298,5 +299,68 @@ func TestDiscoverTestsPathIsFile(t *testing.T) {
 				t.Errorf("directory must still produce a result, got %q", stdout)
 			}
 		})
+	}
+}
+
+// The expected next steps are spelled out here, not read from production
+// variables, so a change to what an agent is told to do next is a deliberate
+// edit in two places (as help_next_steps_test.go does).
+var wantDiscoverTestsEmptyHelp = []string{
+	"Check --path points at the project root",
+	"Test files are counted when their names contain .test., .spec., _test. or _spec.",
+	"Run `llm-data tree --path <dir>` to see the project layout",
+}
+
+// Defends epic 22 T5: discover-tests finding no tests used to print a bare
+// all-zero result, indistinguishable from a dead end. An agent needs the next
+// step: the usual causes are the wrong --path or test file names the counter
+// does not recognise (pytest's test_*.py among them).
+func TestDiscoverTestsNoTestsCarriesHelp(t *testing.T) {
+	dir := t.TempDir()
+
+	for _, minOut := range []bool{false, true} {
+		args := []string{"discover-tests", "--path", dir, "--json"}
+		if minOut {
+			args = append(args, "--min")
+		}
+		help, ok := jsonHelp(t, runOK(t, args...))
+		if !ok || !reflect.DeepEqual(help, wantDiscoverTestsEmptyHelp) {
+			t.Errorf("--json (min %v) help = %q (present %v), want %q", minOut, help, ok, wantDiscoverTestsEmptyHelp)
+		}
+	}
+	assertAXIHelp(t, runOK(t, "discover-tests", "--path", dir, "--axi"), wantDiscoverTestsEmptyHelp)
+}
+
+// Defends a run that found tests staying clean: next steps there are noise an
+// agent pays tokens to read. E2E-only counts as found: the run is not empty.
+func TestDiscoverTestsWithTestsCarriesNoHelp(t *testing.T) {
+	separated := t.TempDir()
+	os.MkdirAll(filepath.Join(separated, "tests"), 0755)
+	os.WriteFile(filepath.Join(separated, "tests", "app.test.ts"), []byte("test()"), 0644)
+
+	e2eOnly := t.TempDir()
+	os.MkdirAll(filepath.Join(e2eOnly, "e2e"), 0755)
+	os.WriteFile(filepath.Join(e2eOnly, "e2e", "app.spec.ts"), []byte("test()"), 0644)
+
+	for _, dir := range []string{separated, e2eOnly} {
+		if help, ok := jsonHelp(t, runOK(t, "discover-tests", "--path", dir, "--json")); ok {
+			t.Errorf("--json on %s carried help %q", dir, help)
+		}
+		if out := runOK(t, "discover-tests", "--path", dir, "--axi"); hasHelpKey(out) {
+			t.Errorf("--axi on %s carried help:\n%s", dir, out)
+		}
+	}
+}
+
+// Defends --plain staying help-free, as grep, multigrep and the home view are:
+// the text form is for a person, and --help is where its next steps are.
+func TestDiscoverTestsEmptyHelpAbsentFromPlain(t *testing.T) {
+	dir := t.TempDir()
+	out := runOK(t, "discover-tests", "--path", dir, "--plain")
+	if hasHelpKey(out) {
+		t.Errorf("--plain empty result printed a help key:\n%s", out)
+	}
+	if !strings.Contains(out, "TOTAL_TEST_COUNT: 0") {
+		t.Errorf("--plain empty result lost its zero count:\n%s", out)
 	}
 }
