@@ -531,7 +531,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "math",
-			Description: "Evaluate mathematical expressions safely. Supports basic arithmetic, functions (sin, cos, sqrt, etc.), and variables." + relativePathBaseDescription,
+			Description: "Evaluate mathematical expressions safely. Supports basic arithmetic, functions (sin, cos, sqrt, etc.), and variables.",
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
@@ -560,7 +560,7 @@ func GetToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        ToolPrefix + "runtime",
-			Description: "Calculate elapsed time between epoch timestamps." + relativePathBaseDescription,
+			Description: "Calculate elapsed time between epoch timestamps.",
 			InputSchema: json.RawMessage(`{
 						"type": "object",
 						"properties": {
