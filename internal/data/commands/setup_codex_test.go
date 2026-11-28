@@ -198,6 +198,26 @@ func TestSetupCodexMergesConfig(t *testing.T) {
 			in:   "[features]\nmatrix = [\n  [\"\\\"[\", '[', 1], # [x\n]\n[tui]\nhooks = false\n",
 			want: "[features]\nhooks = true\nmatrix = [\n  [\"\\\"[\", '[', 1], # [x\n]\n[tui]\nhooks = false\n",
 		},
+		// A bracket inside a multi-line string does not open an array;
+		// counting it hid [tui], so setup flipped [tui] hooks and refused a
+		// config it can edit.
+		{
+			name: "header after a multi-line string still ends features",
+			in:   "[features]\nx = \"\"\"\nfoo [bar\n\"\"\"\n[tui]\nhooks = false\n",
+			want: "[features]\nhooks = true\nx = \"\"\"\nfoo [bar\n\"\"\"\n[tui]\nhooks = false\n",
+		},
+		{
+			name: "header after a multi-line literal string still ends features",
+			in:   "[features]\nx = '''\n{\n'''\n[tui]\nhooks = false\n",
+			want: "[features]\nhooks = true\nx = '''\n{\n'''\n[tui]\nhooks = false\n",
+		},
+		// Up to two quotes may sit against the closing delimiter and belong
+		// to the string; the string still ends there.
+		{
+			name: "header after a multi-line string ending in quotes",
+			in:   "[features]\nx = \"\"\"\na [\"\"\"\"\"\n[tui]\nhooks = false\n",
+			want: "[features]\nhooks = true\nx = \"\"\"\na [\"\"\"\"\"\n[tui]\nhooks = false\n",
+		},
 		{
 			name: "already on",
 			in:   "# keep me\n[features]\n  hooks   =   true\n",
@@ -247,6 +267,9 @@ func TestSetupCodexRefusesUnmergeableConfig(t *testing.T) {
 		// The line edit lands inside the string and still decodes; only
 		// the check of the decoded result catches it.
 		"features header inside a string": "notes = \"\"\"\n[features]\n\"\"\"\n[features]\nweb_search = true\n",
+		// Tracking multi-line strings must not let one that never closes
+		// through: it is not valid TOML, so nothing is written.
+		"unterminated multi-line string": "[features]\nx = \"\"\"\nfoo [bar\n[tui]\nhooks = false\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			project, _ := setupEnv(t)
