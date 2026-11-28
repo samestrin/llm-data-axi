@@ -125,6 +125,8 @@ stack: go
 | `git-context` | Gather git repository context information |
 | `grep` | Search for pattern in files |
 | `highest` | Find highest numbered directory or file |
+| `json` | Read a value from a JSON file by path (`json query`) |
+| `markdown` | Read the headers, one section, the frontmatter or the tasks of a markdown file |
 | `math` | Evaluate mathematical expressions safely |
 | `multiexists` | Check if multiple files/directories exist |
 | `multigrep` | Search for multiple keywords in parallel |

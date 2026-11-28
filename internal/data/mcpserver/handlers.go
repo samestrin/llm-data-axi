@@ -362,26 +362,31 @@ func (e *CommandFailedError) Unwrap() error { return e.err }
 // command cannot exist, and tests check it against GetToolDefinitions in both
 // directions.
 var commandRegistry = map[string]func(map[string]interface{}) []string{
-	"tree":           buildTreeArgs,
-	"grep":           buildGrepArgs,
-	"multiexists":    buildMultiexistsArgs,
-	"template":       buildTemplateArgs,
-	"discover_tests": buildDiscoverTestsArgs,
-	"multigrep":      buildMultigrepArgs,
-	"detect":         buildDetectArgs,
-	"count":          buildCountArgs,
-	"git_context":    buildGitContextArgs,
-	"repo_root":      buildRepoRootArgs,
-	"highest":        buildHighestArgs,
-	"git_changes":    buildGitChangesArgs,
-	"yaml_get":       buildYamlGetArgs,
-	"yaml_set":       buildYamlSetArgs,
-	"yaml_multiget":  buildYamlMultigetArgs,
-	"yaml_multiset":  buildYamlMultisetArgs,
-	"catfiles":       buildCatfilesArgs,
-	"math":           buildMathArgs,
-	"stats":          buildStatsArgs,
-	"runtime":        buildRuntimeArgs,
+	"tree":                 buildTreeArgs,
+	"grep":                 buildGrepArgs,
+	"multiexists":          buildMultiexistsArgs,
+	"template":             buildTemplateArgs,
+	"discover_tests":       buildDiscoverTestsArgs,
+	"multigrep":            buildMultigrepArgs,
+	"detect":               buildDetectArgs,
+	"count":                buildCountArgs,
+	"git_context":          buildGitContextArgs,
+	"repo_root":            buildRepoRootArgs,
+	"highest":              buildHighestArgs,
+	"git_changes":          buildGitChangesArgs,
+	"yaml_get":             buildYamlGetArgs,
+	"yaml_set":             buildYamlSetArgs,
+	"yaml_multiget":        buildYamlMultigetArgs,
+	"yaml_multiset":        buildYamlMultisetArgs,
+	"markdown_headers":     buildMarkdownHeadersArgs,
+	"markdown_section":     buildMarkdownSectionArgs,
+	"markdown_frontmatter": buildMarkdownFrontmatterArgs,
+	"markdown_tasks":       buildMarkdownTasksArgs,
+	"json_query":           buildJSONQueryArgs,
+	"catfiles":             buildCatfilesArgs,
+	"math":                 buildMathArgs,
+	"stats":                buildStatsArgs,
+	"runtime":              buildRuntimeArgs,
 }
 
 // buildArgs builds CLI arguments for the given tool
@@ -734,6 +739,69 @@ func getFloat(args map[string]interface{}, key string) (float64, bool) {
 		return float64(v), true
 	}
 	return 0, false
+}
+
+// The markdown and json builders add no --json or --min: the call's format
+// alone decides the encoding. The file, title and dot path are positionals,
+// so they go last, after "--".
+
+func buildMarkdownHeadersArgs(args map[string]interface{}) []string {
+	cmdArgs := []string{"markdown", "headers"}
+	if level, ok := args["level"].(string); ok {
+		cmdArgs = append(cmdArgs, "--level", level)
+	} else if level, ok := getInt(args, "level"); ok {
+		cmdArgs = append(cmdArgs, "--level", strconv.Itoa(level))
+	}
+	if file, ok := args["file"].(string); ok {
+		cmdArgs = appendPositionals(cmdArgs, file)
+	}
+	return cmdArgs
+}
+
+func buildMarkdownSectionArgs(args map[string]interface{}) []string {
+	cmdArgs := []string{"markdown", "section"}
+	if getBool(args, "include_header") {
+		cmdArgs = append(cmdArgs, "--include-header")
+	}
+	var positionals []string
+	if file, ok := args["file"].(string); ok {
+		positionals = append(positionals, file)
+	}
+	if title, ok := args["title"].(string); ok {
+		positionals = append(positionals, title)
+	}
+	return appendPositionals(cmdArgs, positionals...)
+}
+
+func buildMarkdownFrontmatterArgs(args map[string]interface{}) []string {
+	cmdArgs := []string{"markdown", "frontmatter"}
+	if file, ok := args["file"].(string); ok {
+		cmdArgs = appendPositionals(cmdArgs, file)
+	}
+	return cmdArgs
+}
+
+func buildMarkdownTasksArgs(args map[string]interface{}) []string {
+	cmdArgs := []string{"markdown", "tasks"}
+	if getBool(args, "summary") {
+		cmdArgs = append(cmdArgs, "--summary")
+	}
+	if file, ok := args["file"].(string); ok {
+		cmdArgs = appendPositionals(cmdArgs, file)
+	}
+	return cmdArgs
+}
+
+func buildJSONQueryArgs(args map[string]interface{}) []string {
+	cmdArgs := []string{"json", "query"}
+	var positionals []string
+	if file, ok := args["file"].(string); ok {
+		positionals = append(positionals, file)
+	}
+	if path, ok := args["path"].(string); ok {
+		positionals = append(positionals, path)
+	}
+	return appendPositionals(cmdArgs, positionals...)
 }
 
 func buildYamlGetArgs(args map[string]interface{}) []string {

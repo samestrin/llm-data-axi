@@ -41,7 +41,7 @@ Output Formats:
   default: TOON with the frontmatter mapping
   --plain: the raw block without the --- lines (CRLF becomes LF)
   --json:  {"frontmatter": {...}}
-  --min:   abbreviated keys and no empty values, with --json
+  --min:   abbreviated keys and no empty values, with --json. No effect on TOON.
 
 Examples:
   llm-data markdown frontmatter PLAN.md

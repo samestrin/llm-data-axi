@@ -421,6 +421,91 @@ func GetToolDefinitions() []ToolDefinition {
 					}`),
 		},
 		{
+			Name:        ToolPrefix + "markdown_headers",
+			Description: "List the headers of a markdown file with their level and line. Lines inside fenced code blocks and a leading YAML frontmatter block are never headers." + relativePathBaseDescription,
+			InputSchema: json.RawMessage(`{
+						"type": "object",
+						"properties": {
+							"file": {
+								"type": "string"
+							},
+							"level": {
+								"type": "string",
+								"description": "Only these header levels, comma-separated (e.g. 1,2)"
+							}
+						},
+						"required": ["file"]
+					}`),
+		},
+		{
+			Name:        ToolPrefix + "markdown_section",
+			Description: "Extract one section of a markdown file by its header title (case-insensitive), up to the next header of the same or a higher level. A title that is not found is an error listing the file's headers." + relativePathBaseDescription,
+			InputSchema: json.RawMessage(`{
+						"type": "object",
+						"properties": {
+							"file": {
+								"type": "string"
+							},
+							"title": {
+								"type": "string",
+								"description": "Header title to extract"
+							},
+							"include_header": {
+								"type": "boolean",
+								"description": "Include the header line itself in the content"
+							}
+						},
+						"required": ["file", "title"]
+					}`),
+		},
+		{
+			Name:        ToolPrefix + "markdown_frontmatter",
+			Description: "Parse the leading YAML frontmatter block of a markdown file, keeping nested keys and lists. No block, an unterminated block and invalid YAML are each an error." + relativePathBaseDescription,
+			InputSchema: json.RawMessage(`{
+						"type": "object",
+						"properties": {
+							"file": {
+								"type": "string"
+							}
+						},
+						"required": ["file"]
+					}`),
+		},
+		{
+			Name:        ToolPrefix + "markdown_tasks",
+			Description: "List the task list items (- [ ], - [x]) of a markdown file with line, state and text, plus total, completed, incomplete and percent. Items inside fenced code blocks are not tasks." + relativePathBaseDescription,
+			InputSchema: json.RawMessage(`{
+						"type": "object",
+						"properties": {
+							"file": {
+								"type": "string"
+							},
+							"summary": {
+								"type": "boolean",
+								"description": "Only the counts, without the item list"
+							}
+						},
+						"required": ["file"]
+					}`),
+		},
+		{
+			Name:        ToolPrefix + "json_query",
+			Description: "Retrieve a value from a JSON file by dot-notation path (users[0].name, users[-1], [0].name), with the path syntax of yaml_get. The file is always a file, never a JSON string; a path not in the file is an error." + relativePathBaseDescription,
+			InputSchema: json.RawMessage(`{
+						"type": "object",
+						"properties": {
+							"file": {
+								"type": "string"
+							},
+							"path": {
+								"type": "string",
+								"description": "Dot-notation path to the value"
+							}
+						},
+						"required": ["file", "path"]
+					}`),
+		},
+		{
 			Name:        ToolPrefix + "catfiles",
 			Description: "Concatenate multiple files with path headers. Respects .gitignore." + relativePathBaseDescription,
 			InputSchema: json.RawMessage(`{
