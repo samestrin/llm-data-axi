@@ -36,6 +36,8 @@ type CountCheckboxResult struct {
 	// Skipped counts the FIFOs, devices and sockets a walk passed over:
 	// reading one blocked or never ended.
 	Skipped int `json:"skipped,omitempty"`
+	// Help carries the next steps when the count is zero, nil otherwise.
+	Help []string `json:"help,omitempty"`
 }
 
 // CountLinesResult holds line count results. Skipped is as in
@@ -43,11 +45,15 @@ type CountCheckboxResult struct {
 type CountLinesResult struct {
 	Count   int `json:"count"`
 	Skipped int `json:"skipped,omitempty"`
+	// Help carries the next steps when the count is zero, nil otherwise.
+	Help []string `json:"help,omitempty"`
 }
 
 // CountFilesResult holds file count results
 type CountFilesResult struct {
 	Count int `json:"count"`
+	// Help carries the next steps when the count is zero, nil otherwise.
+	Help []string `json:"help,omitempty"`
 }
 
 // newCountCmd creates the count command
@@ -66,6 +72,7 @@ Output fields (TOON and --json):
   count      the total
   checked, unchecked, partial, percent   checkboxes mode only
   skipped    FIFOs, devices and sockets passed over, when there were any
+  help       next steps when the count is zero
 
 Examples:
   llm-data count --mode checkboxes --path PLAN.md
@@ -231,6 +238,7 @@ func runCountCheckboxes(cmd *cobra.Command, target string, info os.FileInfo) err
 		Partial:   partial,
 		Percent:   percent,
 		Skipped:   skipped,
+		Help:      emptyHelp(total == 0, countCheckboxZeroHelp(info.IsDir())...),
 	}
 
 	formatter := output.New(countJSON, countMinimal, cmd.OutOrStdout())
@@ -245,6 +253,48 @@ func runCountCheckboxes(cmd *cobra.Command, target string, info os.FileInfo) err
 			fmt.Fprintf(w, "SKIPPED: %d (not a regular file)\n", r.Skipped)
 		}
 	})
+}
+
+// countCheckboxZeroHelp is the next step a checkbox count of zero offers.
+// It leaves out a flag the caller already passed, as grepZeroMatchHelp does:
+// telling an agent to add -r when it did is advice it cannot act on. The
+// last step is unconditional, so an empty result always has something to say.
+func countCheckboxZeroHelp(isDir bool) []string {
+	var help []string
+	if isDir && !countRecursive {
+		help = append(help, "Add -r to count checkboxes in subdirectories too")
+	}
+	if countStyle != "" && countStyle != "all" {
+		help = append(help, "Add --style all to count list, heading and table checkboxes")
+	}
+	// '[[]' matches a literal '[' without a backslash: TOON escapes
+	// backslashes inside quoted strings, so a `\[` hint would read
+	// differently in --axi than in --json.
+	return append(help, "Run `llm-data grep '[[]' <path>` to see the checkbox lines in a file")
+}
+
+// countLinesZeroHelp is the next step a line count of zero offers: the
+// files are empty or the walk missed them.
+func countLinesZeroHelp(isDir bool) []string {
+	var help []string
+	if isDir && !countRecursive {
+		help = append(help, "Add -r to count lines in subdirectories too")
+	}
+	return append(help, "Run `llm-data catfiles <path>` to check the files have content")
+}
+
+// countFilesZeroHelp is the next step a file count of zero offers, given the
+// effective pattern ("*" when the caller passed none). A pattern containing
+// ** already walks recursively, so -r would add nothing there.
+func countFilesZeroHelp(pattern string) []string {
+	var help []string
+	if pattern != "*" {
+		help = append(help, "Drop --pattern to count every file")
+	}
+	if !countRecursive && !strings.Contains(pattern, "**") {
+		help = append(help, "Add -r to count files in subdirectories too")
+	}
+	return append(help, "Run `llm-data tree --path <dir>` to see what the directory holds")
 }
 
 // dropSpecialFiles removes the FIFOs, devices and sockets from files and
@@ -324,7 +374,11 @@ func runCountLines(cmd *cobra.Command, target string, info os.FileInfo) error {
 		totalLines += lines
 	}
 
-	result := CountLinesResult{Count: totalLines, Skipped: skipped}
+	result := CountLinesResult{
+		Count:   totalLines,
+		Skipped: skipped,
+		Help:    emptyHelp(totalLines == 0, countLinesZeroHelp(info.IsDir())...),
+	}
 	formatter := output.New(countJSON, countMinimal, cmd.OutOrStdout())
 	return formatter.Print(result, func(w io.Writer, data interface{}) {
 		r := data.(CountLinesResult)
@@ -379,7 +433,10 @@ func runCountFiles(cmd *cobra.Command, target string, info os.FileInfo) error {
 		}
 	}
 
-	result := CountFilesResult{Count: count}
+	result := CountFilesResult{
+		Count: count,
+		Help:  emptyHelp(count == 0, countFilesZeroHelp(pattern)...),
+	}
 	formatter := output.New(countJSON, countMinimal, cmd.OutOrStdout())
 	return formatter.Print(result, func(w io.Writer, data interface{}) {
 		r := data.(CountFilesResult)

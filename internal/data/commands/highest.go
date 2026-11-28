@@ -31,6 +31,8 @@ type HighestResult struct {
 	FullPath string `json:"full_path"`
 	Next     string `json:"next"`
 	Count    int    `json:"count"`
+	// Help carries the next steps when nothing matched, nil otherwise.
+	Help []string `json:"help,omitempty"`
 }
 
 // defaultPatterns maps directory context to default regex patterns
@@ -216,6 +218,7 @@ func runHighest(cmd *cobra.Command, args []string) error {
 			FullPath: "",
 			Next:     "1",
 			Count:    0,
+			Help:     emptyHelp(true, highestZeroHelp()...),
 		}
 		formatter := output.New(highestJSON, highestMinimal, cmd.OutOrStdout())
 		return formatter.Print(result, func(w io.Writer, data interface{}) {
@@ -250,6 +253,21 @@ func printHighestResult(w io.Writer, r HighestResult) {
 	fmt.Fprintf(w, "FULL_PATH: %s\n", r.FullPath)
 	fmt.Fprintf(w, "NEXT: %s\n", r.Next)
 	fmt.Fprintf(w, "COUNT: %d\n", r.Count)
+}
+
+// highestZeroHelp is the next step a search with no numbered match offers.
+// It leaves out a flag the caller already passed, as grepZeroMatchHelp does.
+// The last step is unconditional, so an empty result always has something
+// to say.
+func highestZeroHelp() []string {
+	var help []string
+	if highestPattern == "" {
+		help = append(help, "Add --pattern <regex> to match a different numbering scheme")
+	}
+	if highestType != "both" {
+		help = append(help, "Add --type both to search files and directories")
+	}
+	return append(help, "Run `llm-data tree --path <dir>` to see what the directory holds")
 }
 
 // detectPattern determines the best pattern based on directory path context
