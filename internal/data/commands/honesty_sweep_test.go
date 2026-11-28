@@ -24,6 +24,7 @@ type sweepFixture struct {
 	empty   string // an empty directory
 	repo    string // a git repository with one commit and an empty sub/
 	yaml    string // a YAML file holding a: 1
+	blank   string // a zero-byte file
 }
 
 // sweepEntry is what the sweep runs for one command, and why it skips any
@@ -119,6 +120,50 @@ var sweepTable = map[string]sweepEntry{
 		empty:      func(fx sweepFixture) []string { return []string{"highest", "--path", fx.empty} },
 		emptyKeys:  []string{"count"},
 		plainCount: "COUNT: 0",
+	},
+	"json": {
+		missingReason:   "the parent of query, swept on its own",
+		wrongTypeReason: "the parent of query, swept on its own",
+		emptyKeysReason: "the parent of query; a bare run prints help",
+		plainReason:     "the parent of query; a bare run prints help",
+	},
+	"json query": {
+		missing:         func(fx sweepFixture) []string { return []string{"json", "query", fx.missing, "a"} },
+		wrongType:       func(fx sweepFixture) []string { return []string{"json", "query", fx.empty, "a"} },
+		emptyKeysReason: "returns one value; a path that is not there is an error, not an empty result",
+		plainReason:     "prints the value, no count line",
+	},
+	"markdown": {
+		missingReason:   "the parent of headers, section, frontmatter and tasks, each swept on its own",
+		wrongTypeReason: "the parent of headers, section, frontmatter and tasks, each swept on its own",
+		emptyKeysReason: "the parent of headers, section, frontmatter and tasks; a bare run prints help",
+		plainReason:     "the parent of headers, section, frontmatter and tasks; a bare run prints help",
+	},
+	"markdown frontmatter": {
+		missing:         func(fx sweepFixture) []string { return []string{"markdown", "frontmatter", fx.missing} },
+		wrongType:       func(fx sweepFixture) []string { return []string{"markdown", "frontmatter", fx.empty} },
+		emptyKeysReason: "returns one parsed block; a file with no block is an error, not an empty result",
+		plainReason:     "prints the raw block, no count line",
+	},
+	"markdown headers": {
+		missing:    func(fx sweepFixture) []string { return []string{"markdown", "headers", fx.missing} },
+		wrongType:  func(fx sweepFixture) []string { return []string{"markdown", "headers", fx.empty} },
+		empty:      func(fx sweepFixture) []string { return []string{"markdown", "headers", fx.blank} },
+		emptyKeys:  []string{"headers", "total"},
+		plainCount: "TOTAL: 0",
+	},
+	"markdown section": {
+		missing:         func(fx sweepFixture) []string { return []string{"markdown", "section", fx.missing, "a"} },
+		wrongType:       func(fx sweepFixture) []string { return []string{"markdown", "section", fx.empty, "a"} },
+		emptyKeysReason: "returns one section; a title that is not there is an error, not an empty result",
+		plainReason:     "prints the section text, no count line",
+	},
+	"markdown tasks": {
+		missing:    func(fx sweepFixture) []string { return []string{"markdown", "tasks", fx.missing} },
+		wrongType:  func(fx sweepFixture) []string { return []string{"markdown", "tasks", fx.empty} },
+		empty:      func(fx sweepFixture) []string { return []string{"markdown", "tasks", fx.blank} },
+		emptyKeys:  []string{"tasks", "total"},
+		plainCount: "TOTAL: 0",
 	},
 	"math": {
 		missingReason:   "takes an expression, no path",
@@ -407,6 +452,7 @@ func newSweepFixture(t *testing.T) sweepFixture {
 		empty:   filepath.Join(root, "empty"),
 		repo:    filepath.Join(root, "repo"),
 		yaml:    filepath.Join(root, "config.yaml"),
+		blank:   filepath.Join(root, "blank.md"),
 	}
 	for _, d := range []string{fx.empty, filepath.Join(fx.repo, "sub")} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
@@ -416,6 +462,7 @@ func newSweepFixture(t *testing.T) sweepFixture {
 	for path, body := range map[string]string{
 		fx.file:                         "hello\n",
 		fx.yaml:                         "a: 1\n",
+		fx.blank:                        "",
 		filepath.Join(fx.repo, "a.txt"): "a\n",
 	} {
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {

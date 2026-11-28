@@ -18,7 +18,9 @@ import (
 var portedTools = []string{
 	"catfiles", "count", "detect", "discover_tests",
 	"git_changes", "git_context",
-	"grep", "highest", "math", "multiexists", "multigrep",
+	"grep", "highest", "json_query",
+	"markdown_frontmatter", "markdown_headers", "markdown_section", "markdown_tasks",
+	"math", "multiexists", "multigrep",
 	"repo_root", "runtime", "stats", "template",
 	"tree", "yaml_get", "yaml_multiget", "yaml_multiset",
 	"yaml_set",
@@ -134,6 +136,12 @@ func TestToolSchemaRequiredFields(t *testing.T) {
 		ToolPrefix + "yaml_set":      {"file", "key", "value"},
 		ToolPrefix + "yaml_multiget": {"file"},
 		ToolPrefix + "yaml_multiset": {"file", "pairs"},
+
+		ToolPrefix + "markdown_headers":     {"file"},
+		ToolPrefix + "markdown_section":     {"file", "title"},
+		ToolPrefix + "markdown_frontmatter": {"file"},
+		ToolPrefix + "markdown_tasks":       {"file"},
+		ToolPrefix + "json_query":           {"file", "path"},
 	}
 
 	seen := make(map[string]bool)
