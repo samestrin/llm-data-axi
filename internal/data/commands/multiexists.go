@@ -30,7 +30,21 @@ type MultiexistsResult struct {
 	AllExist     bool               `json:"all_exist"`
 	ExistCount   int                `json:"exist_count"`
 	MissingCount int                `json:"missing_count"`
+	Help         []string           `json:"help,omitempty"`
 }
+
+// multiexistsMissingHelp is the next steps a run with any missing path offers.
+// The caller appends the --no-fail hint on the failing (default) run, where it
+// is actionable; under --no-fail the flag was already given, so it is left off.
+func multiexistsMissingHelp() []string {
+	return []string{
+		"Check the spelling and case of each missing path",
+		"Relative paths resolve from the working directory; pass an absolute path or run from the directory that holds them",
+		"Run `llm-data tree --path <dir>` to list what a directory holds",
+	}
+}
+
+const multiexistsNoFailStep = "Add --no-fail to report missing paths as a result with exit 0"
 
 // newMultiexistsCmd creates the multiexists command
 func newMultiexistsCmd() *cobra.Command {
@@ -47,7 +61,8 @@ Output fields (TOON and --json):
 
 A missing path is an error (exit 1) that lists the missing paths as
 "missing", with exist_count and missing_count. With --no-fail it is a result
-instead: the full listing with all_exist false, exit 0.
+instead: the full listing with all_exist false, exit 0. Either way a run with
+any missing path carries "help": next steps for finding the paths.
 
 Examples:
   llm-data multiexists README.md go.mod
@@ -98,6 +113,7 @@ func runMultiexists(cmd *cobra.Command, args []string) error {
 		AllExist:     allExist,
 		ExistCount:   existCount,
 		MissingCount: missingCount,
+		Help:         emptyHelp(!allExist, multiexistsMissingHelp()...),
 	}
 
 	// A missing path fails the run (unless --no-fail) with one error document
@@ -117,6 +133,7 @@ func runMultiexists(cmd *cobra.Command, args []string) error {
 				"missing":       missing,
 				"exist_count":   existCount,
 				"missing_count": missingCount,
+				"help":          append(result.Help, multiexistsNoFailStep),
 			},
 		}
 	}
