@@ -39,7 +39,7 @@ A terminated block with no keys is empty frontmatter, not an error.
 
 Output Formats:
   default: TOON with the frontmatter mapping
-  --plain: the raw block, byte for byte, without the --- lines
+  --plain: the raw block without the --- lines (CRLF becomes LF)
   --json:  {"frontmatter": {...}}
   --min:   abbreviated keys and no empty values, with --json
 
