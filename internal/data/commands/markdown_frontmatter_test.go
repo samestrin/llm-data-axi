@@ -192,12 +192,12 @@ func TestMarkdownFrontmatterNonMappingRootIsInvalid(t *testing.T) {
 	}
 }
 
-// Defends the empty state: a terminated block with no keys (or only
-// comments) is frontmatter that exists and is empty, so --json says
+// Defends the empty state: a terminated block with no keys, only comments,
+// or a null document is frontmatter that exists and is empty, so --json says
 // frontmatter: {} and TOON carries the frontmatter key. A null or an empty
 // document with exit 0 would read as "nothing happened".
 func TestMarkdownFrontmatterEmptyBlockStatesEmpty(t *testing.T) {
-	for _, content := range []string{"---\n---\n", "---\n# only a comment\n---\n"} {
+	for _, content := range []string{"---\n---\n", "---\n# only a comment\n---\n", "---\nnull\n---\n"} {
 		path := writeMarkdown(t, "doc.md", content)
 
 		code, stdout, _ := runFrontmatterCLI(t, "markdown", "frontmatter", "--json", path)
@@ -324,6 +324,14 @@ func TestMarkdownFrontmatterMultipleDocumentsAreInvalid(t *testing.T) {
 	path = writeMarkdown(t, "ok.md", "---\na: 1\n...\n---\n")
 	if fm := frontmatterJSON(t, path); fm["a"] != float64(1) {
 		t.Fatalf("a = %#v, want 1", fm["a"])
+	}
+
+	// A second document that does not even parse is the same failure, not
+	// a reason to print the first one.
+	path = writeMarkdown(t, "bad2.md", "---\na: 1\n...\nkey: [unclosed\n---\n")
+	code, stdout, _ = runFrontmatterCLI(t, "markdown", "frontmatter", "--json", path)
+	if code != 1 || !strings.Contains(stdout, "invalid frontmatter YAML") {
+		t.Fatalf("broken second document: exit %d, want 1 naming invalid frontmatter YAML: %q", code, stdout)
 	}
 }
 
