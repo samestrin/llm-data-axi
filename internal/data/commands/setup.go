@@ -119,37 +119,43 @@ func resolveHookCommand() (string, error) {
 	return shellQuote(exe), nil
 }
 
+// goRunBuildDirRE matches the directory `go run` builds in:
+// os.MkdirTemp(..., "go-build") always appends a decimal number, so a
+// sibling like go-builders is not one.
+var goRunBuildDirRE = regexp.MustCompile(`^go-build[0-9]+$`)
+
 // isGoRunBuild reports whether exe is under a go-build directory directly
 // beneath os.TempDir(), where `go run` builds and later deletes its binary.
 // Each side is compared both as written and with symlinks resolved, since
 // the temp dir is often a symlink (/var -> /private/var on macOS).
 func isGoRunBuild(exe string) bool {
-	resolve := func(p string) string {
-		if r, err := filepath.EvalSymlinks(p); err == nil {
-			return r
-		}
-		return filepath.Clean(p)
-	}
 	tmp := os.TempDir()
-	for _, pair := range [][2]string{{tmp, exe}, {resolve(tmp), resolve(exe)}} {
+	for _, pair := range [][2]string{{tmp, exe}, {resolvePath(tmp), resolvePath(exe)}} {
 		rel, err := filepath.Rel(pair[0], pair[1])
-		if err == nil && strings.HasPrefix(rel, "go-build") {
+		if err != nil {
+			continue
+		}
+		first, _, _ := strings.Cut(rel, string(filepath.Separator))
+		if goRunBuildDirRE.MatchString(first) {
 			return true
 		}
 	}
 	return false
 }
 
+// resolvePath returns p with symlinks resolved, or cleaned as written when
+// it does not resolve (the file may not exist yet).
+func resolvePath(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
+}
+
 // sameExecutable reports whether a and b name one file once symlinks are
 // resolved. A path that does not resolve is compared as written.
 func sameExecutable(a, b string) bool {
-	resolve := func(p string) string {
-		if r, err := filepath.EvalSymlinks(p); err == nil {
-			return r
-		}
-		return filepath.Clean(p)
-	}
-	return resolve(a) == resolve(b)
+	return resolvePath(a) == resolvePath(b)
 }
 
 // shellQuote single-quotes s when a shell would otherwise split or expand it.

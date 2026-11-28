@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -61,5 +62,70 @@ func TestHookCommandIsBareOnlyWhenPATHFindsThisBinary(t *testing.T) {
 	setupExecutable = func() (string, error) { return "", fmt.Errorf("unknown") }
 	if got, err := resolveHookCommand(); err == nil {
 		t.Errorf("hook command %q with this binary's path unknown, want an error", got)
+	}
+}
+
+// Defends the go run check against refusing directories that merely start
+// with "go-build": a prefix match refused a binary under $TMP/go-builders,
+// which `go run` never creates (os.MkdirTemp(..., "go-build") always appends
+// a decimal number). Only a first path element of go-build<digits> directly
+// beneath the temp dir is a go run build.
+func TestIsGoRunBuildRequiresANumberedGoBuildDir(t *testing.T) {
+	tmp := os.TempDir()
+	for _, c := range []struct {
+		rel  string
+		want bool
+	}{
+		{filepath.Join("go-build123", "x", "llm-data"), true},
+		{filepath.Join("go-build123456789", "b001", "exe", "llm-data"), true},
+		{filepath.Join("go-builders", "tools", "llm-data"), false},
+		{filepath.Join("go-build", "llm-data"), false},
+		{filepath.Join("go-build12x", "exe", "llm-data"), false},
+		{filepath.Join("tools", "llm-data"), false},
+		{filepath.Join("nested", "go-build123", "llm-data"), false},
+	} {
+		t.Run(c.rel, func(t *testing.T) {
+			if got := isGoRunBuild(filepath.Join(tmp, c.rel)); got != c.want {
+				t.Errorf("isGoRunBuild(%s) = %v, want %v", filepath.Join(tmp, c.rel), got, c.want)
+			}
+		})
+	}
+}
+
+// Defends both sides of the narrowed go run refusal at the setup level: a
+// binary under $TMP/go-builders (or any non-go-build sibling) registers its
+// absolute path as the hook, while a real go run build under
+// $TMP/go-build123 still fails and writes nothing.
+func TestSetupRefusesOnlyNumberedGoBuildDirs(t *testing.T) {
+	tmp := os.TempDir()
+	for _, c := range []struct {
+		exe     string
+		refused bool
+	}{
+		{filepath.Join(tmp, "go-builders", "tools", "llm-data"), false},
+		{filepath.Join(tmp, "tools", "llm-data"), false},
+		{filepath.Join(tmp, "go-build123", "x", "llm-data"), true},
+	} {
+		t.Run(c.exe, func(t *testing.T) {
+			project, _ := setupEnv(t)
+			stubBinary(t, false, c.exe)
+			out, err := runSetupCmd(t, "--path", project)
+			if c.refused {
+				if err == nil {
+					t.Fatalf("setup succeeded registering a go run build:\n%s", out)
+				}
+				if !strings.Contains(err.Error(), "go run") {
+					t.Errorf("error does not say why: %v", err)
+				}
+				assertEmptyDir(t, project)
+				return
+			}
+			if err != nil {
+				t.Fatalf("setup refused %s: %v", c.exe, err)
+			}
+			if cmds := sessionStartCommands(t, readFile(t, settingsPath(project))); len(cmds) != 1 || cmds[0] != shellQuote(c.exe) {
+				t.Errorf("SessionStart commands = %v, want [%s]", cmds, shellQuote(c.exe))
+			}
+		})
 	}
 }
