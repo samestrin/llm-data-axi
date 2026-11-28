@@ -13,7 +13,7 @@ import (
 // opening one with no writer blocks forever. It is refused before anything
 // opens it, exit 1, naming the path.
 func TestMarkdownFrontmatterRefusesAFIFO(t *testing.T) {
-	fifo := filepath.Join(fifoTree(t), "pipe.md")
+	fifo := filepath.Join(fifoTree(t), "pipe.txt")
 	type res struct {
 		code   int
 		stdout string

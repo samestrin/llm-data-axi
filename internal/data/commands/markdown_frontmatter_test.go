@@ -309,6 +309,24 @@ func TestMarkdownFrontmatterDuplicateKeysAreInvalid(t *testing.T) {
 	}
 }
 
+// Defends against a silent partial read: yaml.Unmarshal on a block with a
+// ... document-end marker returns only the first document and exit 0, so
+// every key after the marker vanished without an error. More than one
+// document is not frontmatter; a trailing ... with nothing after it is one
+// document and stays valid.
+func TestMarkdownFrontmatterMultipleDocumentsAreInvalid(t *testing.T) {
+	path := writeMarkdown(t, "doc.md", "---\na: 1\n...\nb: 2\n---\n")
+	code, stdout, _ := runFrontmatterCLI(t, "markdown", "frontmatter", "--json", path)
+	if code != 1 || !strings.Contains(stdout, "invalid frontmatter YAML") || !strings.Contains(stdout, "document") {
+		t.Fatalf("exit %d, want 1 naming invalid frontmatter YAML and documents: %q", code, stdout)
+	}
+
+	path = writeMarkdown(t, "ok.md", "---\na: 1\n...\n---\n")
+	if fm := frontmatterJSON(t, path); fm["a"] != float64(1) {
+		t.Fatalf("a = %#v, want 1", fm["a"])
+	}
+}
+
 // Defends against a YAML value JSON cannot encode (.inf) exiting 0 with an
 // empty or partial document: the encode failure must be an error naming the
 // file whose frontmatter could not be printed.
