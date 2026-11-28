@@ -211,6 +211,26 @@ func TestSetupCodexMergesConfig(t *testing.T) {
 			in:   "[features]\nx = '''\n{\n'''\n[tui]\nhooks = false\n",
 			want: "[features]\nhooks = true\nx = '''\n{\n'''\n[tui]\nhooks = false\n",
 		},
+		// A hooks line inside a multi-line string is text, not the key;
+		// editing it changed the string, so setup refused.
+		{
+			name: "hooks line inside a multi-line string is not the key",
+			in:   "[features]\nx = \"\"\"\nhooks = false\n\"\"\"\n",
+			want: "[features]\nhooks = true\nx = \"\"\"\nhooks = false\n\"\"\"\n",
+		},
+		// A line inside a multi-line string that starts with [ is not a
+		// table header; reading it as one ended [features] before its key.
+		{
+			name: "header line inside a multi-line string does not end features",
+			in:   "[features]\nx = \"\"\"\n[not a table]\n\"\"\"\nhooks = false\n",
+			want: "[features]\nx = \"\"\"\n[not a table]\n\"\"\"\nhooks = true\n",
+		},
+		// An escaped quote does not close a basic multi-line string.
+		{
+			name: "escaped quotes do not close a multi-line string",
+			in:   "[features]\nx = \"\"\"\na \\\"\"\" [\n\"\"\"\nhooks = false\n",
+			want: "[features]\nx = \"\"\"\na \\\"\"\" [\n\"\"\"\nhooks = true\n",
+		},
 		// Up to two quotes may sit against the closing delimiter and belong
 		// to the string; the string still ends there.
 		{
