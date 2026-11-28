@@ -39,7 +39,10 @@ Lines inside fenced code blocks (` + "```" + ` and ~~~) and inside a leading YAM
 frontmatter block (--- on line 1 to the next ---) are never read as markdown.
 
 Subcommands:
-  headers   List the headers with their level and line`,
+  headers       List the headers with their level and line
+  section       Print one section, by its title
+  frontmatter   Parse the leading YAML frontmatter block
+  tasks         List the task items with their state and counts`,
 		// Runnable so cobra validates the argument instead of printing help
 		// and exiting 0 for a removed or misspelt subcommand.
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -49,7 +52,12 @@ Subcommands:
 			return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
 		},
 	}
-	cmd.AddCommand(newMarkdownHeadersCmd())
+	cmd.AddCommand(
+		newMarkdownHeadersCmd(),
+		newMarkdownSectionCmd(),
+		newMarkdownFrontmatterCmd(),
+		newMarkdownTasksCmd(),
+	)
 	return cmd
 }
 

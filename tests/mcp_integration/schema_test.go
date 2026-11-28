@@ -28,8 +28,9 @@ import (
 // Phase 2 port rule. llm-tools asserted 77 here; llm-data shipped the 24 tools
 // that the cadence skills actually call, minus the four that moved back to
 // cadence in epic 11.2 T3 (plan_type, project_components, tier_classifier,
-// diff_smell).
-const portedToolCount = 20
+// diff_smell). Epic 20 added five: markdown_headers, markdown_section,
+// markdown_frontmatter, markdown_tasks and json_query.
+const portedToolCount = 25
 
 func TestToolCount(t *testing.T) {
 	if got := len(mcpserver.GetToolDefinitions()); got != portedToolCount {

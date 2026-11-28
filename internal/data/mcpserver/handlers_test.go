@@ -1080,3 +1080,76 @@ func TestGetInt64(t *testing.T) {
 		})
 	}
 }
+
+// Defends the five epic 20 builders: each file, title and dot path reaches
+// the CLI as a positional after "--", so a markdown file or JSON path spelled
+// like an option ("-x.md", "--json") is read as data, never as a flag; and no
+// builder adds --json or --min itself, so the call's format alone decides the
+// encoding.
+func TestBuildMarkdownAndJSONQueryArgs(t *testing.T) {
+	tests := []struct {
+		name  string
+		build func(map[string]interface{}) []string
+		args  map[string]interface{}
+		want  []string
+	}{
+		{"headers", buildMarkdownHeadersArgs,
+			map[string]interface{}{"file": "PLAN.md"},
+			[]string{"markdown", "headers", "--", "PLAN.md"}},
+		{"headers with a string level", buildMarkdownHeadersArgs,
+			map[string]interface{}{"file": "PLAN.md", "level": "1,2"},
+			[]string{"markdown", "headers", "--level", "1,2", "--", "PLAN.md"}},
+		{"headers with a number level", buildMarkdownHeadersArgs,
+			map[string]interface{}{"file": "PLAN.md", "level": float64(2)},
+			[]string{"markdown", "headers", "--level", "2", "--", "PLAN.md"}},
+		{"headers with a dash file", buildMarkdownHeadersArgs,
+			map[string]interface{}{"file": "--json"},
+			[]string{"markdown", "headers", "--", "--json"}},
+		{"section", buildMarkdownSectionArgs,
+			map[string]interface{}{"file": "PLAN.md", "title": "Tasks"},
+			[]string{"markdown", "section", "--", "PLAN.md", "Tasks"}},
+		{"section with the header", buildMarkdownSectionArgs,
+			map[string]interface{}{"file": "PLAN.md", "title": "-Tasks", "include_header": true},
+			[]string{"markdown", "section", "--include-header", "--", "PLAN.md", "-Tasks"}},
+		{"frontmatter", buildMarkdownFrontmatterArgs,
+			map[string]interface{}{"file": "PLAN.md"},
+			[]string{"markdown", "frontmatter", "--", "PLAN.md"}},
+		{"tasks", buildMarkdownTasksArgs,
+			map[string]interface{}{"file": "PLAN.md"},
+			[]string{"markdown", "tasks", "--", "PLAN.md"}},
+		{"tasks summary", buildMarkdownTasksArgs,
+			map[string]interface{}{"file": "PLAN.md", "summary": true},
+			[]string{"markdown", "tasks", "--summary", "--", "PLAN.md"}},
+		{"json query", buildJSONQueryArgs,
+			map[string]interface{}{"file": "a.json", "path": "users[0].name"},
+			[]string{"json", "query", "--", "a.json", "users[0].name"}},
+		{"json query with a dash path", buildJSONQueryArgs,
+			map[string]interface{}{"file": "a.json", "path": "-1"},
+			[]string{"json", "query", "--", "a.json", "-1"}},
+		{"no arguments", buildJSONQueryArgs,
+			map[string]interface{}{},
+			[]string{"json", "query"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.build(tt.args); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// Defends the alias table against the json_query schema: "file" and "path"
+// are both canonical names there, so normalizeArgs must leave a call that
+// sends both as it is. Were "path" (the dot path) remapped to "file", the
+// query would read the dot path as a file name.
+func TestJSONQueryFileAndPathSurviveNormalization(t *testing.T) {
+	got, err := buildArgs("json_query", map[string]interface{}{"file": "a.json", "path": "x.y"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"json", "query", "--", "a.json", "x.y"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("buildArgs(json_query) = %q, want %q", got, want)
+	}
+}

@@ -187,6 +187,8 @@ func NewRootCmd() *cobra.Command {
 		newGitContextCmd(),
 		newGrepCmd(),
 		newHighestCmd(),
+		newJSONCmd(),
+		newMarkdownCmd(),
 		newMathCmd(),
 		newMultiexistsCmd(),
 		newMultigrepCmd(),
