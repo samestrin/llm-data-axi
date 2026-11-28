@@ -19,9 +19,12 @@ var (
 	detectDirs    string
 )
 
-// MultiDetectResult holds per-directory detection results.
+// MultiDetectResult holds per-directory detection results. Help carries the
+// next steps when no component directory exists, so an empty components map
+// is not a dead end (epic 22).
 type MultiDetectResult struct {
 	Components map[string]DetectResult `json:"components"`
+	Help       []string                `json:"help,omitempty"`
 }
 
 // DetectResult represents the project detection result
@@ -32,6 +35,9 @@ type DetectResult struct {
 	Framework      string `json:"framework"`
 	HasTests       bool   `json:"has_tests"`
 	PytestAvail    bool   `json:"pytest_available"`
+	// Help carries the next steps when no stack was detected, so an unknown
+	// stack is not a dead end (epic 22). Absent on a detected stack.
+	Help []string `json:"help,omitempty"`
 }
 
 // newDetectCmd creates the detect command
@@ -95,6 +101,10 @@ func runDetect(cmd *cobra.Command, args []string) error {
 			}
 			result.Components[dir] = detectInDir(dirPath)
 		}
+		result.Help = emptyHelp(len(result.Components) == 0,
+			"Check the --dirs names exist under --path",
+			"Run `llm-data tree --path <dir>` to list subdirectories",
+		)
 		return formatter.Print(result, printMultiDetectText)
 	}
 
@@ -232,6 +242,10 @@ func detectInDir(path string) DetectResult {
 		Framework:      result["framework"].(string),
 		HasTests:       result["has_tests"].(bool),
 		PytestAvail:    result["pytest_available"].(bool),
+		Help: emptyHelp(result["stack"] == "unknown",
+			"Check the directory holds a project marker such as package.json, go.mod or pyproject.toml",
+			"Run `llm-data tree --path <dir>` to see the directory layout",
+		),
 	}
 }
 

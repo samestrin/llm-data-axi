@@ -2,8 +2,10 @@ package commands
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -360,4 +362,155 @@ func TestDetectPathIsFile(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The expected next steps are spelled out here, not read from production
+// variables, so a change to what an agent is told to do next is a deliberate
+// edit in two places (as help_next_steps_test.go does).
+var wantDetectUnknownHelp = []string{
+	"Check the directory holds a project marker such as package.json, go.mod or pyproject.toml",
+	"Run `llm-data tree --path <dir>` to see the directory layout",
+}
+
+var wantDetectNoComponentsHelp = []string{
+	"Check the --dirs names exist under --path",
+	"Run `llm-data tree --path <dir>` to list subdirectories",
+}
+
+// Defends epic 22 T5: detect finding no stack used to print a bare
+// stack: unknown, a dead end. The usual cause is pointing at a directory
+// above or beside the one holding the project's marker files.
+func TestDetectUnknownStackCarriesHelp(t *testing.T) {
+	dir := t.TempDir()
+
+	for _, minOut := range []bool{false, true} {
+		args := []string{"detect", "--path", dir, "--json"}
+		if minOut {
+			args = append(args, "--min")
+		}
+		help, ok := jsonHelp(t, runOK(t, args...))
+		if !ok || !reflect.DeepEqual(help, wantDetectUnknownHelp) {
+			t.Errorf("--json (min %v) help = %q (present %v), want %q", minOut, help, ok, wantDetectUnknownHelp)
+		}
+	}
+	assertAXIHelp(t, runOK(t, "detect", "--path", dir, "--axi"), wantDetectUnknownHelp)
+}
+
+// Defends a detected stack staying clean: next steps there are noise an agent
+// pays tokens to read, in either encoding.
+func TestDetectKnownStackCarriesNoHelp(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644)
+
+	if help, ok := jsonHelp(t, runOK(t, "detect", "--path", dir, "--json")); ok {
+		t.Errorf("--json carried help %q", help)
+	}
+	if out := runOK(t, "detect", "--path", dir, "--axi"); hasHelpKey(out) {
+		t.Errorf("--axi carried help:\n%s", out)
+	}
+}
+
+// Defends --plain staying help-free, as grep, multigrep and the home view are.
+func TestDetectUnknownHelpAbsentFromPlain(t *testing.T) {
+	dir := t.TempDir()
+	out := runOK(t, "detect", "--path", dir, "--plain")
+	if hasHelpKey(out) {
+		t.Errorf("--plain unknown result printed a help key:\n%s", out)
+	}
+	if !strings.Contains(out, "STACK: unknown") {
+		t.Errorf("--plain unknown result lost its stack line:\n%s", out)
+	}
+}
+
+// detectDirsDoc decodes a --dirs payload keeping key presence: "no help" and
+// "an empty help list" must be told apart, per component and at the top level.
+type detectDirsDoc struct {
+	Components map[string]map[string]json.RawMessage `json:"components"`
+	Help       json.RawMessage                       `json:"help"`
+}
+
+func parseDetectDirsDoc(t *testing.T, out string) detectDirsDoc {
+	t.Helper()
+	var doc detectDirsDoc
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, out)
+	}
+	return doc
+}
+
+func componentHelp(t *testing.T, comp map[string]json.RawMessage) ([]string, bool) {
+	t.Helper()
+	raw, ok := comp["help"]
+	if !ok {
+		return nil, false
+	}
+	var help []string
+	if err := json.Unmarshal(raw, &help); err != nil {
+		t.Fatalf("help is not a list of strings: %v\n%s", err, raw)
+	}
+	return help, true
+}
+
+// Defends --dirs runs: an unknown component is a dead end of its own, so it
+// carries the same next steps, while a detected component and the top level
+// stay clean. A run where every component is detected carries no help at all.
+func TestDetectDirsUnknownComponentCarriesHelp(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "backend"), 0755)
+	os.WriteFile(filepath.Join(dir, "backend", "go.mod"), []byte("module test"), 0644)
+	os.MkdirAll(filepath.Join(dir, "frontend"), 0755)
+
+	for _, minOut := range []bool{false, true} {
+		args := []string{"detect", "--path", dir, "--dirs", "backend,frontend", "--json"}
+		if minOut {
+			args = append(args, "--min")
+		}
+		doc := parseDetectDirsDoc(t, runOK(t, args...))
+		help, ok := componentHelp(t, doc.Components["frontend"])
+		if !ok || !reflect.DeepEqual(help, wantDetectUnknownHelp) {
+			t.Errorf("--json (min %v) frontend help = %q (present %v), want %q", minOut, help, ok, wantDetectUnknownHelp)
+		}
+		if help, ok := componentHelp(t, doc.Components["backend"]); ok {
+			t.Errorf("--json (min %v) backend carried help %q", minOut, help)
+		}
+		if doc.Help != nil {
+			t.Errorf("--json (min %v) top level carried help %s", minOut, doc.Help)
+		}
+	}
+	assertAXIHelp(t, runOK(t, "detect", "--path", dir, "--dirs", "backend,frontend", "--axi"), wantDetectUnknownHelp)
+
+	// Every component detected: no help anywhere.
+	os.WriteFile(filepath.Join(dir, "frontend", "package.json"), []byte(`{}`), 0644)
+	doc := parseDetectDirsDoc(t, runOK(t, "detect", "--path", dir, "--dirs", "backend,frontend", "--json"))
+	for name, comp := range doc.Components {
+		if help, ok := componentHelp(t, comp); ok {
+			t.Errorf("component %s carried help %q", name, help)
+		}
+	}
+	if doc.Help != nil {
+		t.Errorf("top level carried help %s", doc.Help)
+	}
+}
+
+// Defends a --dirs run where every named directory is missing: the components
+// map is empty and the warnings go to stderr, so without top-level help the
+// stdout payload is a bare dead end.
+func TestDetectDirsAllMissingCarriesHelp(t *testing.T) {
+	dir := t.TempDir()
+
+	for _, minOut := range []bool{false, true} {
+		args := []string{"detect", "--path", dir, "--dirs", "gone1,gone2", "--json"}
+		if minOut {
+			args = append(args, "--min")
+		}
+		out := runOK(t, args...)
+		help, ok := jsonHelp(t, out)
+		if !ok || !reflect.DeepEqual(help, wantDetectNoComponentsHelp) {
+			t.Errorf("--json (min %v) help = %q (present %v), want %q", minOut, help, ok, wantDetectNoComponentsHelp)
+		}
+		if doc := parseDetectDirsDoc(t, out); len(doc.Components) != 0 {
+			t.Errorf("--json (min %v) components = %v, want empty", minOut, doc.Components)
+		}
+	}
+	assertAXIHelp(t, runOK(t, "detect", "--path", dir, "--dirs", "gone1,gone2", "--axi"), wantDetectNoComponentsHelp)
 }
